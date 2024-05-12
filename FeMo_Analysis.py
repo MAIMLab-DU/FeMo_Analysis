@@ -16,7 +16,7 @@ from femo import Femo# Local code imports
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from SP_Functions import load_data_files, get_preprocessed_data, get_IMU_map, get_IMU_rot_map, get_segmented_data, \
-    get_sensation_map, match_with_m_sensation, get_performance_params
+    get_sensation_map, match_with_m_sensation, get_performance_params, get_merged_map
         
 from ML_Functions import extract_detections, extract_detections_modified, extract_features_modified, normalize_features, ML_prediction
 
@@ -188,6 +188,8 @@ FM_min_SN           = [70,70,50,30,30,50]  # These values are selected to get SE
 
 IMU_map = []
 IMU_RPY_map = []
+IMU_merged_map = []
+
 M_sntn_map =[]
 threshold = np.zeros((n_data_files, n_FM_sensors))
 TPD_extracted = []
@@ -250,7 +252,8 @@ for i in range(n_data_files):
     # Creating IMU_rotation map
     IMU_RPY_map.append(get_IMU_rot_map(IMU_rotation_fltd[i], IMU_rot_threshold, IMU_dilation_time, Fs_sensor))
     
-
+    
+    IMU_merged_map.append(get_merged_map(IMU_map[i], IMU_RPY_map[i] ))
     
     # ----------------------- Creation of M_sensation_map ----------------%
     # get_sensation_map() function is used here. This function gives the
@@ -590,11 +593,11 @@ plotData(3, s4_fltd[file_idx], 'Piezo_2', 'Signal', '' )
 plotData(4, s5_fltd[file_idx], 'Piezo_3', 'Signal', '' )
 plotData(5, s6_fltd[file_idx], 'Piezo_4', 'Signal', '' )
 
-plotData(6, sensor_data_sgmntd_cmbd_all_sensors, 'All Events', 'Detection', '', legend=True )
-plotData(6, sensation_data_trimd[file_idx], 'Ground Truth', '', '', legend=True, plot_type='scatter')
+# plotData(6, sensor_data_sgmntd_cmbd_all_sensors, 'All Events', 'Detection', '', legend=True )
+# plotData(6, sensation_data_trimd[file_idx], 'Ground Truth', '', '', legend=True, plot_type='scatter')
 plotData(6, IMU_map[file_idx]*.5, 'IMU_aclm_Map', '', '', legend=True, plot_type='scatter')
-plotData(6, IMU_RPY_map[file_idx]*.5, 'IMU_RPY_map', '', '', legend=True, plot_type='scatter')
-
+plotData(6, IMU_RPY_map[file_idx]*.6, 'IMU_RPY_map', '', '', legend=True, plot_type='scatter')
+plotData(6, IMU_merged_map[file_idx]*.8, 'IMU_merged_map', '', '', legend=True, plot_type='scatter')
 
 plotData(7, IMU_aclm_fltd[file_idx], 'IMU data', '', '', legend=True, plot_type='scatter')
 # plotData(7, sensor_data_sgmntd_cmbd_all_sensors_ML, 'Fetal movement', 'Detection', 'Time(second)', legend=True, xticks=True )

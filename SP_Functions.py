@@ -716,8 +716,58 @@ def get_IMU_rot_map(IMU_rotation_data, IMU_rot_threshold, IMU_dilation_time, Fs_
     
     IMU_rotation_map = IMU_rotR_map | IMU_rotP_map | IMU_rotY_map
     
+    IMU_rotation_map = np.insert(IMU_rotation_map, 0, 0)
 
     return IMU_rotation_map
+
+def get_merged_map(IMU_aclm_map, IMU_rot_map):
+    """
+    Algorithm and AUthor: @ Moniruzzaman Akash
+    Generates sensation map by merging IMU_aclm and IMU_rotation map
+    Parameters
+    ----------
+    IMU_aclm_map : numpy.ndarray.
+    IMU_rot_map : numpy.ndarray. 
+    
+
+    Returns
+    -------
+    map_final : numpy.ndarray. Shape(sensation mapped values)
+        merged map of IMU accelerometer and rotation map
+    """
+    
+    map_added = IMU_aclm_map.astype(int) + IMU_rot_map.astype(int)
+    
+    map_added[0] = 0
+    map_added[1] = 0
+    
+    # Find where changes from non-zero to zero or zero to non-zero occur
+    changes = np.where((map_added[:-1] == 0) != (map_added[1:] == 0))  [0] + 1
+
+
+    # Create tuples of every two values
+    windows = []
+    for i in range(0, len(changes), 2):
+        if i < len(changes) - 1:
+            windows.append((changes[i], changes[i+1]))
+        else:
+            windows.append((changes[i],))
+    
+    map_final = np.zeros(len(map_added))
+    
+    for window in windows:
+        start = window[0]
+        
+        if len(window) == 2:
+            end = window[1]
+            if np.any(map_added[start:end] == 2):
+                map_final[start:end] = 1
+        else:
+            map_final[start:] = 1
+            
+            
+    # print("Resulting tuples:", windows)
+    return map_final
 
 
 def get_sensation_map(sensation_data, IMU_map, ext_backward, ext_forward, Fs_sensor, Fs_sensation):
