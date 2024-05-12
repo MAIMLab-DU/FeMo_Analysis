@@ -13,6 +13,8 @@ from femo import Femo
 #import tkinter as tk
 import os, sys
 import time
+from tqdm import tqdm
+from scipy.spatial.transform import Rotation as R
 
 
 def custom_binary_dilation(data, dilation_size):
@@ -80,10 +82,9 @@ def load_data_files(data_format, data_file_names):
     # sampling rate for piezo is 1024, accelrometer 512, imu 256. We have resampled all sensor data using upsampling technique.
     # To do upsampling, we have used linear interpolation technique
     
-    
     # Since sensor combination on old and new belt is different, generalized variables s1, s2,....s6 are used
     
-    
+    #If no data file selected, exit.
     if not len(data_file_names):
         print("No Data file selected")
         sys.exit()
@@ -91,16 +92,12 @@ def load_data_files(data_format, data_file_names):
 
     n_data_files = len(data_file_names)
     
+    # Notify start of the step
+    print("\n#Data file loading is going on...")
+    
     
     if data_format == '1': 
-        # Notify start of the step
-        print("\n#Data file loading is going on...")
-        
-        # Define known parameters
-        Fs_sensor = 1024  # Frequency of sensor data sampling in Hz
-        Fs_sensation = 1024  # Frequency of sensation data sampling in Hz
-        n_sensor = 8  # Total number of sensors
-        
+        print("Loading Old Belt Data")
         # Locate and load the data files
         # root = tk.Tk()
         # root.attributes("-topmost", True)
@@ -124,36 +121,41 @@ def load_data_files(data_format, data_file_names):
         Pzplt_data1 = []
         Pzplt_data2 = []
         Flexi_data = []
-        IMU_data = []
+        IMU_aclm = []
+        sensation_data = []
 
         # Loading the data files
-        for i in range(n_data_files):
-            # print('\n\tCurrent data file: %.0f/%.0f',i,n_data_files)
+        with tqdm(total=n_data_files) as pbar:
+            for i in range(n_data_files):
+                # print('\n\tCurrent data file: %.0f/%.0f',i,n_data_files)
+                
+                data = loadmat(data_file_names[i], squeeze_me=True)
+    
+                sensor_data_SD1 = data["data_var"][0]
+                sensor_data_SD2 = data["data_var"][2]
+                sensation_data.append(data["data_var"][1]) #sensation_data_SD1
+                
+                # sensation_data_SD2.append(data["data_var"][3])
+    
+                # Extracting sensor data
+                Flexi_data.append(sensor_data_SD1[:, 0])  # Force sensor data to measure tightness of the belt
+                Pzplt_data1.append(sensor_data_SD1[:, 1]) # Left Piezo-plate data to measure abdominal vibration
+                Pzplt_data2.append(sensor_data_SD1[:, 2]) # Right Piezo-plate data to measure abdominal vibration
+                Acstc_data1.append(sensor_data_SD1[:, 3]) # Left Acoustic sensor data to measure abdominal vibration
+                IMU_aclm_xyz = sensor_data_SD1[:, 4:7]  # Accelerometer x,y and z axis data to measure maternal body movement
+    
+                Acstc_data2.append(sensor_data_SD2[:, 0]) # Right Acoustic sensor data to measure abdominal vibration
+                Aclm_data2_xyz = sensor_data_SD2[:, 1:4]  # Right Accelerometer x,y and z axis data to measure abdominal vibration
+                Aclm_data1_xyz = sensor_data_SD2[:, 4:7]  # Left Accelerometer  x,y and z axis data to measure abdominal vibration
             
-            data = loadmat(data_file_names[i], squeeze_me=True)
-
-            sensor_data_SD1 = data["data_var"][0]
-            sensor_data_SD2 = data["data_var"][2]
-            # sensation_data_SD1.append(data["data_var"][1])
-            # sensation_data_SD2.append(data["data_var"][3])
-
-            # Extracting sensor data
-            Flexi_data.append(sensor_data_SD1[:, 0])  # Force sensor data to measure tightness of the belt
-            Pzplt_data1.append(sensor_data_SD1[:, 1]) # Left Piezo-plate data to measure abdominal vibration
-            Pzplt_data2.append(sensor_data_SD1[:, 2]) # Right Piezo-plate data to measure abdominal vibration
-            Acstc_data1.append(sensor_data_SD1[:, 3]) # Left Acoustic sensor data to measure abdominal vibration
-            IMU_data_xyz = sensor_data_SD1[:, 4:7]  # Accelerometer x,y and z axis data to measure maternal body movement
-
-            Acstc_data2.append(sensor_data_SD2[:, 0]) # Right Acoustic sensor data to measure abdominal vibration
-            Aclm_data2_xyz = sensor_data_SD2[:, 1:4]  # Right Accelerometer x,y and z axis data to measure abdominal vibration
-            Aclm_data1_xyz = sensor_data_SD2[:, 4:7]  # Left Accelerometer  x,y and z axis data to measure abdominal vibration
-        
-
-            # Resultant of acceleration
-            IMU_data.append(np.sqrt(np.sum(IMU_data_xyz ** 2, axis=1)))
-            Aclm_data1.append(np.sqrt(np.sum(Aclm_data1_xyz ** 2, axis=1)))
-            Aclm_data2.append(np.sqrt(np.sum(Aclm_data2_xyz ** 2, axis=1)))
-
+    
+                # Resultant of acceleration
+                IMU_aclm.append(np.sqrt(np.sum(IMU_aclm_xyz ** 2, axis=1)))
+                Aclm_data1.append(np.sqrt(np.sum(Aclm_data1_xyz ** 2, axis=1)))
+                Aclm_data2.append(np.sqrt(np.sum(Aclm_data2_xyz ** 2, axis=1)))
+                
+                # Update the progress bar
+                pbar.update(1)
 
         s1 = Aclm_data1 
         s2 = Aclm_data2 
@@ -161,8 +163,11 @@ def load_data_files(data_format, data_file_names):
         s4 = Acstc_data2 
         s5 = Pzplt_data1 
         s6 = Pzplt_data2 
+        IMU_rotation= []
+        IMU_mag     = []
         
     elif data_format == '2':
+        print("Loading New belt Data")
         # Open a file dialog for selecting files
     
         # root = tk.Tk()
@@ -184,92 +189,155 @@ def load_data_files(data_format, data_file_names):
         Pzplt_data3 = []
         Pzplt_data4 = []
         Flexi_data  = []
-        IMU_data    = []
-        IMU         = []
+        IMU_aclm    = []
+        IMU_rotation= []
+        IMU_mag     = []
+        sensation_data = []
         
         
-        read_data = Femo(data_file_names[0])
-    
-        all_sensor_df = (read_data.dataframes["piezos"]
-                        .join(read_data.dataframes["accelerometers"])
-                        .join(read_data.dataframes["imu"])
-                        .join(read_data.dataframes["force"])
-                        .join(read_data.dataframes["push_button"])
-                        .join(read_data.dataframes["timestamp"]))
-    
-    
-        # Resample accelerometer data using linear interpolation
-    
-        ### Accelerometer 1
-        all_sensor_df['x1'] = pd.Series(all_sensor_df['x1']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['y1'] = pd.Series(all_sensor_df['y1']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['z1'] = pd.Series(all_sensor_df['z1']).interpolate(method='linear', limit_direction='both')
-    
-        ### Accelerometer 2
-        all_sensor_df['x2'] = pd.Series(all_sensor_df['x2']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['y2'] = pd.Series(all_sensor_df['y2']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['z2'] = pd.Series(all_sensor_df['z2']).interpolate(method='linear', limit_direction='both')
-    
-        ### IMU_data_acceleration
-        all_sensor_df['rotation_r'] = pd.Series(all_sensor_df['rotation_r']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['rotation_i'] = pd.Series(all_sensor_df['rotation_i']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['rotation_j'] = pd.Series(all_sensor_df['rotation_j']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['rotation_k'] = pd.Series(all_sensor_df['rotation_k']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['accel_x'] = pd.Series(all_sensor_df['accel_x']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['accel_y'] = pd.Series(all_sensor_df['accel_y']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['accel_z'] = pd.Series(all_sensor_df['accel_z']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['magnet_x'] = pd.Series(all_sensor_df['magnet_x']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['magnet_y'] = pd.Series(all_sensor_df['magnet_y']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['magnet_z'] = pd.Series(all_sensor_df['magnet_z']).interpolate(method='linear', limit_direction='both')
-    
-    
-        selected_data_columns = ['p1', 'p2', 'p3', 'p4', 'x1', 'y1', 'z1', 'x2', 'y2', 'z2', 'rotation_r', 'rotation_i', 'rotation_j', 'rotation_k', 'magnet_x','magnet_y','magnet_z', 'accel_x', 'accel_y', 'accel_z', 'button']
-        selected_sensor_data = all_sensor_df[selected_data_columns]
-    
-        # Convert them to voltage value
-        # All sensor is 16 bit data and max voltage is 3.3v
-        #  Voltage = (Raw data / 2^ADC resolution) * max_voltage
-    
-        max_sensor_value = 2**16 - 1  
-        max_voltage = 3.3  
-    
-        for column in selected_sensor_data.columns:
-            if column != 'button':
-                selected_sensor_data.loc[:, column] = (selected_sensor_data[column] / max_sensor_value) * max_voltage
-    
-    
-        Pzplt_data1.append( np.array(selected_sensor_data['p1']) )
-        Pzplt_data2.append( np.array(selected_sensor_data['p2']) )
-        Pzplt_data3.append( np.array(selected_sensor_data['p3']) )
-        Pzplt_data4.append( np.array(selected_sensor_data['p4']) )
-    
-        # Calculate magnitude values for FM accelerometer data
-        Aclm_data1.append( np.linalg.norm(selected_sensor_data[['x1', 'y1', 'z1' ]], axis=1) )
-        Aclm_data2.append( np.linalg.norm(selected_sensor_data[['x2', 'y2', 'z2' ]], axis=1) )
-    
-        # Calculate magnitude values for IMU accelerometers
-        IMU_data.append( np.linalg.norm(selected_sensor_data[['accel_x', 'accel_y', 'accel_z']], axis=1) )
+        # Loading the data files
+        with tqdm(total=n_data_files) as pbar:
+            for i in range(n_data_files):
+                
+                read_data = Femo(data_file_names[0])
+            
+                all_sensor_df = (read_data.dataframes["piezos"]
+                                .join(read_data.dataframes["accelerometers"])
+                                .join(read_data.dataframes["imu"])
+                                .join(read_data.dataframes["force"])
+                                .join(read_data.dataframes["push_button"])
+                                .join(read_data.dataframes["timestamp"]))
+            
+            
+                # Resample accelerometer data using linear interpolation
+            
+                ### Accelerometer 1
+                all_sensor_df['x1'] = pd.Series(all_sensor_df['x1']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['y1'] = pd.Series(all_sensor_df['y1']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['z1'] = pd.Series(all_sensor_df['z1']).interpolate(method='linear', limit_direction='both')
+            
+                ### Accelerometer 2
+                all_sensor_df['x2'] = pd.Series(all_sensor_df['x2']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['y2'] = pd.Series(all_sensor_df['y2']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['z2'] = pd.Series(all_sensor_df['z2']).interpolate(method='linear', limit_direction='both')
+            
+                ### IMU_data
+                all_sensor_df['rotation_r'] = pd.Series(all_sensor_df['rotation_r']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['rotation_i'] = pd.Series(all_sensor_df['rotation_i']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['rotation_j'] = pd.Series(all_sensor_df['rotation_j']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['rotation_k'] = pd.Series(all_sensor_df['rotation_k']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['accel_x']    = pd.Series(all_sensor_df['accel_x']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['accel_y']    = pd.Series(all_sensor_df['accel_y']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['accel_z']    = pd.Series(all_sensor_df['accel_z']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['magnet_x']   = pd.Series(all_sensor_df['magnet_x']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['magnet_y']   = pd.Series(all_sensor_df['magnet_y']).interpolate(method='linear', limit_direction='both')
+                all_sensor_df['magnet_z']   = pd.Series(all_sensor_df['magnet_z']).interpolate(method='linear', limit_direction='both')
+            
+            
+                selected_data_columns = ['p1', 'p2', 'p3', 'p4', 'x1', 'y1', 'z1', 'x2', 'y2', 'z2', 'rotation_r', 'rotation_i', 'rotation_j', 'rotation_k', 'magnet_x','magnet_y','magnet_z', 'accel_x', 'accel_y', 'accel_z', 'button']
+                selected_sensor_data = all_sensor_df[selected_data_columns]
+                
+                IMU_columns = ['rotation_r', 'rotation_i', 'rotation_j', 'rotation_k', 'magnet_x','magnet_y','magnet_z', 'accel_x', 'accel_y', 'accel_z']
+                FM_sensor_columns = ['p1', 'p2', 'p3', 'p4', 'x1', 'y1', 'z1', 'x2', 'y2', 'z2']
+                
+                # Convert them to voltage value
+                # All sensor is 16 bit data and max voltage is 3.3v
+                #  Voltage = (Raw data / 2^ADC resolution) * max_voltage
+            
+                max_sensor_value = 2**16 - 1  
+                max_voltage = 3.3  
         
-        IMU.append( selected_sensor_data[['rotation_r','rotation_i','rotation_j', 'rotation_k',
-                                          'magnet_x','magnet_y','magnet_z',
-                                          'accel_x','accel_y','accel_z']] )
-        
-        # New data do not have flexi data, so we have passed a blank array for flexi data to keep the same format of return values
-        Flexi_data = np.zeros_like(Aclm_data2)
-    
-        #Get maternal sensation 
-        sensation_data = [np.array(selected_sensor_data['button'])]
-    
+                for column in selected_sensor_data.columns:
+                    if column in FM_sensor_columns:
+                        selected_sensor_data.loc[:, column] = (selected_sensor_data[column] / max_sensor_value) * max_voltage
+            
+                # •	contains the rotation vector, which is the most accurate position (based on magnetometer, accelerometer and gyroscope)
+                # •	rotation vector is currently in quaternion format
+                # •	rotation vector originally is a float variable, it is stored as int16 with the following conversion: 
+                #       rounded (original_float_value x 10000)
+                # •	Magnetic vector is originally in Microtesla
+                #       Magnetic vector is stored as int16: rounded (original_float x 100)
+                # •	Linear acceleration is originally in m/s^2 (gravity excluded)
+                #       Linear acceleration is stored as int16: rounded (original_float_value x 1000)
+                
+                IMU_all = selected_sensor_data[['rotation_r','rotation_i','rotation_j', 'rotation_k',
+                                                  'magnet_x','magnet_y','magnet_z',
+                                                  'accel_x','accel_y','accel_z']]
+                
+                IMU_aclm_single_file    = (IMU_all[['accel_x', 'accel_y', 'accel_z']]/1000)
+                IMU_mag_single_file     = (IMU_all[['magnet_x', 'magnet_y', 'magnet_z']]/100)
+                IMU_rotation_quat       = (IMU_all[['rotation_i', 'rotation_j', 'rotation_k', 'rotation_r']]/10000)
+                
+                
+                
+                # --------- Quaternion to euler conversion is not possible with zero-magnitude rows -----
+                # --------- Converting zero-magnitude rows with the first nonzero-magnitude row values --
+                # Find the first non-zero orientation row
+                non_zero_row = IMU_rotation_quat[(IMU_rotation_quat != 0).any(axis=1)].iloc[0].tolist()
+                # Replace rows with all zeros with first valid nonzero-magnitude row
+                IMU_rotation_quat.loc[(IMU_rotation_quat == 0).all(axis=1)] = non_zero_row
+                
+                
+                IMU_rotation_quat = IMU_rotation_quat.values #convert to numpy array
+                
+                
+                rotation = R.from_quat(IMU_rotation_quat)
+                IMU_rotation_rpy = rotation.as_euler('xyz', degrees=True)                
+                IMU_rotation_rpy = pd.DataFrame(IMU_rotation_rpy, columns=['roll', 'pitch', 'yaw'])
+                
+                
+                # Function to convert quaternion to euler angles
+                # def quaternion_to_euler(row):
+                    
+                #     try:
+                #         quat = [row['rotation_r'], row['rotation_i'], row['rotation_j'], row['rotation_k']]
+                #         rotation = R.from_quat(quat)
+                #         euler = rotation.as_euler('xyz', degrees=True)
+                #     except:
+                #         euler = np.array([0,0,0])
+                #     return pd.Series(euler, index=['roll', 'pitch', 'yaw'])
+                
+                # print("Start")
+                # # Apply the function to each row of the DataFrame
+                # IMU_rotation_rpy = IMU_rotation_quat.apply(quaternion_to_euler, axis=1)
+                # print("End")
+                
+                
+                
+                Pzplt_data1.append( np.array(selected_sensor_data['p1']) )
+                Pzplt_data2.append( np.array(selected_sensor_data['p2']) )
+                Pzplt_data3.append( np.array(selected_sensor_data['p3']) )
+                Pzplt_data4.append( np.array(selected_sensor_data['p4']) )
+            
+                # Calculate magnitude values for FM accelerometer data
+                Aclm_data1.append( np.linalg.norm(selected_sensor_data[['x1', 'y1', 'z1' ]], axis=1) )
+                Aclm_data2.append( np.linalg.norm(selected_sensor_data[['x2', 'y2', 'z2' ]], axis=1) )
+            
+                # Calculate magnitude values for IMU accelerometers
+                IMU_aclm.append( np.linalg.norm(IMU_aclm_single_file[['accel_x', 'accel_y', 'accel_z']], axis=1) )
+                IMU_mag.append( np.linalg.norm(IMU_mag_single_file[['magnet_x', 'magnet_y', 'magnet_z']], axis=1) )
+                
+                IMU_rotation.append(IMU_rotation_rpy) # Rotation data is not combined
+                
+                
+                # New data do not have flexi data, so we have passed a blank array for flexi data to keep the same format of return values
+                Flexi_data.append(np.zeros(len(Pzplt_data1)))
+            
+                #Get maternal sensation 
+                sensation_data.append( np.array(selected_sensor_data['button']) )
+                
+                
+                # Update the progress bar
+                pbar.update(1)
     
         s1 = Aclm_data1 
         s2 = Aclm_data2 
         s3 = Pzplt_data1 
         s4 = Pzplt_data2 
         s5 = Pzplt_data3 
-        s6 = Pzplt_data4 
+        s6 = Pzplt_data4
 
-
-    return s1, s2, s3, s4, s5, s6, Flexi_data, IMU_data, IMU, sensation_data
+    return s1, s2, s3, s4, s5, s6, Flexi_data, IMU_aclm, IMU_rotation, IMU_mag, sensation_data
 
 
 def getParticipantID(dataFileName):
@@ -339,8 +407,7 @@ def get_dataFile_info(data_file_names, Fs_sensor, sample_data):
     )
 
 
-def get_preprocessed_data(Aclm_data1, Aclm_data2, Acstc_data1, Acstc_data2, Pzplt_data1, Pzplt_data2,
-                          Flexi_data, IMU_data, sensation_data, Fs_sensor, data_format):
+def get_preprocessed_data(s1, s2, s3, s4, s5, s6, Flexi_data, IMU_aclm, IMU_rotation, sensation_data, Fs_sensor, data_format):
     
     #GET_PREPROCESSED_DATA Summary of this function goes here
     #   Detailed explanation goes here
@@ -351,17 +418,18 @@ def get_preprocessed_data(Aclm_data1, Aclm_data2, Acstc_data1, Acstc_data2, Pzpl
 
 
     # Variable declaration
-    Aclm_data1_fltd = Aclm_data1.copy()
-    Aclm_data2_fltd = Aclm_data2.copy()
-    Acstc_data1_fltd = Acstc_data1.copy()
-    Acstc_data2_fltd = Acstc_data2.copy()
-    Pzplt_data1_fltd = Pzplt_data1.copy()
-    Pzplt_data2_fltd = Pzplt_data2.copy()
-    Flexi_data_fltd = Flexi_data.copy()
-    IMU_data_fltd = IMU_data.copy()
+    s1_fltd = s1.copy()
+    s2_fltd = s2.copy()
+    s3_fltd = s3.copy()
+    s4_fltd = s4.copy()
+    s5_fltd = s5.copy()
+    s6_fltd = s6.copy()
+    Flexi_data_fltd     = Flexi_data.copy()
+    IMU_aclm_fltd       = IMU_aclm.copy()
+    IMU_rotation_fltd   = IMU_rotation.copy()
     sensation_data_trimd = sensation_data.copy()
 
-    n_data_files = len(Aclm_data1) # Number of data files in the passed data set
+    n_data_files = len(s1) # Number of data files in the passed data set
     
     
     
@@ -384,8 +452,14 @@ def get_preprocessed_data(Aclm_data1, Aclm_data2, Acstc_data1, Acstc_data2, Pzpl
         end_removal_period = 30  # Removal period in seconds
 
     elif data_format == '2':
-        start_removal_period = 5  # Removal period in seconds
-        end_removal_period = 5  # Removal period in seconds
+        
+        if len(s1[0])> Fs_sensor*5*60: #If greater than 5 minutes remove last and first 30 seconds
+            start_removal_period = 30  # Removal period in seconds
+            end_removal_period = 30  # Removal period in seconds
+        
+        else:                                   #Else remove just 5 seconds
+            start_removal_period = 5  # Removal period in seconds
+            end_removal_period = 5  # Removal period in seconds
     
     # Starting notification
     print('\n#Settings for pre-processing and trimming-')
@@ -438,72 +512,79 @@ def get_preprocessed_data(Aclm_data1, Aclm_data2, Acstc_data1, Acstc_data2, Pzpl
     
     
     # =============== Loop for filtering and trimming the data ================
-    for i in range(n_data_files):
-        # print('\n\tCurrent data file: {}/{}'.format(i+1, n_data_files))
-
-        # -----------------------Data filtering--------------------------------
-        
-        # Bandpass filtering
-        Aclm_data1_fltd[i]  = sosfiltfilt(sos_FM,  Aclm_data1_fltd[i])
-        Aclm_data2_fltd[i]  = sosfiltfilt(sos_FM,  Aclm_data2_fltd[i])
-        Acstc_data1_fltd[i] = sosfiltfilt(sos_FM,  Acstc_data1_fltd[i])
-        Acstc_data2_fltd[i] = sosfiltfilt(sos_FM,  Acstc_data2_fltd[i])
-        Pzplt_data1_fltd[i] = sosfiltfilt(sos_FM,  Pzplt_data1_fltd[i])
-        Pzplt_data2_fltd[i] = sosfiltfilt(sos_FM,  Pzplt_data2_fltd[i])
-        IMU_data_fltd[i]    = sosfiltfilt(sos_IMU, IMU_data_fltd[i])
-        
-        
-        # Low-pass filtering
-        Flexi_data_fltd[i]  = sosfiltfilt(sos_force, Flexi_data_fltd[i])
-        
-        
-        # -----------------------Data trimming---------------------------------
-        
-        # Trimming of raw data
-        start_index = start_removal_period * Fs_sensor
-        end_index = -end_removal_period * Fs_sensor
-        sensation_data_trimd[i] = sensation_data_trimd[i][start_index:end_index]
-        
-        # Trimming of filtered data
-        Aclm_data1_fltd[i]  = Aclm_data1_fltd[i][start_index:end_index]
-        Aclm_data2_fltd[i]  = Aclm_data2_fltd[i][start_index:end_index]
-        Acstc_data1_fltd[i] = Acstc_data1_fltd[i][start_index:end_index]
-        Acstc_data2_fltd[i] = Acstc_data2_fltd[i][start_index:end_index]
-        Pzplt_data1_fltd[i] = Pzplt_data1_fltd[i][start_index:end_index]
-        Pzplt_data2_fltd[i] = Pzplt_data2_fltd[i][start_index:end_index]
-        if data_format == '1':
-            Flexi_data_fltd[i]  = Flexi_data_fltd[i][start_index:end_index]
-        elif data_format == '2':
-            Flexi_data_fltd[i] = Flexi_data_fltd[i]
-
-        IMU_data_fltd[i]    = IMU_data_fltd[i][start_index:end_index]
-
-        
-        
-        #---------Equalizing the length of SD1 and SD2 data sets --------------
-        
-        min_length_sensor = min(len(Acstc_data1_fltd[i]), len(Acstc_data2_fltd[i]))
-        # min_length for sensor and sensation are equal except for the
-        # case of data sets taken with DAQ version 1.0
     
-        sensation_data_trimd[i] = sensation_data_trimd[i][:min_length_sensor]
-        
-        Aclm_data1_fltd[i]  = Aclm_data1_fltd[i][:min_length_sensor]
-        Aclm_data2_fltd[i]  = Aclm_data2_fltd[i][:min_length_sensor]
-        Acstc_data1_fltd[i] = Acstc_data1_fltd[i][:min_length_sensor]
-        Acstc_data2_fltd[i] = Acstc_data2_fltd[i][:min_length_sensor]
-        Pzplt_data1_fltd[i] = Pzplt_data1_fltd[i][:min_length_sensor]
-        Pzplt_data2_fltd[i] = Pzplt_data2_fltd[i][:min_length_sensor]
-
-        if data_format == '1':
-            Flexi_data_fltd[i]  = Flexi_data_fltd[i][:min_length_sensor]
-        elif data_format == '2':
-            Flexi_data_fltd[i] = Flexi_data_fltd[i]
-
-        IMU_data_fltd[i]    = IMU_data_fltd[i][:min_length_sensor]
-        
-    return Aclm_data1_fltd, Aclm_data2_fltd, Acstc_data1_fltd, Acstc_data2_fltd, Pzplt_data1_fltd, Pzplt_data2_fltd, \
-           Flexi_data_fltd, IMU_data_fltd, sensation_data_trimd
+    #add progress bar with tqdm
+    with tqdm(total=n_data_files) as pbar:
+        for i in range(n_data_files):
+            # print('\n\tCurrent data file: {}/{}'.format(i+1, n_data_files))
+    
+            # -----------------------Data filtering--------------------------------
+            
+            # Bandpass filtering
+            s1_fltd[i]       = sosfiltfilt(sos_FM,  s1_fltd[i])
+            s2_fltd[i]       = sosfiltfilt(sos_FM,  s2_fltd[i])
+            s3_fltd[i]       = sosfiltfilt(sos_FM,  s3_fltd[i])
+            s4_fltd[i]       = sosfiltfilt(sos_FM,  s4_fltd[i])
+            s5_fltd[i]       = sosfiltfilt(sos_FM,  s5_fltd[i])
+            s6_fltd[i]       = sosfiltfilt(sos_FM,  s6_fltd[i])
+            IMU_aclm_fltd[i] = sosfiltfilt(sos_IMU, IMU_aclm_fltd[i])
+            IMU_rotation_fltd[i]['roll']    = sosfiltfilt(sos_IMU, IMU_rotation_fltd[i]['roll'].values)
+            IMU_rotation_fltd[i]['pitch']   = sosfiltfilt(sos_IMU, IMU_rotation_fltd[i]['pitch'].values)
+            IMU_rotation_fltd[i]['yaw']     = sosfiltfilt(sos_IMU, IMU_rotation_fltd[i]['yaw'].values)
+            
+            
+            
+            if data_format == '1':
+                # Low-pass filtering
+                Flexi_data_fltd[i]  = sosfiltfilt(sos_force, Flexi_data_fltd[i])
+            
+            
+            # -----------------------Data trimming---------------------------------
+            
+            # Trimming of raw data
+            start_index = start_removal_period * Fs_sensor
+            end_index = -end_removal_period * Fs_sensor
+            sensation_data_trimd[i] = sensation_data_trimd[i][start_index:end_index]
+            
+            # Trimming of filtered data
+            s1_fltd[i]          = s1_fltd[i][start_index:end_index]
+            s2_fltd[i]          = s2_fltd[i][start_index:end_index]
+            s3_fltd[i]          = s3_fltd[i][start_index:end_index]
+            s4_fltd[i]          = s4_fltd[i][start_index:end_index]
+            s5_fltd[i]          = s5_fltd[i][start_index:end_index]
+            s6_fltd[i]          = s6_fltd[i][start_index:end_index]
+            Flexi_data_fltd[i]  = Flexi_data_fltd[i][start_index:end_index]
+            IMU_aclm_fltd[i]    = IMU_aclm_fltd[i][start_index:end_index]
+            IMU_rotation_fltd[i]= IMU_rotation_fltd[i].iloc[start_index:end_index]
+            
+            
+            #---------Equalizing the length of SD1 and SD2 data sets (old data only) --------------
+            
+            if data_format == '1':
+                min_length_sensor = min(len(s3_fltd[i]), len(s4_fltd[i]))
+                # min_length for sensor and sensation are equal except for the
+                # case of data sets taken with DAQ version 1.0
+            
+                sensation_data_trimd[i] = sensation_data_trimd[i][:min_length_sensor]
+                
+                s1_fltd[i]  = s1_fltd[i][:min_length_sensor]
+                s2_fltd[i]  = s2_fltd[i][:min_length_sensor]
+                s3_fltd[i] = s3_fltd[i][:min_length_sensor]
+                s4_fltd[i] = s4_fltd[i][:min_length_sensor]
+                s5_fltd[i] = s5_fltd[i][:min_length_sensor]
+                s6_fltd[i] = s6_fltd[i][:min_length_sensor]
+                Flexi_data_fltd[i]  = Flexi_data_fltd[i][:min_length_sensor]
+                IMU_aclm_fltd[i]    = IMU_aclm_fltd[i][:min_length_sensor]
+            elif data_format == '2':
+                pass
+                #Equalization isn't required for new belt data
+            
+            
+            # Update the progress bar
+            pbar.update(1)
+            
+            
+    return s1_fltd, s2_fltd, s3_fltd, s4_fltd, s5_fltd, s6_fltd, Flexi_data_fltd, IMU_aclm_fltd, IMU_rotation_fltd, sensation_data_trimd
 
 
 
@@ -531,42 +612,141 @@ def get_info_from_preprocessed_data(n_data_files, Flexi_data_fltd, Fs_sensor):
 
 #==============Data and feature extraction part
 
-def get_IMU_map(IMU_data, data_file_name, Fs_sensor, data_format):
-    # Input variables: IMU_data - A column vector of IMU data
-    #                  data_file_name - a string with the data file name
-    # Output variables: IMU_map - A column vector with segmented IMU data
+def get_IMU_map(IMU_data, data_file_name, Fs_sensor, IMU_threshold_, IMU_dilation_, data_format):
     
-   # Counting the number of data files to be loaded
-   #    data_file_names is a cell variable containing 1 name in each cell  
+    """
+    Algorithm: @ Abhishek Kumar Ghosh
+    Author: @ Moniruzzaman Akash
+    Segments and dilates the IMU data and returns the resultant data as IMU map.
+    Parameters
+    ----------
+    IMU_data : List. Shape: (number of files, sensor data values)
+        Filtered Sensor data to determine maternal movement.
+    data_file_name : str
+        A string containing data file name. i.e. 'S1_Day3_dataFile_000.mat'
+    Fs_sensor : int
+        Sampling rate of the sensor data.
+    data_format : str
+        Belt selection number. "1"(old), "2"(new)
+
+    Returns
+    -------
+    IMU_map : numpy vector of boolean values
+        Contains True/False values for that particular data file considering IMU Mapping.
+
+    """
 
 
     if data_format == '1':
         IMU_threshold = [0.003, 0.002]  # Fixed threshold values obtained through separate testing
         IMU_dilation_time = 4.0
+        
+        # -----------Segmentation of IMU data and creation of IMU_map--------------
+        if getParticipantID(data_file_name) == '1' or getParticipantID(data_file_name) == '2':
+            IMU_map = np.abs(IMU_data) >= IMU_threshold[0]  # Threshold for Subject 1 or 2
+        else:
+            IMU_map = np.abs(IMU_data) >= IMU_threshold[1]  # Threshold for Subject 3, 4, 5
+            
+            
     elif data_format == '2':
-        IMU_threshold = 0.015 #0.008
-        IMU_dilation_time = 4
-    
-      # Dilation length in seconds
-    IMU_dilation_size = round(IMU_dilation_time * Fs_sensor)  # Dilation length in sample number
-    SE_IMU = np.ones(IMU_dilation_size)  # Structuring element for dilation that will have values 1 with a length of dilation_size
+        IMU_threshold = IMU_threshold_
+        IMU_dilation_time = IMU_dilation_
+        
+        # -----------Segmentation of IMU data and creation of IMU_map--------------
+        IMU_map = np.abs(IMU_data) >= IMU_threshold
 
-    # -----------Segmentation of IMU data and creation of IMU_map--------------
-    IMU_map = np.abs(IMU_data) >= IMU_threshold
+        
+    # Dilation length in seconds
+    IMU_dilation_size = round(IMU_dilation_time * Fs_sensor)  # Dilation length in sample number
 
     # ----------------------Dilation of IMU data-------------------------------
-    # IMU_map = binary_dilation(IMU_map, structure=SE_IMU, iterations=1)# Dilate or expand the ROI's(points with value = 1) by dilation_size (half above and half below),as defined by SE
     IMU_map = custom_binary_dilation( IMU_map, IMU_dilation_size)# Dilate or expand the ROI's(points with value = 1) by dilation_size (half above and half below),as defined by SE
 
     return IMU_map
 
+def get_IMU_rot_map(IMU_rotation_data, IMU_rot_threshold, IMU_dilation_time, Fs_sensor):
+    
+    """
+    @ Moniruzzaman Akash
+    Segments and dilates the IMU data and returns the resultant data as IMU map.
+    Parameters
+    ----------
+    IMU_data : List. Shape: (number of files, sensor data values)
+        Filtered Sensor data to determine maternal movement.
+    data_file_name : str
+        A string containing data file name. i.e. 'S1_Day3_dataFile_000.mat'
+    Fs_sensor : int
+        Sampling rate of the sensor data.
+    data_format : str
+        Belt selection number. "1"(old), "2"(new)
+
+    Returns
+    -------
+    IMU_map : numpy vector of boolean values
+        Contains True/False values for that particular data file considering IMU Mapping.
+
+    """
+    
+    # find differerntial of each euler angle
+    IMU_rotR_fltd = IMU_rotation_data['roll'].values
+    IMU_rotP_fltd = IMU_rotation_data['pitch'].values
+    IMU_rotY_fltd = IMU_rotation_data['yaw'].values
+
+    IMU_rotR_diff = np.abs(np.diff(IMU_rotR_fltd))
+    IMU_rotP_diff = np.abs(np.diff(IMU_rotP_fltd))
+    IMU_rotY_diff = np.abs(np.diff(IMU_rotY_fltd))
+    
+    
+    # -----------Segmentation of IMU data and creation of IMU_map--------------
+    # threshold for each euler angle and make them true if pass threshold
+    IMU_rotR_map = np.abs(IMU_rotR_diff) >= IMU_rot_threshold
+    IMU_rotP_map = np.abs(IMU_rotP_diff) >= IMU_rot_threshold
+    IMU_rotY_map = np.abs(IMU_rotY_diff) >= IMU_rot_threshold
+
+    # Dilation length in seconds
+    IMU_dilation_size = round(IMU_dilation_time * Fs_sensor)# Dilation length in sample number
+    
+    
+    # ----------------------Dilation of IMU data-------------------------------
+    IMU_rotR_map = custom_binary_dilation(IMU_rotR_map, IMU_dilation_size)
+    IMU_rotP_map = custom_binary_dilation(IMU_rotP_map, IMU_dilation_size)
+    IMU_rotY_map = custom_binary_dilation(IMU_rotY_map, IMU_dilation_size)
+    
+    
+    
+    IMU_rotation_map = IMU_rotR_map | IMU_rotP_map | IMU_rotY_map
+    
+
+    return IMU_rotation_map
+
 
 def get_sensation_map(sensation_data, IMU_map, ext_backward, ext_forward, Fs_sensor, Fs_sensation):
-    # Input variables: sensation_data - A column vector with the sensation data
-    #                  IMU_map - A column vector
-    #                  ext_backward, ext_forward - Scalar values
-    #                  Fs_sensor, Fs_sensation - Scalar values
-    # Output variables: M_sntn_map - A column vector with all the sensation windows joined together
+    
+    """
+    Algorithm: @ Abhishek Kumar Ghosh
+    Author: @ Moniruzzaman Akash
+    Generates sensation map by dilating every detection to past and future. Revomes the windows that overlaps with IMU_map
+    Parameters
+    ----------
+    sensation_data : numpy.ndarray. Shape(sensation data values)
+        Sensation data for a particular data file.
+    IMU_map : numpy.ndarray. Shape(IMU mapped values)
+        IMU Map of a particular data file.
+    ext_backward : int
+        Backward extension length in second. i.e, 5 seconds. so value = 5
+    ext_forward : int
+        Forward extension length in second. i.e, 2 seconds. so value = 2
+    Fs_sensor : int
+        The sampling rate of the sensor data. Usual case scenario Fs_sensor = 1024
+    Fs_sensation : int
+        The sampling rate of the sensation data. Usual case scenario Fs_sensation = 1024
+
+    Returns
+    -------
+    M_sntn_map : numpy.ndarray. Shape(sensation mapped values)
+        Contains 1/0 values for that particular data file considering Sensation Data Mapping.
+        A vector with all the sensation windows joined together
+    """
 
     M_event_index = np.where(sensation_data)[0]  # Sample numbers for maternal sensation detection
     M_sntn_map = np.zeros(len(IMU_map))  # Initializing the map with zeros everywhere
@@ -596,25 +776,38 @@ def get_sensation_map(sensation_data, IMU_map, ext_backward, ext_forward, Fs_sen
 
 
 def get_segmented_data(sensor_data, min_SN, IMU_map, dilation_time, Fs_sensor):
-    # Input variables: sensor_data - A list numpy array
-    #                  min_SN - A list or scalar
-    #                  IMU_map - A 1D numpy array
-    #                  dilation_time - Scalar
-    #                  Fs_sensor - Scalar
-    # Output variables: sensor_data_sgmntd - A list variable of the same size as the input variable sensor_data
-    #                   h - A vector
+    """
+    Algorithm: @ Abhishek Kumar Ghosh
+    Author: @ Moniruzzaman Akash
+    Thresholds the data, removes body movement, and dilates the data.
+    Parameters
+    ----------
+    sensor_data : List. Shape(number of FM sensors, sensor data values)
+        Sensor data for a particular data file.
+    min_SN : List (number of FM sensors)
+        These values are selected to get SEN of 99%
+    IMU_map : numpy.ndarray. Shape(IMU mapped values)
+        IMU Map of a particular data file.
+    dilation_time : int
+        Dilation size in seconds
+    Fs_sensor : int
+        The sampling rate of the sensor data. Usual case scenario Fs_sensor = 1024
 
+    Returns
+    -------
+    sensor_data_sgmntd : List. Shape(number of FM sensors, sensor data values)
+        Segmented data values for that particular sensor in that particular datafile.
+    h: List. Shape (number of FM sensors)
+        Generates a threshold variable based on which TPD,FPD and features can be extracted.
+
+    """
+    
     low_signal_quantile = 0.25
     sgmntd_signal_cutoff = [0.0001, 0.0001, 0.0001, 0.0001, 0.0001, 0.0001]
     dilation_size = round(dilation_time * Fs_sensor)
     SE = np.ones((dilation_size+1))  # linear element necessary for dilation operation
 
     n_sensors = len(sensor_data)
-
-    if np.isscalar(min_SN):
-        min_SN_new = np.full(n_sensors, min_SN)  # In the case where only a single value is given for FM_min_SN, it is expanded for all the sensors
-    else:
-        min_SN_new = min_SN
 
     h = np.zeros(n_sensors)  # Variable for threshold
     sensor_data_sgmntd = [None] * n_sensors
@@ -624,7 +817,7 @@ def get_segmented_data(sensor_data, min_SN, IMU_map, dilation_time, Fs_sensor):
         s = np.abs(sensor_data[index])
         LQ = np.quantile(s, low_signal_quantile)  # Returns the quantile value for low 25% (= low_signal_quantile) of the signal
         e = s[s <= LQ]  # Signal noise
-        h[index] = min_SN_new[index] * np.median(e)  # Threshold value. Each row will contain the threshold value for each data file
+        h[index] = min_SN[index] * np.median(e)  # Threshold value. Each row will contain the threshold value for each data file
 
         if np.isnan(h[index]):  # Check if h = NaN. This happens when e=[], as median(e)= NaN for that case!!!
             h[index] = np.inf
@@ -758,13 +951,36 @@ def match_with_m_sensation(sensor_data_sgmntd, sensation_data, IMU_map, M_sntn_M
 
 def get_performance_params(TPD_all, FPD_all, TND_all, FND_all):
     """
-    GET_PERFORMANCE_PARAMS Summary of this function goes here
-    Input variables:  TPD_all, FPD_all, TND_all, FND_all - single cell/multi-cell variable.
-    Number of cells indicates the number of sensor data or combination data provided together.
+    Algorithm: @ Abhishek Kumar Ghosh
+    Author: @ Moniruzzaman Akash
+    Gets the performance values of the implemented algorithms
+    Parameters
+    ----------
+    TPD_all : single cell/multi-cell variable
+        Number of cells indicates the number of sensor data or combination data provided together.
+    FPD_all : single cell/multi-cell variable
+        Number of cells indicates the number of sensor data or combination data provided together..
+    TND_all : single cell/multi-cell variable
+        Number of cells indicates the number of sensor data or combination data provided together..
+    FND_all : single cell/multi-cell variable
+        Number of cells indicates the number of sensor data or combination data provided together..
+        
     Each cell contains a vector with row size = n_data_files.
+    Returns
+    -------
+    SEN_all : cell variable with size same as the input variables.
+        DESCRIPTION.
+    PPV_all : cell variable with size same as the input variables.
+        DESCRIPTION.
+    SPE_all : cell variable with size same as the input variables.
+        DESCRIPTION.
+    ACC_all : cell variable with size same as the input variables.
+        DESCRIPTION.
+    FS_all : cell variable with size same as the input variables.
+        DESCRIPTION.
+    FPR_all : cell variable with size same as the input variables.
+        DESCRIPTION.
 
-    Output variables: SEN_all, PPV_all, SPE_all, ACC_all, FS_all, FPR_all - cell variable with
-    size same as the input variables.
     """
 
     n_sensors = len(TPD_all)
