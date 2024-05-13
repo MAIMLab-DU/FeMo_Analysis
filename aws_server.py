@@ -13,7 +13,7 @@ class S3FileManager:
         
         
     def download_file(self, object_key):
-        current_script_path = os.path.realpath(__file__)
+        current_script_path = os.path.dirname(os.path.abspath(__file__))
         folder = current_script_path+ "/Data_files/"+object_key.split("/")[0].replace(":", "_") #Convert from 'DC:54:75:C2:E3:FC/' to 'DC_54_75_C2_E3_FC/'
         file_name = object_key.split("/")[1]
         
