@@ -1,4 +1,4 @@
-# %%%Import Libraries
+# %% Import Libraries
 #!/usr/bin/bash python3
 
 import pandas as pd
@@ -20,7 +20,7 @@ from SP_Functions import load_data_files, get_preprocessed_data, get_IMU_map, ge
         
 from ML_Functions import extract_detections, extract_detections_modified, extract_features_modified, normalize_features, ML_prediction
 
-import boto3
+from aws_server import S3FileManager
 
 warnings.filterwarnings('ignore')
 # Change the current working directory to the directory of the current script file
@@ -28,8 +28,9 @@ os.chdir(os.path.dirname( os.path.abspath(__file__) ) )
 
 
 # model_filepath = "Model_folder/rf_model_selected_two_sensor.pkl"
-data_file_path = "Data_files/F4_12_FA_8D_05_EC/log_2024_04_05_18_24_11.dat" # Data file to use when no data file argument given
-single_file = True
+# data_file_path = "Data_files/F4_12_FA_8D_05_EC/log_2024_04_05_18_24_11.dat" # Data file to use when no data file argument given
+data_file_path = "Data_files/log_2024_05_09_10_44_54_IMU_thresh_chk.dat"
+load_single_file = True
 
 # Create an ArgumentParser object
 parser = argparse.ArgumentParser(description='This cose uses saved model to predict FM')
@@ -50,34 +51,18 @@ else:
     print("Using New Belt data.")
     
 if args.server:
-
+    S3bucket = S3FileManager('femo-sensor-logfiles')
+    
     # If file name is passed use that
     if args.file_name:
         object_key = args.file_name
     else:
         #Otherwise use a predefined data
         object_key = 'DC:54:75:C2:E3:FC/log_2024_02_06_06_17_27'
+    
+    #Download the file
+    S3bucket.download_file(object_key)
 
-    # Replace 'your_bucket_name' and 'your_object_key' with your actual S3 bucket name and object key
-    bucket_name = 'femo-sensor-logfiles'
-
-    folder = "Data_files/"+object_key.split("/")[0].replace(":", "_") #Convert from 'DC:54:75:C2:E3:FC/' to 'DC_54_75_C2_E3_FC/'
-    file_name = object_key.split("/")[1]
-    if not os.path.exists(folder):
-        # Create the directory
-        os.makedirs(folder)
-
-    data_file_path = folder+"/"+file_name+".dat"  # Specify the local file path where you want to save the file
-
-    print(f"Getting file from S3: {object_key}")
-    if not os.path.exists(data_file_path):
-        # data_file_path = "Data_files/"+data_file_name #os.path.join(os.getcwd(),
-
-        # Create an S3 client
-        s3 = boto3.client('s3')
-
-        # Download the file from S3 to the local server
-        s3.download_file(bucket_name, object_key, data_file_path)
 
 # Data Format
 # data_format = '2' # input("Data Format: ")
@@ -111,12 +96,14 @@ new_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Github/FeMo_Analy
 old_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Previous Study/All subject data/Fetal movement data/"
 
 
-if data_format == '1':
-    data_file_names = get_file_list(old_data_folder_path, data_format)
-elif data_format == '2':
-    data_file_names = get_file_list(new_data_folder_path, data_format)
-    if single_file:
-        data_file_names = [data_file_path]
+if load_single_file:
+    data_file_names = [data_file_path]
+else:
+    if data_format == '1':
+        data_file_names = get_file_list(old_data_folder_path, data_format)
+    elif data_format == '2':
+        data_file_names = get_file_list(new_data_folder_path, data_format)
+
 
 # %% Data Loading and Preprocessing
 # data_file_path = os.path.join(os.getcwd(), data_file_path)

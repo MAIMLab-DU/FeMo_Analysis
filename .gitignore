@@ -1,2 +1,6 @@
 __pycache__
 *.pyc
+Data_files/
+Reports/
+Model_folder/
+Results/

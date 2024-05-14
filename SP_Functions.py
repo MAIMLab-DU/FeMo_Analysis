@@ -739,7 +739,7 @@ def get_merged_map(IMU_aclm_map, IMU_rot_map):
     map_added = IMU_aclm_map.astype(int) + IMU_rot_map.astype(int)
     
     map_added[0] = 0
-    map_added[1] = 0
+    map_added[-1] = 0
     
     # Find where changes from non-zero to zero or zero to non-zero occur
     changes = np.where((map_added[:-1] == 0) != (map_added[1:] == 0))  [0] + 1

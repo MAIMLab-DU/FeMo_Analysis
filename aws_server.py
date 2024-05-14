@@ -20,9 +20,14 @@ class S3FileManager:
         if not os.path.exists(folder):
             # Create the directory
             os.makedirs(folder)
-
-        data_file_path = folder+"/"+file_name+".dat"  # Specify the local file path where you want to save the file
         
+        
+        # Specify the local file path where you want to save the file
+        if ".dat" not in object_key:
+            data_file_path = folder+"/"+file_name+".dat"  #If .dat extension is not present in object key, add that
+        else:
+            data_file_path = folder+"/"+file_name         #Otherwise keep as it is
+            
         try:
             #If file is not downloaded before downlaod it
             if not os.path.exists(data_file_path):
@@ -34,7 +39,7 @@ class S3FileManager:
         except Exception as e:
             print(f"Error downloading file: {e}")
 
-    def download_files_in_device(self, device_name, local_dir):
+    def download_files_in_device(self, device_name):
         try:
             response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=device_name)
             if 'Contents' in response:
@@ -43,9 +48,11 @@ class S3FileManager:
                     self.download_file(obj_key)
             else:
                 print("No objects found with the specified device.")
+            
+            print("Downloading Completed.\n")
+            
         except Exception as e:
             print(f"Error downloading files with key part: {e}")
-    
     def get_fileList_in_device(self, device_name):
         #Retrieves a list of files and their corresponding sizes within a specific folder of the S3 bucket.
         files = []
@@ -76,3 +83,16 @@ class S3FileManager:
                     folders.append(prefix['Prefix'])
 
         return folders
+
+# object_key = 'DC:54:75:C2:E3:FC/log_2024_02_06_06_17_27'
+# S3bucket = S3FileManager('femo-sensor-logfiles')
+
+# S3bucket.download_file(object_key)
+
+# files, size = S3bucket.get_fileList_in_device('DC:54:75:C2:23:28')
+# print(len(files))
+
+# S3bucket.download_files_in_device('DC:54:75:C2:23:28')
+
+# devices = S3bucket.get_device_list()
+# print(devices)
