@@ -199,7 +199,7 @@ def load_data_files(data_format, data_file_names):
         with tqdm(total=n_data_files) as pbar:
             for i in range(n_data_files):
                 
-                read_data = Femo(data_file_names[0])
+                read_data = Femo(data_file_names[i])
             
                 all_sensor_df = (read_data.dataframes["piezos"]
                                 .join(read_data.dataframes["accelerometers"])
@@ -667,7 +667,7 @@ def get_IMU_map(IMU_data, data_file_name, Fs_sensor, IMU_threshold_, IMU_dilatio
 def get_IMU_rot_map(IMU_rotation_data, IMU_rot_threshold, IMU_dilation_time, Fs_sensor):
     
     """
-    @ Moniruzzaman Akash
+    @ Algorithm and Author: Ahsan Imran, Moniruzzaman Akash
     Segments and dilates the IMU data and returns the resultant data as IMU map.
     Parameters
     ----------
@@ -692,16 +692,16 @@ def get_IMU_rot_map(IMU_rotation_data, IMU_rot_threshold, IMU_dilation_time, Fs_
     IMU_rotP_fltd = IMU_rotation_data['pitch'].values
     IMU_rotY_fltd = IMU_rotation_data['yaw'].values
 
-    IMU_rotR_diff = np.abs(np.diff(IMU_rotR_fltd))
-    IMU_rotP_diff = np.abs(np.diff(IMU_rotP_fltd))
-    IMU_rotY_diff = np.abs(np.diff(IMU_rotY_fltd))
+    # IMU_rotR_diff = np.abs(np.diff(IMU_rotR_fltd))
+    # IMU_rotP_diff = np.abs(np.diff(IMU_rotP_fltd))
+    # IMU_rotY_diff = np.abs(np.diff(IMU_rotY_fltd))
     
     
     # -----------Segmentation of IMU data and creation of IMU_map--------------
     # threshold for each euler angle and make them true if pass threshold
-    IMU_rotR_map = np.abs(IMU_rotR_diff) >= IMU_rot_threshold
-    IMU_rotP_map = np.abs(IMU_rotP_diff) >= IMU_rot_threshold
-    IMU_rotY_map = np.abs(IMU_rotY_diff) >= IMU_rot_threshold
+    IMU_rotR_map = np.abs(IMU_rotR_fltd) >= IMU_rot_threshold
+    IMU_rotP_map = np.abs(IMU_rotP_fltd) >= IMU_rot_threshold
+    IMU_rotY_map = np.abs(IMU_rotY_fltd) >= IMU_rot_threshold
 
     # Dilation length in seconds
     IMU_dilation_size = round(IMU_dilation_time * Fs_sensor)# Dilation length in sample number
@@ -716,7 +716,7 @@ def get_IMU_rot_map(IMU_rotation_data, IMU_rot_threshold, IMU_dilation_time, Fs_
     
     IMU_rotation_map = IMU_rotR_map | IMU_rotP_map | IMU_rotY_map
     
-    IMU_rotation_map = np.insert(IMU_rotation_map, 0, 0)
+    # IMU_rotation_map = np.insert(IMU_rotation_map, 0, 0)
 
     return IMU_rotation_map
 
@@ -767,7 +767,7 @@ def get_merged_map(IMU_aclm_map, IMU_rot_map):
             
             
     # print("Resulting tuples:", windows)
-    return map_final
+    return map_final.astype(dtype=bool)
 
 
 def get_sensation_map(sensation_data, IMU_map, ext_backward, ext_forward, Fs_sensor, Fs_sensation):

@@ -28,9 +28,9 @@ os.chdir(os.path.dirname( os.path.abspath(__file__) ) )
 
 
 # model_filepath = "Model_folder/rf_model_selected_two_sensor.pkl"
-# data_file_path = "Data_files/F4_12_FA_8D_05_EC/log_2024_04_05_18_24_11.dat" # Data file to use when no data file argument given
-data_file_path = "Data_files/log_2024_05_09_10_44_54_IMU_thresh_chk.dat"
-load_single_file = True
+data_file_path = "Data_files/F4_12_FA_8D_05_EC/log_2024_04_04_19_12_51.dat" # Data file to use when no data file argument given
+# data_file_path = "Data_files/log_2024_05_09_10_44_54_IMU_thresh_chk.dat"
+load_single_file = False
 
 # Create an ArgumentParser object
 parser = argparse.ArgumentParser(description='This cose uses saved model to predict FM')
@@ -92,7 +92,7 @@ def get_file_list(folder_path, data_format):
 
     return file_list
 
-new_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Github/FeMo_Analysis/Data_files/F4_12_FA_8D_05_EC/"
+new_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Github/FeMo_Analysis/Data_files/all_data/"
 old_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Previous Study/All subject data/Fetal movement data/"
 
 
@@ -165,17 +165,17 @@ tic = time.time()
 
 # Parameters for segmentation and detection matching
 ext_backward        = 5.0  # Backward extension length in second
-ext_forward         = 2.0  # Forward extension length in second
-FM_dilation_time    = 3 # Dilation size in seconds, its the minimum size of a fetal movement
+ext_forward         = 5  # Forward extension length in second
+FM_dilation_time    = 7 # Dilation size in seconds, its the minimum size of a fetal movement
 n_FM_sensors        = 6   # Number of FM sensors
-FM_min_SN           = [70,70,50,30,30,50]  # These values are selected to get SEN of 99%
+FM_min_SN           = [30,30,65,30,30,65]  # These values are selected to get SEN of 99%
+
+#70,70,50,30,30,50
 
 
-
-
-IMU_map = []
+IMU_aclm_map = []
 IMU_RPY_map = []
-IMU_merged_map = []
+IMU_map = []
 
 M_sntn_map =[]
 threshold = np.zeros((n_data_files, n_FM_sensors))
@@ -205,8 +205,8 @@ FPD_indv = np.zeros(array_shape)
 TND_indv = np.zeros(array_shape)
 FND_indv = np.zeros(array_shape)
 
-IMU_aclm_threshold = 0.2
-IMU_rot_threshold = 5
+IMU_aclm_threshold = 0.22
+IMU_rot_threshold = 4
 IMU_dilation_time = 4
 
 
@@ -231,7 +231,7 @@ for i in range(n_data_files):
     print('\nCurrent data file: {}/{}'.format(i+1, n_data_files))
 
     print("\tCreating IMU Map...")
-    IMU_map.append(get_IMU_map(IMU_aclm_fltd[i], data_file_names[i], Fs_sensor, IMU_aclm_threshold, IMU_dilation_time, data_format))
+    IMU_aclm_map.append(get_IMU_map(IMU_aclm_fltd[i], data_file_names[i], Fs_sensor, IMU_aclm_threshold, IMU_dilation_time, data_format))
     # IMU_map[i] = np.arange(0, len(IMU_map[i]), 1)
     #Make IMU map 'False' for this dummy data, because we do not know exact threshold
     #IMU_map = [~arr for arr in IMU_map]
@@ -240,7 +240,8 @@ for i in range(n_data_files):
     IMU_RPY_map.append(get_IMU_rot_map(IMU_rotation_fltd[i], IMU_rot_threshold, IMU_dilation_time, Fs_sensor))
     
     
-    IMU_merged_map.append(get_merged_map(IMU_map[i], IMU_RPY_map[i] ))
+    IMU_map.append(get_merged_map(IMU_aclm_map[i], IMU_RPY_map[i] ))
+    
     
     # ----------------------- Creation of M_sensation_map ----------------%
     # get_sensation_map() function is used here. This function gives the
@@ -420,8 +421,7 @@ for i in range(n_data_files):
             current_ML_detection_map, sensation_data_trimd[i], IMU_map[i], M_sntn_map[i], ext_backward,
             ext_forward, FM_dilation_time, Fs_sensor, Fs_sensation)
 
-print("Total time ", time.time()-tic) 
-# %% 
+
 print("\nCalculating Results of all Segmentation Schemes...")
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~ Result Generation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -462,7 +462,7 @@ for scheme_ind, scheme in enumerate(schemes):
     scenario_count = scenario_count + 1
 print("Complete\n")
 
-
+print("Total time ", time.time()-tic) 
 
 
 ## %%Data frame and results saving
@@ -581,10 +581,10 @@ plotData(4, s5_fltd[file_idx], 'Piezo_3', 'Signal', '' )
 plotData(5, s6_fltd[file_idx], 'Piezo_4', 'Signal', '' )
 
 # plotData(6, sensor_data_sgmntd_cmbd_all_sensors, 'All Events', 'Detection', '', legend=True )
-# plotData(6, sensation_data_trimd[file_idx], 'Ground Truth', '', '', legend=True, plot_type='scatter')
-plotData(6, IMU_map[file_idx]*.5, 'IMU_aclm_Map', '', '', legend=True, plot_type='scatter')
-plotData(6, IMU_RPY_map[file_idx]*.6, 'IMU_RPY_map', '', '', legend=True, plot_type='scatter')
-plotData(6, IMU_merged_map[file_idx]*.8, 'IMU_merged_map', '', '', legend=True, plot_type='scatter')
+plotData(6, sensation_data_trimd[file_idx], 'Ground Truth', '', '', legend=True, plot_type='scatter')
+plotData(6, IMU_aclm_map[file_idx]*.5, 'IMU_aclm_Map', '', '', legend=True, plot_type='scatter')
+# plotData(6, IMU_RPY_map[file_idx]*.6, 'IMU_RPY_map', '', '', legend=True, plot_type='scatter')
+# plotData(6, IMU_merged_map[file_idx]*.8, 'IMU_merged_map', '', '', legend=True, plot_type='scatter')
 
 plotData(7, IMU_aclm_fltd[file_idx], 'IMU data', '', '', legend=True, plot_type='scatter')
 # plotData(7, sensor_data_sgmntd_cmbd_all_sensors_ML, 'Fetal movement', 'Detection', 'Time(second)', legend=True, xticks=True )

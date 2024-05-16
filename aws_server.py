@@ -83,6 +83,15 @@ class S3FileManager:
                     folders.append(prefix['Prefix'])
 
         return folders
+    
+    def delete_small_files(self, directory):
+        for filename in os.listdir(directory):
+            filepath = os.path.join(directory, filename)
+            if os.path.isfile(filepath):
+                file_size = os.path.getsize(filepath)
+                if file_size < 1024 * 1024:  # 1MB = 1024 * 1024 bytes
+                    os.remove(filepath)
+                    print(f"Deleted file: {filepath}")
 
 # object_key = 'DC:54:75:C2:E3:FC/log_2024_02_06_06_17_27'
 # S3bucket = S3FileManager('femo-sensor-logfiles')
@@ -96,3 +105,9 @@ class S3FileManager:
 
 # devices = S3bucket.get_device_list()
 # print(devices)
+
+# Specify the directory where you want to delete small files
+# directory_path = "/home/ubuntu/FeMo_Analysis/Data_files/DC_54_75_C2_23_28/"
+
+# Call the function to delete small files in the specified directory
+# S3bucket.delete_small_files(directory_path)
