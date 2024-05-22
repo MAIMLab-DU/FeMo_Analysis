@@ -1508,11 +1508,47 @@ print("\n\nTime taken: ", time.time()- tic)
 # del sensor_data_fltd, sensor_data_sgmntd, sensor_data_sgmntd_cmbd_all_sensors, sensor_data_sgmntd_cmbd_all_sensors_labeled
 
 
+# %% Export Result with ML
+
+print(f"Calculating Result of Desired Segementation Scheme: {scheme_strs[desired_scheme]}")
+
+column_heads = ['Scenario', 'SENSITIVITY', 'PRECISION', 'SPECIFICITY', 'ACCURACY', 'PABAK', 'FS_SCORE', 'TPD', 'FPD', 'TND', 'FND']
+result_col = [0] * len(column_heads)
+
+SN_current = ','.join(map(str, FM_min_SN))
+
+result_col[0] =  f'Scheme {scheme_strs[desired_scheme]}({SN_current}_aclm_{IMU_aclm_threshold}_rot_{IMU_rot_threshold})'
+result_col[1]= SEN_overall[0]
+result_col[2]= PPV_overall[0]
+result_col[3]= SPE_overall[0]
+result_col[4]= ACC_overall[0]
+result_col[5]= PABAK_overall
+result_col[6]= FS_overall[0]
+result_col[7]= int(TPD_overall[0])
+result_col[8]= int(FPD_overall[0])
+result_col[9]= int(TND_overall[0])
+result_col[10]= int(FND_overall[0])
+
+## %%Data frame and results saving
+
+
+df = pd.DataFrame([result_col], columns=column_heads)
+# Print the DataFrame
+
+file_path = rf'FMM_analysis_with_ML_6schemes_Dilation_time_{scheme_strs[desired_scheme]}.csv'
+
+# Save the DataFrame to a CSV file
+df.to_csv(file_path, index=False)
+
+print("results Generated")
+
 #%%
+'''
 print("\nCalculating Results of all Segmentation Schemes...")
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~ Result Generation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 for scheme_ind, scheme in enumerate(schemes):
+
     SEN_indv, PPV_indv, SPE_indv, ACC_indv, FS_indv, FPR_indv = get_performance_params(
         TPD_indv[:, scheme_ind], FPD_indv[:, scheme_ind], TND_indv[:, scheme_ind], FND_indv[:, scheme_ind])
     indv_detections = np.concatenate(
@@ -1562,7 +1598,7 @@ file_path = rf'FMM_analysis_without_ML_6schemes_Dilation_time.csv'
 
 # Save the DataFrame to a CSV file
 df.to_csv(file_path, index=False)
-
+'''
 # %% ML Prediction
 '''
 #==================================================================================
