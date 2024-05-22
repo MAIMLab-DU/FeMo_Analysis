@@ -92,31 +92,52 @@ if args.server:
 # data_format = '2' # input("Data Format: ")
 
 
-def get_file_list(folder_path, data_format):
+def get_file_list(folder_path, data_format, participant_folders=None):
     # Initialize an empty list to store file names
     file_list = []
 
-    # Get list of files in the folder
-    files = os.listdir(folder_path)
-
-    # Iterate over each file
-    for file_name in files:
+    # Check if participant_folders is provided
+    if participant_folders:
+        # Iterate over each participant folder
+        for participant_folder in participant_folders:
+            participant_path = os.path.join(folder_path, participant_folder)
+            if os.path.isdir(participant_path):
+                print(participant_folder, "> Found")
+                # Get list of files in the participant folder
+                files = os.listdir(participant_path)
+                
+                # Iterate over each file
+                for file_name in files:
+                    # Check the file extension based on data_format
+                    if (data_format == '1' and file_name.endswith(".mat")) or \
+                       (data_format == '2' and file_name.endswith(".dat")):
+                        # If it matches, append the file path to the list
+                        file_list.append(folder_path + participant_folder + "/" + file_name)
+            else:
+                print(participant_folder, "> Not Found")
+    else:
+        # Get list of files in the main folder
+        files = os.listdir(folder_path)
         
-        if data_format == '1':
-            # Check if file ends with ".mat" extension
-            if file_name.endswith(".mat"):
-                # If it does, append the file name to the list
-                file_list.append(folder_path + file_name)
-        
-        elif data_format == '2':
-            # Check if file ends with ".dat" extension
-            if file_name.endswith(".dat"):
-                # If it does, append the file name to the list
-                file_list.append(folder_path + file_name)
+        # Iterate over each file
+        for file_name in files:
+            # Check the file extension based on data_format
+            if (data_format == '1' and file_name.endswith(".mat")) or \
+               (data_format == '2' and file_name.endswith(".dat")):
+                # If it matches, append the file path to the list
+                file_list.append(folder_path + participant_folder + "/" + file_name)
 
+    print("Total files found:", len(file_list))
     return file_list
 
-new_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Github/FeMo_Analysis/Data_files/all_data/"
+
+participant_data_in_use = ["F4_12_FA_8D_05_EC",
+                            "DC_54_75_C2_23_28",
+                            "F4_12_FA_8D_12_D4",
+                            "DC_54_75_C0_E8_30",
+                            "F4_12_FA_8B_1B_C0",
+                            "DC_54_75_C2_22_4C"]
+new_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Github/FeMo_Analysis/Data_files/"
 # new_data_folder_path = "D:/Monaf/New Data FM Monitoring/All_data_files_combined/"
 # new_data_folder_path = "D:/Monaf/confidential_monaf_only/"
 old_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Previous Study/All subject data/Fetal movement data/"
@@ -128,7 +149,7 @@ else:
     if data_format == '1':
         data_file_names = get_file_list(old_data_folder_path, data_format)
     elif data_format == '2':
-        data_file_names = get_file_list(new_data_folder_path, data_format)
+        data_file_names = get_file_list(new_data_folder_path, data_format, participant_data_in_use)
 
 
 # %% Data Loading and Preprocessing
