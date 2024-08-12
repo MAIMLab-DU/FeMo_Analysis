@@ -11,7 +11,7 @@ from skimage.measure import label
 from femo import Femo
 #from tkinter import filedialog
 #import tkinter as tk
-import os, sys
+import os, sys, glob
 import time
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R
@@ -769,6 +769,145 @@ def get_merged_map(IMU_aclm_map, IMU_rot_map):
     # print("Resulting tuples:", windows)
     return map_final.astype(dtype=bool)
 
+def get_IMU_rot_map_complex(IMU_rotation_data, IMU_rot_threshold, IMU_dilation_time, Fs_sensor):
+    """
+    Modified function to segment and dilate the IMU data based on new conditions.
+    Parameters
+    ----------
+    IMU_rotation_data : DataFrame. Contains 'roll', 'pitch', 'yaw' columns with values.
+    IMU_rot_threshold : int. Not used in the modified function but kept for compatibility.
+    IMU_dilation_time : float. Time in seconds for dilation.
+    Fs_sensor : int. Sampling rate of the sensor data.
+
+    Returns
+    -------
+    IMU_rotation_map : numpy array of boolean values. Contains True/False values based on new conditions.
+    """
+   
+    # Extract roll, pitch, and yaw values
+    IMU_rotR_fltd = IMU_rotation_data['roll'].values
+    IMU_rotP_fltd = IMU_rotation_data['pitch'].values
+    IMU_rotY_fltd = IMU_rotation_data['yaw'].values
+
+    # Take the absolute values of the Euler angles
+    IMU_rotR_fltd = np.abs(IMU_rotR_fltd)
+    IMU_rotP_fltd = np.abs(IMU_rotP_fltd)
+    IMU_rotY_fltd = np.abs(IMU_rotY_fltd)
+   
+    # Initialize the IMU map with zeros (False)
+    IMU_rotation_map = np.zeros_like(IMU_rotP_fltd, dtype=bool)
+   
+    # Apply new conditions to modify the IMU map
+    for i in range(len(IMU_rotP_fltd)):
+        if IMU_rotP_fltd[i] < 1.5:
+            if IMU_rotR_fltd[i] < 4 and IMU_rotY_fltd[i] < 4:
+                IMU_rotation_map[i] = False  
+            else:
+                IMU_rotation_map[i] = True
+        else:  # IMU_rotP_fltd[i] >= 1
+            if IMU_rotR_fltd[i] > 4 or IMU_rotY_fltd[i] > 4:
+                IMU_rotation_map[i] = True  
+
+    # Dilation length in samples
+    IMU_dilation_size = round(IMU_dilation_time * Fs_sensor)
+   
+    # Dilation of IMU data
+    IMU_rotation_map = custom_binary_dilation(IMU_rotation_map, IMU_dilation_size)
+   
+    return IMU_rotation_map
+
+def get_IMU_rot_map_TWO(IMU_rotation_data, IMU_rot_threshold, IMU_dilation_time, Fs_sensor):
+    
+    """
+    @ 
+    Segments and dilates the IMU data and returns the resultant data as IMU map.
+    Parameters
+    ----------
+    IMU_data : List. Shape: (number of files, sensor data values)
+        Filtered Sensor data to determine maternal movement.
+    data_file_name : str
+        A string containing data file name. i.e. 'S1_Day3_dataFile_000.mat'
+    Fs_sensor : int
+        Sampling rate of the sensor data.
+    data_format : str
+        Belt selection number. "1"(old), "2"(new)
+
+    Returns
+    -------
+    IMU_map : numpy vector of boolean values
+        Contains True/False values for that particular data file considering IMU Mapping.
+
+    """
+    
+    # find differerntial of each euler angle
+    IMU_rotR_fltd = IMU_rotation_data['roll'].values
+    IMU_rotP_fltd = IMU_rotation_data['pitch'].values
+    IMU_rotY_fltd = IMU_rotation_data['yaw'].values
+    
+    
+    IMU_rotR_fltd = np.abs(IMU_rotR_fltd)
+    IMU_rotP_fltd = np.abs(IMU_rotP_fltd)
+    IMU_rotY_fltd = np.abs(IMU_rotY_fltd)
+    
+    
+    IMU_rotR_map = IMU_rotR_fltd >= 4.0
+    IMU_rotP_map = IMU_rotP_fltd >= 1.5
+    IMU_rotY_map = IMU_rotY_fltd >= 4.0
+
+    # Dilation length in seconds
+    IMU_dilation_size = round(IMU_dilation_time * Fs_sensor)# Dilation length in sample number
+    
+    
+    IMU_rotation_map_1 = get_merged_map(IMU_rotR_map, IMU_rotP_map)
+    IMU_rotation_map_2 = get_merged_map(IMU_rotR_map, IMU_rotY_map)
+    IMU_rotation_map_3 = get_merged_map(IMU_rotP_map, IMU_rotY_map)
+
+    IMU_rotation_map = IMU_rotation_map_1 | IMU_rotation_map_2 | IMU_rotation_map_3
+
+    IMU_rotation_map = custom_binary_dilation(IMU_rotation_map, IMU_dilation_size)
+    # IMU_rotation_map = IMU_rotR_map | IMU_rotP_map | IMU_rotY_map
+    
+    # IMU_rotation_map = np.insert(IMU_rotation_map, 0, 0)
+
+    return IMU_rotation_map
+
+def remove_IMU_from_segmentation(IMU_map, segmentation_map):
+    """
+    Algorithm and AUthor: @ Moniruzzaman Akash
+    """
+    map_added = IMU_map.astype(int) + segmentation_map.astype(int)
+    
+    map_added[0] = 0
+    map_added[-1] = 0
+    
+    # Find where changes from non-zero to zero or zero to non-zero occur
+    changes = np.where((map_added[:-1] == 0) != (map_added[1:] == 0))  [0] + 1
+
+
+    # Create tuples of every two values
+    windows = []
+    for i in range(0, len(changes), 2):
+        if i < len(changes) - 1:
+            windows.append((changes[i], changes[i+1]))
+        else:
+            windows.append((changes[i],))
+    
+    map_final = np.copy(segmentation_map)
+    
+    for window in windows:
+        start = window[0]
+        
+        if len(window) == 2:
+            end = window[1]
+            if np.any(map_added[start:end] == 2):
+                map_final[start:end] = 0
+        else:
+            map_final[start:] = 1
+            
+    map_final[0] = 0     
+    map_final[-1] = 0 
+    # print("Resulting tuples:", windows)
+    return map_final.astype(dtype=int)
 
 def get_sensation_map(sensation_data, IMU_map, ext_backward, ext_forward, Fs_sensor, Fs_sensation):
     
@@ -822,7 +961,6 @@ def get_sensation_map(sensation_data, IMU_map, ext_backward, ext_forward, Fs_sen
             M_sntn_map[L1:L2 + 1] = 0  # Removes the sensation data from the map
 
     return M_sntn_map
-
 
 
 def get_segmented_data(sensor_data, min_SN, IMU_map, dilation_time, Fs_sensor):
@@ -904,6 +1042,65 @@ def get_segmented_data(sensor_data, min_SN, IMU_map, dilation_time, Fs_sensor):
 
 
     return sensor_data_sgmntd, h
+
+def get_segmented_data_cmbd_all_sensors(s1_fltd, s2_fltd, s3_fltd, s4_fltd, s5_fltd, s6_fltd,
+                                        FM_min_SN, IMU_map_, FM_dilation_time, Fs_sensor, sensor_selection):
+    if sensor_selection == 1:
+       n_FM_sensors = 2
+       sensor_data_fltd = [s1_fltd, s2_fltd]
+       sensor_data_sgmntd, threshold_ = get_segmented_data(sensor_data_fltd, FM_min_SN, IMU_map_, FM_dilation_time, Fs_sensor)
+       for i in range(n_FM_sensors):
+           sensor_data_sgmntd[i] = remove_IMU_from_segmentation(IMU_map_, sensor_data_sgmntd[i])
+       sensor_data_sgmntd_cmbd_all_sensors = sensor_data_sgmntd[0] | sensor_data_sgmntd[1]
+    elif sensor_selection == 2:
+        n_FM_sensors = 2
+        sensor_data_fltd = [s3_fltd, s4_fltd]
+        sensor_data_sgmntd, threshold_ = get_segmented_data(sensor_data_fltd, FM_min_SN, IMU_map_, FM_dilation_time, Fs_sensor)
+        for i in range(n_FM_sensors):
+            sensor_data_sgmntd[i] = remove_IMU_from_segmentation(IMU_map_, sensor_data_sgmntd[i])
+        sensor_data_sgmntd_cmbd_all_sensors = sensor_data_sgmntd[0] | sensor_data_sgmntd[1]
+    elif sensor_selection == 3:
+        n_FM_sensors = 2
+        sensor_data_fltd = [s5_fltd, s6_fltd]
+        sensor_data_sgmntd, threshold_ = get_segmented_data(sensor_data_fltd, FM_min_SN, IMU_map_, FM_dilation_time, Fs_sensor)
+        for i in range(n_FM_sensors):
+            sensor_data_sgmntd[i] = remove_IMU_from_segmentation(IMU_map_, sensor_data_sgmntd[i])
+        sensor_data_sgmntd_cmbd_all_sensors = sensor_data_sgmntd[0] | sensor_data_sgmntd[1]
+    elif sensor_selection == 4:
+        n_FM_sensors = 4
+        sensor_data_fltd = [s1_fltd, s2_fltd, s3_fltd, s4_fltd]
+        sensor_data_sgmntd, threshold_ = get_segmented_data(sensor_data_fltd, FM_min_SN, IMU_map_, FM_dilation_time, Fs_sensor)
+        for i in range(n_FM_sensors):
+            sensor_data_sgmntd[i] = remove_IMU_from_segmentation(IMU_map_, sensor_data_sgmntd[i])
+        sensor_data_sgmntd_cmbd_all_sensors = sensor_data_sgmntd[0] | sensor_data_sgmntd[1] | sensor_data_sgmntd[2] | sensor_data_sgmntd[3]
+    elif sensor_selection == 5:
+        n_FM_sensors = 4
+        sensor_data_fltd = [s1_fltd, s2_fltd, s5_fltd, s6_fltd]
+        sensor_data_sgmntd, threshold_ = get_segmented_data(sensor_data_fltd, FM_min_SN, IMU_map_, FM_dilation_time, Fs_sensor)
+        for i in range(n_FM_sensors):
+            sensor_data_sgmntd[i] = remove_IMU_from_segmentation(IMU_map_, sensor_data_sgmntd[i])
+        sensor_data_sgmntd_cmbd_all_sensors = sensor_data_sgmntd[0] | sensor_data_sgmntd[1] | sensor_data_sgmntd[2] | sensor_data_sgmntd[3]
+    
+    elif sensor_selection == 6:
+        n_FM_sensors = 4
+        sensor_data_fltd = [s3_fltd, s4_fltd, s5_fltd, s6_fltd]
+        sensor_data_sgmntd, threshold_ = get_segmented_data(sensor_data_fltd, FM_min_SN, IMU_map_, FM_dilation_time, Fs_sensor)
+        for i in range(n_FM_sensors):
+            sensor_data_sgmntd[i] = remove_IMU_from_segmentation(IMU_map_, sensor_data_sgmntd[i])
+        sensor_data_sgmntd_cmbd_all_sensors = sensor_data_sgmntd[0] | sensor_data_sgmntd[1] | sensor_data_sgmntd[2] | sensor_data_sgmntd[3]
+        
+    elif sensor_selection == 7:
+        n_FM_sensors = 6
+        sensor_data_fltd = [s1_fltd, s2_fltd, s3_fltd, s4_fltd, s5_fltd, s6_fltd]
+        sensor_data_sgmntd, threshold_ = get_segmented_data(sensor_data_fltd, FM_min_SN, IMU_map_, FM_dilation_time, Fs_sensor)
+        for i in range(n_FM_sensors):
+            sensor_data_sgmntd[i] = remove_IMU_from_segmentation(IMU_map_, sensor_data_sgmntd[i])
+        # sensor_data_sgmntd_all.append(sensor_data_sgmntd)
+        
+        sensor_data_sgmntd_cmbd_all_sensors = sensor_data_sgmntd[0] | sensor_data_sgmntd[1] | sensor_data_sgmntd[2] | sensor_data_sgmntd[3] | sensor_data_sgmntd[4] | sensor_data_sgmntd[5]
+
+    return sensor_data_sgmntd_cmbd_all_sensors, sensor_data_fltd, sensor_data_sgmntd, n_FM_sensors, threshold_
+
 
 
 

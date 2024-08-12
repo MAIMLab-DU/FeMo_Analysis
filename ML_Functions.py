@@ -21,7 +21,8 @@ from SP_Functions import get_IMU_map,get_segmented_data, getParticipantID
 tf.config.set_visible_devices([], 'GPU')
 
 
-def extract_detections(M_sntn_map, sensor_data_fltd, sensor_data_sgmntd, sensor_data_sgmntd_cmbd_all_sensors_labeled, n_label, n_FM_sensors):
+def extract_detections(M_sntn_map, sensor_data_fltd, sensor_data_sgmntd, sensor_data_sgmntd_cmbd_all_sensors_labeled, n_label, n_FM_sensors,
+                       IMU_aclm_fltd, IMU_rotation_fltd_1D):
     # Input variables: M_sntn_map - Column vector
     #                  sensor_data_fltd - Cell variable
     #                  sensor_data_sgmntd - Cell variable
@@ -36,13 +37,18 @@ def extract_detections(M_sntn_map, sensor_data_fltd, sensor_data_sgmntd, sensor_
     n_candidate_TPD = len(np.unique(sensor_data_sgmntd_cmbd_all_sensors_labeled * M_sntn_map)) - 1  # Number of detections that intersect with maternal sensation
     n_candidate_FPD = n_label - n_candidate_TPD
     
-    
     current_file_TPD_extraction_cell = []# Each element will contain 1 TPD for all 6 sensors
     current_file_FPD_extraction_cell = []
-
+    
     current_file_extracted_TPD_weightage = []
     current_file_extracted_FPD_weightage = []
-
+    
+    current_file_aclm_TPD = []
+    current_file_aclm_FPD = []
+    current_file_rot_TPD = []
+    current_file_rot_FPD = []
+    
+    
     k_TPD = 0
     k_FPD = 0
     for k in range(1, n_label+1):
@@ -83,19 +89,29 @@ def extract_detections(M_sntn_map, sensor_data_fltd, sensor_data_sgmntd, sensor_
             current_file_TPD_extraction_cell.append(current_TPD_extraction)
             current_file_extracted_TPD_weightage.append(tmp_var)
             
+            current_file_aclm_TPD.append(IMU_aclm_fltd[L_min:L_max + 1])
+            current_file_rot_TPD.append(IMU_rotation_fltd_1D[L_min:L_max + 1])
+            
         else:
             k_FPD += 1
             current_FPD_extraction = np.zeros((L_max - L_min + 1, n_FM_sensors))
             for j in range(n_FM_sensors):
                 current_FPD_extraction[:, j] = sensor_data_fltd[j][L_min:L_max + 1]
+                
             current_file_FPD_extraction_cell.append(current_FPD_extraction)
             current_file_extracted_FPD_weightage.append(tmp_var)
+            
+            current_file_aclm_FPD.append(IMU_aclm_fltd[L_min:L_max + 1])
+            current_file_rot_FPD.append(IMU_rotation_fltd_1D[L_min:L_max + 1])
             
     return (
         current_file_TPD_extraction_cell,
         current_file_FPD_extraction_cell,
         current_file_extracted_TPD_weightage,
         current_file_extracted_FPD_weightage,
+        
+        current_file_aclm_TPD, current_file_rot_TPD, current_file_aclm_FPD, current_file_rot_FPD
+        
     )
 
 
@@ -492,7 +508,8 @@ def getMorphological(signal, Fs_sensor):
     return absolute_area, relative_area, absolute_area_differential
 
 
-def extract_features(TPD_extracted, extracted_TPD_weightage, FPD_extracted, extracted_FPD_weightage, threshold, Fs_sensor, n_FM_sensors):
+def extract_features(TPD_extracted, extracted_TPD_weightage, FPD_extracted, extracted_FPD_weightage, threshold, Fs_sensor, n_FM_sensors,
+                     IMU_aclm_TPD, IMU_aclm_FPD, IMU_rot_TPD, IMU_rot_FPD):
     """
     Algorithm: @ Abhishek Kumar Ghosh
     Author: @ Monaf Chowdhury, Moniruzzaman Akash, Omar Ibn Shahid 
@@ -539,11 +556,11 @@ def extract_features(TPD_extracted, extracted_TPD_weightage, FPD_extracted, extr
     total_TPD_data = 0  # Total TP datapoints in a data file
     total_FPD_data = 0  # Total FP datapoints in a data file
 
-    for i in range(len(TPD_extracted)):#For each data file
+    for i in range(len(TPD_extracted)): # For each data file
         n_TPD += len(TPD_extracted[i])
         n_FPD += len(FPD_extracted[i])
 
-        for j in range(len(TPD_extracted[i])): #For each segment count how many TP data points
+        for j in range(len(TPD_extracted[i])): # For each segment count how many TP data points
             total_TPD_data += len(TPD_extracted[i][j])
 
         for j in range(len(FPD_extracted[i])):
@@ -553,7 +570,7 @@ def extract_features(TPD_extracted, extracted_TPD_weightage, FPD_extracted, extr
     total_duration_FPD = total_FPD_data/Fs_sensor/3600  # Duration of FPD in hrs
     
     n_common_features = 53 #i.e. max, mean, sum, sd, percentile, skew, kurtosis, .....
-    total_features = n_FM_sensors*n_common_features + 1 #Extra one feature for segment duration
+    total_features = (n_FM_sensors+2) * n_common_features + 1 #Extra one feature for segment duration
     
     
     # Extraction of features from TPDs and FPDs
@@ -574,17 +591,28 @@ def extract_features(TPD_extracted, extracted_TPD_weightage, FPD_extracted, extr
             #X_TPD[index_TPD,2] = extracted_TPD_weightage[i][j]#  Duration of each TPD in s
             X_TPD[index_TPD, 0] = len(TPD_extracted[i][j]) / Fs_sensor  # Duration of each TPD in s
 
-            for k in range(n_FM_sensors):
-                S = TPD_extracted[i][j][:, k]
-                S_thd = np.abs(S) - threshold[i, k]
-                S_thd_above = S_thd[S_thd > 0]
-
-# =============================================================================
-                S_MPDatom = np.abs(TPD_extracted[i][j]) - threshold[i] # get getMPDatom expects 2D array. 
-# =============================================================================
-                # 2D array representing a set of epoch signals. Each row of the array corresponds to an epoch signal, 
-                # and each column corresponds to a sample in the signal.
+            for k in range(n_FM_sensors+2):
                 
+                if k == n_FM_sensors:  # IMU_aclm_TPD, IMU_rot_TPD
+                    S = IMU_rot_TPD[i][j]
+                    S_thd = S
+                    S_thd_above = S
+                
+                elif k == n_FM_sensors+1: 
+                    S = IMU_aclm_TPD[i][j]
+                    S_thd = S
+                    S_thd_above = S
+
+                else: 
+                    S = TPD_extracted[i][j][:, k]
+                    S_thd = np.abs(S) - threshold[i, k]
+                    S_thd_above = S_thd[S_thd > 0]
+
+    # =============================================================================
+                    # S_MPDatom = np.abs(TPD_extracted[i][j]) - threshold[i] # get getMPDatom expects 2D array. 
+    # =============================================================================
+                    # 2D array representing a set of epoch signals. Each row of the array corresponds to an epoch signal, 
+                    # and each column corresponds to a sample in the signal.
                 
                 # Time domain features
                 X_TPD[index_TPD, k * n_common_features + 1] = np.max(S_thd)  # Max value
@@ -675,14 +703,26 @@ def extract_features(TPD_extracted, extracted_TPD_weightage, FPD_extracted, extr
             
             
             # Feature extraction for left accelerometer
-            for k in range(n_FM_sensors):
-                S = FPD_extracted[i][j][:, k]
-                S_thd = np.abs(S) - threshold[i, k]
-                S_thd_above = S_thd[S_thd > 0]
+            for k in range(n_FM_sensors+2):               
+                if k == n_FM_sensors:  # IMU_aclm_FPD, IMU_rot_FPD
+                    S = IMU_rot_FPD[i][j]
+                    S_thd = S
+                    S_thd_above = S
                 
-                # =============================================================================
-                S_MPDatom = np.abs(FPD_extracted[i][j]) - threshold[i] # get getMPDatom expects 2D array. 
-                # =============================================================================
+                elif k == n_FM_sensors+1 :
+                    S = IMU_aclm_FPD[i][j]
+                    S_thd = S
+                    S_thd_above = S
+                
+                else:
+                    S = FPD_extracted[i][j][:, k]
+                    S_thd = np.abs(S) - threshold[i, k]
+                    S_thd_above = S_thd[S_thd > 0]
+                    
+                    # =============================================================================
+                    # S_MPDatom = np.abs(FPD_extracted[i][j]) - threshold[i] # get getMPDatom expects 2D array. 
+                    # =============================================================================
+                
                 
                 # Statistical features
                 X_FPD[index_FPD, k * n_common_features + 1] = np.max(S_thd)  # Max value

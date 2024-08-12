@@ -7,7 +7,7 @@ from tqdm import tqdm
 #import tkinter as tk
 #from tkinter import filedialog
 from skimage.measure import label
-import glob
+import glob, pickle, itertools
 import os, time, sys, argparse, warnings, logging
 from matplotlib import pyplot as plt
 
@@ -18,30 +18,31 @@ from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold, G
 from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, Ridge
 from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, ExtraTreesClassifier,\
+    VotingClassifier
 from sklearn.decomposition import PCA
-from sklearn.neighbors import NeighborhoodComponentsAnalysis
+from sklearn.neighbors import NeighborhoodComponentsAnalysis, KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier, ExtraTreeClassifier
+from sklearn.neural_network import MLPClassifier
 from scipy.special import expit
 
 # Suppress TensorFlow warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-from SP_Functions import load_data_files, get_preprocessed_data, get_IMU_map, get_IMU_rot_map, get_segmented_data, \
-    get_sensation_map, match_with_m_sensation, get_performance_params, get_merged_map
-        
-from ML_Functions import extract_detections_modified, extract_features_modified, ML_prediction
-
 
 from SP_Functions import load_data_files, get_dataFile_info, get_preprocessed_data,\
     get_info_from_preprocessed_data,get_IMU_map,get_sensation_map,get_segmented_data,\
-    match_with_m_sensation,get_performance_params
+    match_with_m_sensation,get_performance_params, remove_IMU_from_segmentation, \
+    get_segmented_data_cmbd_all_sensors, get_IMU_rot_map, get_merged_map, get_IMU_rot_map_complex, get_IMU_rot_map_TWO
         
 from ML_Functions import extract_detections, extract_features, normalize_features,\
     divide_by_holdout, divide_by_K_folds, divide_by_participants, get_prediction_accuracies,\
-    projectData, get_overall_test_prediction, map_ML_detections, define_model
+    projectData, get_overall_test_prediction, map_ML_detections, define_model, ML_prediction
     
 from Feature_Ranking import FeatureRanker
 from tensorflow.keras.callbacks import EarlyStopping, Callback
+import tensorflow as tf
 # from aws_server import S3FileManager
 
 warnings.filterwarnings('ignore')
@@ -49,7 +50,8 @@ warnings.filterwarnings('ignore')
 os.chdir(os.path.dirname( os.path.abspath(__file__) ) )
 
 
-#%% 
+#%% Data Files Names Collection
+
 # model_filepath = "Model_folder/rf_model_selected_two_sensor.pkl"
 data_file_path = "Data_files/F4_12_FA_8D_05_EC/log_2024_04_04_19_12_51.dat" # Data file to use when no data file argument given
 # data_file_path = "Data_files/log_2024_05_09_10_44_54_IMU_thresh_chk.dat"
@@ -92,13 +94,14 @@ if args.server:
 # data_format = '2' # input("Data Format: ")
 
 
-def get_file_list(folder_path, data_format, participant_folders=None):
+def get_file_list(folder_path, data_format, participant_folders=False):
     # Initialize an empty list to store file names
     file_list = []
-
+    
     # Check if participant_folders is provided
     if participant_folders:
         # Iterate over each participant folder
+        
         for participant_folder in participant_folders:
             participant_path = os.path.join(folder_path, participant_folder)
             if os.path.isdir(participant_path):
@@ -106,13 +109,16 @@ def get_file_list(folder_path, data_format, participant_folders=None):
                 # Get list of files in the participant folder
                 files = os.listdir(participant_path)
                 
+                
                 # Iterate over each file
                 for file_name in files:
                     # Check the file extension based on data_format
                     if (data_format == '1' and file_name.endswith(".mat")) or \
-                       (data_format == '2' and file_name.endswith(".dat")):
+                       (data_format == '2' and ((file_name.endswith(".dat")) or (file_name.endswith(".csv")))):
                         # If it matches, append the file path to the list
                         file_list.append(folder_path + participant_folder + "/" + file_name)
+                    
+                
             else:
                 print(participant_folder, "> Not Found")
     else:
@@ -123,13 +129,29 @@ def get_file_list(folder_path, data_format, participant_folders=None):
         for file_name in files:
             # Check the file extension based on data_format
             if (data_format == '1' and file_name.endswith(".mat")) or \
-               (data_format == '2' and file_name.endswith(".dat")):
+               (data_format == '2' and ((file_name.endswith(".dat")) or (file_name.endswith(".csv")))):
                 # If it matches, append the file path to the list
-                file_list.append(folder_path + participant_folder + "/" + file_name)
+                # file_list.append(folder_path + participant_folder + "/" + file_name)
+                file_list.append(folder_path + file_name)
 
     print("Total files found:", len(file_list))
     return file_list
 
+def list_all_files(directory):
+    file_paths = []
+
+    # Iterate over all files in the directory
+    for filename in os.listdir(directory):
+        # Create the full path
+        full_path = os.path.join(directory, filename)
+        full_path = full_path + '/'
+        # Check if it's a file (not a directory)
+        files = os.listdir(full_path)
+        for file in files:
+            final_path = os.path.join(full_path,file)
+            file_paths.append(final_path)
+
+    return file_paths
 
 participant_data_in_use = ["F4_12_FA_8D_05_EC",
                             "DC_54_75_C2_23_28",
@@ -137,9 +159,47 @@ participant_data_in_use = ["F4_12_FA_8D_05_EC",
                             "DC_54_75_C0_E8_30",
                             "F4_12_FA_8B_1B_C0",
                             "DC_54_75_C2_22_4C"]
-new_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Github/FeMo_Analysis/Data_files/"
-# new_data_folder_path = "D:/Monaf/New Data FM Monitoring/All_data_files_combined/"
-# new_data_folder_path = "D:/Monaf/confidential_monaf_only/"
+
+def list_files(directory, mode='IMU_ok'):
+    """
+    List all files in a directory and its subdirectories.
+
+    Parameters:
+    directory (str): The directory to search for files.
+    mode (str): The mode of listing files. 'all' for all files, 'IMU_ok' for files in IMU_ok folders.
+
+    Returns:
+    list: A list of file paths.
+    """
+    file_paths = []
+
+    for root, dirs, files in os.walk(directory):
+        print (root)
+        if mode == 'all':
+            for file in files:
+                file_paths.append(os.path.join(root, file))
+        elif mode == 'IMU_ok':
+            if 'IMU_ok' in root:
+                for file in files:
+                    file_paths.append(os.path.join(root, file))
+        elif mode == 'IMU_pblm':
+            if 'IMU_pblm' in root:
+                for file in files:
+                    file_paths.append(os.path.join(root, file))
+        elif mode == 'All_IMU':
+            if 'IMU_ok' in root:
+                for file in files:
+                    file_paths.append(os.path.join(root, file))
+            elif 'IMU_pblm' in root:
+                for file in files:
+                    file_paths.append(os.path.join(root, file))
+            
+    
+    return file_paths
+
+
+# new_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Github/FeMo_Analysis/Data_files/"
+new_data_folder_path = "D:/Monaf/Femo All Data/all_data/A_type"
 old_data_folder_path = "I:/Other computers/Desktop/WelcomeLeap/Previous Study/All subject data/Fetal movement data/"
 
 
@@ -149,8 +209,19 @@ else:
     if data_format == '1':
         data_file_names = get_file_list(old_data_folder_path, data_format)
     elif data_format == '2':
-        data_file_names = get_file_list(new_data_folder_path, data_format, participant_data_in_use)
+        data_file_names = list_files(new_data_folder_path, 'IMU_ok') # For drive
+        # data_file_names = get_file_list(new_data_folder_path, data_format) # For local machine
+data_file_names = list_files(new_data_folder_path, mode='All_IMU') 
 
+# =============================================================================
+# There are problems with three datafiles
+# 1. DC_54_75_C0_E8_30/log_2024_05_08_12_38_16.dat
+# 2. F4_12_FA_8B_1B_CC/log_2024_05_13_12_28_40.dat
+# 3. F4_12_FA_8D_05_EC/log_2024_04_22_18_17_15.dat
+# Remove them
+# =============================================================================
+# indices_to_remove = [4, 31, 41]
+# data_file_names = [element for index, element in enumerate(data_file_names) if index not in indices_to_remove]
 
 # %% Data Loading and Preprocessing
 # data_file_path = os.path.join(os.getcwd(), data_file_path)
@@ -205,17 +276,38 @@ s1, s2, s3, s4, s5, s6, Flexi_data, IMU_aclm, IMU_rotation, IMU_mag, sensation_d
 print("\n#Data pre-processing is going on...")
 
 s1_fltd, s2_fltd, s3_fltd, s4_fltd, s5_fltd, s6_fltd, flexi_fltd, IMU_aclm_fltd, IMU_rotation_fltd, sensation_data_trimd = get_preprocessed_data(s1, s2, s3, s4, s5, s6, Flexi_data, IMU_aclm, IMU_rotation, sensation_data, Fs_sensor, data_format)
+
+# Implementing pca on IMU_roation_fltd to reduce the three dimensional values into one 
+from sklearn.decomposition import PCA
+pca = PCA(n_components=1)
+# Function to apply PCA to each dataframe
+
+def apply_pca(df_list):
+    reduced_dataframes = []
+    for df in df_list:
+        principal_component = pca.fit_transform(df)
+        principal_component = principal_component.reshape(-1)
+        reduced_dataframes.append(principal_component)
+    return reduced_dataframes
+# Apply PCA to the list of dataframes
+print("\n#Converting 3D IMU Rotational data to 1D using PCA")
+IMU_rotation_fltd_1D = apply_pca(IMU_rotation_fltd)
+
+
 print("Preprocessing complete")
 
 # %% SENSOR FUSION, GENERATE SEGMENTATION MAP and DATA EXTRACTION
 tic = time.time()
+desired_scheme_list = [0,1,2,3,4,5,6,7,8]
+sensor_selection_list = [1,2,3,4,5,6,7]
+classifier_option_list = [1,2,3,4,5,6]
 
 # Parameters for segmentation and detection matching
 ext_backward        = 5.0  # Backward extension length in second
-ext_forward         = 5  # Forward extension length in second
-FM_dilation_time    = 7 # Dilation size in seconds, its the minimum size of a fetal movement
+ext_forward         = 2  # Forward extension length in second
+FM_dilation_time    = 3 # Dilation size in seconds, its the minimum size of a fetal movement
 n_FM_sensors        = 6   # Number of FM sensors
-FM_min_SN           = [30,30,60,30,30,60]  # These values are selected to get SEN of 99%
+FM_min_SN           = [40,40,40,40,40,40] #  [30,30,40,30,30,40]   # These values are selected to get SEN of 99%
 
 #70,70,50,30,30,50
 
@@ -232,7 +324,12 @@ extracted_TPD_weightage = []
 extracted_FPD_weightage = []
 all_data_files_schemes = []
 
-import itertools
+IMU_aclm_TPD = []
+IMU_aclm_FPD = []
+IMU_rot_TPD = []
+IMU_rot_FPD = []
+
+
 original_list = [30, 40, 50, 60, 70, 80, 90]
 # original_list = [30, 40]
 # Generate all combinations of 6 elements with replacement
@@ -253,13 +350,13 @@ TND_indv = np.zeros(array_shape)
 FND_indv = np.zeros(array_shape)
 
 IMU_aclm_threshold = 0.2
-IMU_rot_threshold = 1 # 4
+IMU_rot_threshold = 4 # 4
 IMU_dilation_time = 4 # 4
 
 n_Maternal_detected_movement_raw = 0
 n_Maternal_detected_movement_after = 0
 
-print("Segmentation going on...")
+
 
 # ===== Loop for testing set of SN ratios =====
 # for SN in all_combinations:
@@ -271,7 +368,41 @@ print("Segmentation going on...")
 #     FM_min_SN = [aclm_sm, aclm_sm, pzplt_lrg_sn, pzplt_sml_sm, pzplt_sml_sm,  pzplt_lrg_sn]
 #     print(*FM_min_SN, sep = ", ") 
 #     print(f"{scenario_count+1}/{len(all_combinations)}")
-    
+sensor_data_sgmntd_all = []
+sensor_data_sgmntd_2_type_sensor_list = []
+
+# =============================================================================
+
+print("\n#Select the sensor for data extraction from the following options: ")
+print("1- Aclm, 2- Acstc, 3- Piezo, 4- Aclm+Acstc,")
+print("5- Aclm+Piezo, 6- Acstc+Piezo, 7- All sensors.")
+# sensor_selection = int(input("Selection: "))
+sensor_selection = 7
+# Starting notification
+print("\n#Data extraction is going on with the following settings: ")
+print("\tDetection matching time window = {:.1f} (s) + {:.1f} (s)".format(ext_backward, ext_forward))
+print("\tFM dilation period = {:.1f} (s)".format(FM_dilation_time))
+print("\tThreshold multiplier:")
+print("\tAccelerometer = {:.0f}, Acoustic = {:.0f}, Piezoelectric = {:.0f}".format(FM_min_SN[0], FM_min_SN[2], FM_min_SN[4]))
+
+if sensor_selection == 1:
+    print("\n\tSensor combination: Accelerometers only.\n\t...")
+elif sensor_selection == 2:
+    print("\n\tSensor combination: Acoustic sensors only.\n\t...")
+elif sensor_selection == 3:
+    print("\n\tSensor combination: Piezoelectric diaphragms only.\n\t...")
+elif sensor_selection == 4:
+    print("\n\tSensor combination: Accelerometers and acoustic sensors.\n\t...")
+elif sensor_selection == 5:
+    print("\n\tSensor combination: Accelerometers and piezoelectric diaphragms.\n\t...")
+elif sensor_selection == 6:
+    print("\n\tSensor combination: Acoustic sensors and piezoelectric diaphragms.\n\t...")
+elif sensor_selection == 7:
+    print("\n\tSensor combination: All the sensors.\n\t...")
+
+print("Segmentation going on...")
+
+# =============================================================================
 for i in range(n_data_files):
     # Starting notification
     print('\nCurrent data file: {}/{}'.format(i+1, n_data_files))
@@ -283,7 +414,8 @@ for i in range(n_data_files):
     #IMU_map = [~arr for arr in IMU_map]
     
     # Creating IMU_rotation map
-    IMU_RPY_map.append(get_IMU_rot_map(IMU_rotation_fltd[i], IMU_rot_threshold, IMU_dilation_time, Fs_sensor))
+    # IMU_RPY_map.append(get_IMU_rot_map(IMU_rotation_fltd[i], IMU_rot_threshold, IMU_dilation_time, Fs_sensor))
+    IMU_RPY_map.append(get_IMU_rot_map_complex(IMU_rotation_fltd[i], IMU_rot_threshold, IMU_dilation_time, Fs_sensor))
     
     IMU_map.append(get_merged_map(IMU_aclm_map[i], IMU_RPY_map[i]))      
     # IMU_map[i][:] = False # New change   
@@ -314,16 +446,11 @@ for i in range(n_data_files):
     # Here we will threshold the data, remove body movement, and dilate the data.
     # Setting for the threshold and dilation are given in the function.
     # Finally sensor data will be combined using different Fusion Scheme
-    
-    sensor_data_fltd = [s1_fltd[i], s2_fltd[i], s3_fltd[i], s4_fltd[i], s5_fltd[i], s6_fltd[i]]
-    
-    #Get segmented map for each sensors
-    sensor_data_sgmntd, threshold[i, 0:n_FM_sensors] = get_segmented_data(sensor_data_fltd, FM_min_SN, IMU_map[i], FM_dilation_time, Fs_sensor)
-    
-    #Combine sensor segmentation
-    sensor_data_sgmntd_cmbd_all_sensors = sensor_data_sgmntd[0] | sensor_data_sgmntd[1] | sensor_data_sgmntd[2] | sensor_data_sgmntd[3] | sensor_data_sgmntd[4] | sensor_data_sgmntd[5]
-  
 
+    sensor_data_sgmntd_cmbd_all_sensors, sensor_data_fltd, sensor_data_sgmntd, n_FM_sensors, threshold[i, 0:n_FM_sensors] = get_segmented_data_cmbd_all_sensors(s1_fltd[i], s2_fltd[i], s3_fltd[i], s4_fltd[i], s5_fltd[i], s6_fltd[i],
+                                            FM_min_SN, IMU_map[i], FM_dilation_time, Fs_sensor, sensor_selection)
+    sensor_data_sgmntd_all.append(sensor_data_sgmntd)
+    
     # label all detections with chronological numbers starting from 0
     sensor_data_sgmntd_cmbd_all_sensors_labeled = label(sensor_data_sgmntd_cmbd_all_sensors)
     # Number of labels in the sensor_data_cmbd_all_sensors_labeled
@@ -344,159 +471,140 @@ for i in range(n_data_files):
     # %   individual sensor data to find its presence in that data set.
     # %   Combined data are stored as a cell to make it compatable with the
     # %   function related to matcing with maternal sensation.
-    
-    #Initialize segmentation map with 
-    sensor_data_sgmntd_atleast_1_sensor = np.zeros_like(sensor_data_sgmntd[0])
-    sensor_data_sgmntd_atleast_2_sensor = np.zeros_like(sensor_data_sgmntd[0])
-    sensor_data_sgmntd_atleast_3_sensor = np.zeros_like(sensor_data_sgmntd[0])
-    sensor_data_sgmntd_atleast_4_sensor = np.zeros_like(sensor_data_sgmntd[0])
-    sensor_data_sgmntd_atleast_5_sensor = np.zeros_like(sensor_data_sgmntd[0])
-    sensor_data_sgmntd_atleast_6_sensor = np.zeros_like(sensor_data_sgmntd[0])
-
-    
-    
-    if n_label > 0:
-        for index in range(1, n_label + 1):
-            L_min = np.where(sensor_data_sgmntd_cmbd_all_sensors_labeled == index)[0][0]  # Start of the label
-            L_max = np.where(sensor_data_sgmntd_cmbd_all_sensors_labeled == index)[0][-1] + 1  # End of the label
-
-            indv_detection_map = np.zeros_like(sensor_data_sgmntd[0])
-            indv_detection_map[L_min:L_max] = 1  # Map individual detection data
-            tmp_var = sum([np.any(indv_detection_map * each_sensor_data_sgmntd) for each_sensor_data_sgmntd in sensor_data_sgmntd])
-                            
-            # For detection by at least n type of sensors
-            if tmp_var >= 1:
-                sensor_data_sgmntd_atleast_1_sensor[L_min:L_max] = 1
-            if tmp_var >= 2:
-                sensor_data_sgmntd_atleast_2_sensor[L_min:L_max] = 1
-            if tmp_var >= 3:
-                sensor_data_sgmntd_atleast_3_sensor[L_min:L_max] = 1
-            if tmp_var >= 4:
-                sensor_data_sgmntd_atleast_4_sensor[L_min:L_max] = 1
-            if tmp_var >= 5:
-                sensor_data_sgmntd_atleast_5_sensor[L_min:L_max] = 1
-            if tmp_var >= 6:
-                sensor_data_sgmntd_atleast_6_sensor[L_min:L_max] = 1
-                
-                
-    # SCHEME TYPE 2: ATLEAST n TYPE OF SENSOR after Combining left and right sensors of each type*****************
-    
-    # %   First each type of left and right sensor pairs are combined with logical OR.
-    # %   Then each non-zero sengment of 'sensor_data_sgmntd_cmbd_all_sensors' is 
-    # %   checked against segmentated map of combination of left and right sensor
-    # %   pair of each kind to find its presence in that data set.
-    
-    if data_format == "1":
-        #For Old belt
-        sensor_data_sgmntd_Left_OR_Right_Aclm  = [sensor_data_sgmntd[0] | sensor_data_sgmntd[1]]
-        sensor_data_sgmntd_Left_OR_Right_Acstc = [sensor_data_sgmntd[2] | sensor_data_sgmntd[3]]
-        sensor_data_sgmntd_Left_OR_Right_Pzplt = [sensor_data_sgmntd[4] | sensor_data_sgmntd[5]]
+    if sensor_selection != 7:
+        user_scheme_labeled = sensor_data_sgmntd_cmbd_all_sensors_labeled
+        desired_scheme = 0
+        schemes = [sensor_data_sgmntd_cmbd_all_sensors]
+        all_data_files_schemes.append(schemes)
+        # all_data_files_schemes[i][desired_scheme]
+    else: 
         
-        #Keep merged sensor data in a list
-        sensor_data_sgmntd_cmbd_multi_type_sensors_array = [sensor_data_sgmntd_Left_OR_Right_Aclm, sensor_data_sgmntd_Left_OR_Right_Acstc, sensor_data_sgmntd_Left_OR_Right_Pzplt]
+        #Initialize segmentation map with 
+        sensor_data_sgmntd_atleast_1_sensor = np.zeros_like(sensor_data_sgmntd[0])
+        sensor_data_sgmntd_atleast_2_sensor = np.zeros_like(sensor_data_sgmntd[0])
+        sensor_data_sgmntd_atleast_3_sensor = np.zeros_like(sensor_data_sgmntd[0])
+        sensor_data_sgmntd_atleast_4_sensor = np.zeros_like(sensor_data_sgmntd[0])
+        sensor_data_sgmntd_atleast_5_sensor = np.zeros_like(sensor_data_sgmntd[0])
+        sensor_data_sgmntd_atleast_6_sensor = np.zeros_like(sensor_data_sgmntd[0])
+    
         
-    elif data_format == "2":
-        #For New belt
-        sensor_data_sgmntd_Left_OR_Right_Aclm        = [sensor_data_sgmntd[0] | sensor_data_sgmntd[1]]
-        sensor_data_sgmntd_Left_OR_Right_Pzplt_large = [sensor_data_sgmntd[2] | sensor_data_sgmntd[5]]
-        sensor_data_sgmntd_Left_OR_Right_Pzplt_small = [sensor_data_sgmntd[3] | sensor_data_sgmntd[4]]
         
-        #Keep merged sensor data in a list
-        sensor_data_sgmntd_cmbd_multi_type_sensors_array = [sensor_data_sgmntd_Left_OR_Right_Aclm, sensor_data_sgmntd_Left_OR_Right_Pzplt_large, sensor_data_sgmntd_Left_OR_Right_Pzplt_small]
+        if n_label > 0:
+            for index in range(1, n_label + 1):
+                L_min = np.where(sensor_data_sgmntd_cmbd_all_sensors_labeled == index)[0][0]  # Start of the label
+                L_max = np.where(sensor_data_sgmntd_cmbd_all_sensors_labeled == index)[0][-1] + 1  # End of the label
     
-    # sensor_data_sgmntd_cmbd_all_sensors_labeled = sensor_data_sgmntd_cmbd_all_sensors_labeled.reshape((sensor_data_sgmntd_cmbd_all_sensors_labeled.size,))  # (1,n) to (n,) array
+                indv_detection_map = np.zeros_like(sensor_data_sgmntd[0])
+                indv_detection_map[L_min:L_max] = 1  # Map individual detection data
+                tmp_var = sum([np.any(indv_detection_map * each_sensor_data_sgmntd) for each_sensor_data_sgmntd in sensor_data_sgmntd])
+                                
+                # For detection by at least n type of sensors
+                if tmp_var >= 1:
+                    sensor_data_sgmntd_atleast_1_sensor[L_min:L_max] = 1
+                if tmp_var >= 2:
+                    sensor_data_sgmntd_atleast_2_sensor[L_min:L_max] = 1
+                if tmp_var >= 3:
+                    sensor_data_sgmntd_atleast_3_sensor[L_min:L_max] = 1
+                if tmp_var >= 4:
+                    sensor_data_sgmntd_atleast_4_sensor[L_min:L_max] = 1
+                if tmp_var >= 5:
+                    sensor_data_sgmntd_atleast_5_sensor[L_min:L_max] = 1
+                if tmp_var >= 6:
+                    sensor_data_sgmntd_atleast_6_sensor[L_min:L_max] = 1
+                    
+                    
+        # SCHEME TYPE 2: ATLEAST n TYPE OF SENSOR after Combining left and right sensors of each type*****************
+        
+        # %   First each type of left and right sensor pairs are combined with logical OR.
+        # %   Then each non-zero sengment of 'sensor_data_sgmntd_cmbd_all_sensors' is 
+        # %   checked against segmentated map of combination of left and right sensor
+        # %   pair of each kind to find its presence in that data set.
+        
+        if data_format == "1":
+            #For Old belt
+            sensor_data_sgmntd_Left_OR_Right_Aclm  = [sensor_data_sgmntd[0] | sensor_data_sgmntd[1]]
+            sensor_data_sgmntd_Left_OR_Right_Acstc = [sensor_data_sgmntd[2] | sensor_data_sgmntd[3]]
+            sensor_data_sgmntd_Left_OR_Right_Pzplt = [sensor_data_sgmntd[4] | sensor_data_sgmntd[5]]
+            
+            #Keep merged sensor data in a list
+            sensor_data_sgmntd_cmbd_multi_type_sensors_array = [sensor_data_sgmntd_Left_OR_Right_Aclm, sensor_data_sgmntd_Left_OR_Right_Acstc, sensor_data_sgmntd_Left_OR_Right_Pzplt]
+            
+        elif data_format == "2":
+            #For New belt
+            sensor_data_sgmntd_Left_OR_Right_Aclm        = [sensor_data_sgmntd[0] | sensor_data_sgmntd[1]]
+            sensor_data_sgmntd_Left_OR_Right_Pzplt_large = [sensor_data_sgmntd[2] | sensor_data_sgmntd[5]]
+            sensor_data_sgmntd_Left_OR_Right_Pzplt_small = [sensor_data_sgmntd[3] | sensor_data_sgmntd[4]]
+            
+            #Keep merged sensor data in a list
+            sensor_data_sgmntd_cmbd_multi_type_sensors_array = [sensor_data_sgmntd_Left_OR_Right_Aclm, sensor_data_sgmntd_Left_OR_Right_Pzplt_large, sensor_data_sgmntd_Left_OR_Right_Pzplt_small]
+        
+        # sensor_data_sgmntd_cmbd_all_sensors_labeled = sensor_data_sgmntd_cmbd_all_sensors_labeled.reshape((sensor_data_sgmntd_cmbd_all_sensors_labeled.size,))  # (1,n) to (n,) array
+        
+        
+        sensor_data_sgmntd_atleast_1_type_of_sensor = np.zeros_like(sensor_data_sgmntd[0])
+        sensor_data_sgmntd_atleast_2_type_of_sensor = np.zeros_like( sensor_data_sgmntd[0])
+        sensor_data_sgmntd_atleast_3_type_of_sensor = np.zeros_like( sensor_data_sgmntd[0])
+    
+        if n_label > 0:
+            for k in range(1, n_label + 1):
+                L_min = np.where(sensor_data_sgmntd_cmbd_all_sensors_labeled == k)[0][0]  # Start of the label
+                L_max = np.where(sensor_data_sgmntd_cmbd_all_sensors_labeled == k)[0][-1] + 1  # End of the label
+    
+                indv_detection_map = np.zeros_like(sensor_data_sgmntd[0])
+                # Map individual detection data
+                indv_detection_map[L_min:L_max] = 1
+                tmp_var = sum([np.any(indv_detection_map * temp_sensor_data_sgmntd)
+                              for temp_sensor_data_sgmntd in sensor_data_sgmntd_cmbd_multi_type_sensors_array])
+                if tmp_var >= 1:
+                    sensor_data_sgmntd_atleast_1_type_of_sensor[L_min:L_max] = 1
+                if tmp_var >= 2:
+                    sensor_data_sgmntd_atleast_2_type_of_sensor[L_min:L_max] = 1
+                if tmp_var >= 3:
+                    sensor_data_sgmntd_atleast_3_type_of_sensor[L_min:L_max] = 1
     
     
-    sensor_data_sgmntd_atleast_1_type_of_sensor = np.zeros_like(sensor_data_sgmntd[0])
-    sensor_data_sgmntd_atleast_2_type_of_sensor = np.zeros_like( sensor_data_sgmntd[0])
-    sensor_data_sgmntd_atleast_3_type_of_sensor = np.zeros_like( sensor_data_sgmntd[0])
-
-    if n_label > 0:
-        for k in range(1, n_label + 1):
-            L_min = np.where(sensor_data_sgmntd_cmbd_all_sensors_labeled == k)[0][0]  # Start of the label
-            L_max = np.where(sensor_data_sgmntd_cmbd_all_sensors_labeled == k)[0][-1] + 1  # End of the label
-
-            indv_detection_map = np.zeros_like(sensor_data_sgmntd[0])
-            # Map individual detection data
-            indv_detection_map[L_min:L_max] = 1
-            tmp_var = sum([np.any(indv_detection_map * temp_sensor_data_sgmntd)
-                          for temp_sensor_data_sgmntd in sensor_data_sgmntd_cmbd_multi_type_sensors_array])
-            if tmp_var >= 1:
-                sensor_data_sgmntd_atleast_1_type_of_sensor[L_min:L_max] = 1
-            if tmp_var >= 2:
-                sensor_data_sgmntd_atleast_2_type_of_sensor[L_min:L_max] = 1
-            if tmp_var >= 3:
-                sensor_data_sgmntd_atleast_3_type_of_sensor[L_min:L_max] = 1
-
-
+        
     
-
-    schemes = [sensor_data_sgmntd_atleast_1_type_of_sensor, sensor_data_sgmntd_atleast_2_type_of_sensor, sensor_data_sgmntd_atleast_3_type_of_sensor, sensor_data_sgmntd_atleast_1_sensor,
-               sensor_data_sgmntd_atleast_2_sensor, sensor_data_sgmntd_atleast_3_sensor, sensor_data_sgmntd_atleast_4_sensor, sensor_data_sgmntd_atleast_5_sensor, sensor_data_sgmntd_atleast_6_sensor]
-    
-    all_data_files_schemes.append(schemes)
-    
-# =============================================================================
-#     # Fix the scheme based on which user wants to extract TPD and FPD
-# =============================================================================
-    desired_scheme = 2
-    user_scheme = schemes[desired_scheme]
-    # ---------------------- Extraction of TPDs and FPDs -----------------------
-    print("\tExtracting TPDs and FPDs Based on Schemes")
-    
-    user_scheme_labeled = label(np.array(user_scheme)) # taking as numpy array since lable function expects an array
-    n_label = len(np.unique(user_scheme_labeled)) - 1 # Number of labels in the sensor_data_cmbd_all_sensors_labeled
-    
-    #label() function returs 2D array, we need 1D array for calculaiton.
-    user_scheme_labeled = user_scheme_labeled.reshape((user_scheme_labeled.size,)) #(1,n) to (n,) array
- 
+        schemes = [sensor_data_sgmntd_atleast_1_type_of_sensor, sensor_data_sgmntd_atleast_2_type_of_sensor, sensor_data_sgmntd_atleast_3_type_of_sensor, sensor_data_sgmntd_atleast_1_sensor,
+                   sensor_data_sgmntd_atleast_2_sensor, sensor_data_sgmntd_atleast_3_sensor, sensor_data_sgmntd_atleast_4_sensor, sensor_data_sgmntd_atleast_5_sensor, sensor_data_sgmntd_atleast_6_sensor]
+        
+        sensor_data_sgmntd_2_type_sensor_list.append(sensor_data_sgmntd_atleast_2_type_of_sensor)
+        
+        all_data_files_schemes.append(schemes)
+        
+    # =============================================================================
+    #     # Fix the scheme based on which user wants to extract TPD and FPD
+    # ==========================  ===================================================
+        desired_scheme = 1
+        user_scheme = schemes[desired_scheme]
+        # ---------------------- Extraction of TPDs and FPDs -----------------------
+        print("\tExtracting TPDs and FPDs Based on Schemes")
+        
+        user_scheme_labeled = label(np.array(user_scheme)) # taking as numpy array since lable function expects an array
+        n_label = len(np.unique(user_scheme_labeled)) - 1 # Number of labels in the sensor_data_cmbd_all_sensors_labeled
+        
+        #label() function returs 2D array, we need 1D array for calculaiton.
+        user_scheme_labeled = user_scheme_labeled.reshape((user_scheme_labeled.size,)) #(1,n) to (n,) array
+     
     if n_label: # When there is a detection by the sensor system
         TPD_extracted_single, FPD_extracted_single, extracted_TPD_weightage_single,\
-        extracted_FPD_weightage_single = extract_detections(M_sntn_map[i],
+        extracted_FPD_weightage_single, current_file_aclm_TPD, current_file_rot_TPD, current_file_aclm_FPD, current_file_rot_FPD = extract_detections(M_sntn_map[i],
                                                             sensor_data_fltd,
                                                             sensor_data_sgmntd,
                                                             user_scheme_labeled,
-                                                            n_label, n_FM_sensors)
+                                                            n_label, n_FM_sensors, IMU_aclm_fltd[i], IMU_rotation_fltd_1D[i])
         
         #append in list variable
         TPD_extracted.append(TPD_extracted_single)
         FPD_extracted.append(FPD_extracted_single)
         extracted_TPD_weightage.append(extracted_TPD_weightage_single)
         extracted_FPD_weightage.append(extracted_FPD_weightage_single)
-    
-    '''
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~ Data extraction ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    print("\tExtracting TPDs and FPDs")
-    for scheme_ind, scheme in enumerate(schemes):
-
-        # taking as numpy array since lable function expects an array
-        scheme_labeled = label(scheme)
-        scheme_labeled_reshaped = scheme_labeled.reshape( (scheme_labeled.size,))
         
-        # Number of labels in the sensor_data_cmbd_all_sensors_labeled
-        n_label_scheme = len(np.unique(label(scheme_labeled_reshaped))) - 1
+        IMU_aclm_TPD.append(current_file_aclm_TPD)
+        IMU_aclm_FPD.append(current_file_aclm_FPD)
+        IMU_rot_TPD.append(current_file_rot_TPD)
+        IMU_rot_FPD.append(current_file_rot_FPD)
 
-        # if n_label_scheme:  # When there is a detection by the sensor system
-        #     TPD_extracted_single, FPD_extracted_single, extracted_TPD_weightage_single,\
-        #         extracted_FPD_weightage_single = extract_detections(M_sntn_map[i],
-        #                                                             sensor_data_fltd,
-        #                                                             sensor_data_sgmntd,
-        #                                                             scheme_labeled_reshaped,
-        #                                                             n_label_scheme, n_FM_sensors)
-
-        #     # append in list variable
-        #     TPD_extracted.append(TPD_extracted_single)
-        #     FPD_extracted.append(FPD_extracted_single)
-        #     extracted_TPD_weightage.append(extracted_TPD_weightage_single)
-        #     extracted_FPD_weightage.append(extracted_FPD_weightage_single)
-
-        # copy creates an independent array
-        current_ML_detection_map = np.copy([scheme])
-
-        TPD_indv[i, scheme_ind], FPD_indv[i, scheme_ind], TND_indv[i, scheme_ind], FND_indv[i, scheme_ind] = match_with_m_sensation(
-            current_ML_detection_map, sensation_data_trimd[i], IMU_map[i], M_sntn_map[i], ext_backward,
-            ext_forward, FM_dilation_time, Fs_sensor, Fs_sensation)
-    '''
     
 # Clearing unnecessary variables
 #del sensor_data_fltd, sensor_data_sgmntd, sensor_data_sgmntd_cmbd_all_sensors, sensor_data_sgmntd_cmbd_all_sensors_labeled
@@ -508,12 +616,11 @@ print('\nData extraction is completed.\n')
 # In this part of the code, selected features are extracted from the
 # the TPD and FPD data sets extracted in the previous step.
 
-
 print('\n#Feature extraction for machine learning is going on\n...')
 
 X_TPD, X_FPD, n_TPD, n_FPD, total_duration_TPD, total_duration_FPD = extract_features(
     TPD_extracted, extracted_TPD_weightage, FPD_extracted, extracted_FPD_weightage,
-    threshold, Fs_sensor, n_FM_sensors)
+    threshold, Fs_sensor, n_FM_sensors, IMU_aclm_TPD, IMU_aclm_FPD, IMU_rot_TPD, IMU_rot_FPD)
 
 print('\nFeature extraction is completed.')
 print('\nIn total, %d features were collected from all the sensor data.\n' % X_TPD.shape[1])
@@ -537,6 +644,13 @@ X_norm = X_norm[:, ~nan_columns]
 X_TPD_norm = X_norm[:X_TPD.shape[0], :]  # Normalize with respect to deviation (= max - min)
 X_FPD_norm = X_norm[X_TPD.shape[0]:, :]  # Normalize with respect to deviation (= max - min)
 
+# Saving the schemes to a file
+# with open('schemes.pkl', 'wb') as file:
+#     pickle.dump(all_data_files_schemes, file)
+
+# Loading the list of lists from the file
+# with open('schemes.pkl', 'rb') as file:
+#     all_data_files_schemes = pickle.load(file)
 
 print("Time taken: ", time.time()- tic)
 
@@ -550,7 +664,8 @@ TWO: Ensemble feature selection using four SOTA feature selection methods. i.e, 
 """
 
 feature_ranker = FeatureRanker(X_norm, Y) # Creates an instance to the class FeatureRanker
-n = 100 # Ideally the number of features that we want 
+# n = 135 # Ideally the number of features that we want 
+n = X_norm.shape[1] // 3    # Taking only the one third of the main feature space
 print("/n# Enter the Feature selection method ")
 print("1 - Old MATLAB features")
 print("2 - Ensemble Method using four feature selection methodologies")
@@ -582,21 +697,21 @@ X_FPD_norm_ranked = X_FPD_norm[:, index_top_features]
 np.savetxt('X_TPD_norm_ranked.txt', X_TPD_norm_ranked)
 np.savetxt('X_FPD_norm_ranked.txt', X_FPD_norm_ranked)
 
-# X_TPD_norm_ranked = np.genfromtxt('D:/Monaf/From GITHUB/FMdata-analysis/X_TPD_norm_ranked.txt')
-# X_FPD_norm_ranked = np.genfromtxt('D:/Monaf/From GITHUB/FMdata-analysis/X_FPD_norm_ranked.txt')
+# X_TPD_norm_ranked = np.genfromtxt('D:/Monaf/From GITHUB/FeMo_Analysis/X_TPD_norm_ranked.txt')
+# X_FPD_norm_ranked = np.genfromtxt('D:/Monaf/From GITHUB/FeMo_Analysis/X_FPD_norm_ranked.txt')
 
 #%% PREPARATION OF TRAINING AND TESTING DATA FILES =========================
 
- # Division into test and training sets
- #   1: Divide by hold out method 
- #   2: K-fold with original ratio of FPD and TPD in each fold, 
- #   3: K-fold with custom ratio of FPD and TPD in each fold. 
- #   4: Divide by participants
- #   In the cases of option 1, 2 and 3, stratified division will be created, 
- #   i.e. each division will have the same ratio of FPD and TPD.
+# Division into test and training sets
+#   1: Divide by hold out method 
+#   2: K-fold with original ratio of FPD and TPD in each fold, 
+#   3: K-fold with custom ratio of FPD and TPD in each fold. 
+#   4: Divide by participants
+#   In the cases of option 1, 2 and 3, stratified division will be created, 
+#   i.e. each division will have the same ratio of FPD and TPD.
 
 
-
+    
 data_div_option = 2  # Change this value based on the data division option you want
 
 if data_div_option == 1:  # Divide data using the holdout method
@@ -626,7 +741,7 @@ elif data_div_option == 4:  # Divide data by participant
 else:
     print('Wrong data division option chosen.')
 
-
+    
 #%% CROSS-VALIDATION TO FIND THE OPTIMUM HYPERPARAMETERS ====================
 # ------------- Cross-validation to select model parameters ---------------
 
@@ -660,9 +775,11 @@ SVM_model = list(np.zeros(n_iter,dtype=int)) #Contains SVM models
 NN_model = list(np.zeros(n_iter,dtype=int)) #Contains NN models
 LR_model = list(np.zeros(n_iter,dtype=int)) #Contains LR models
 RF_model = list(np.zeros(n_iter,dtype=int)) #Contains RF models
+ADA_model = list(np.zeros(n_iter,dtype=int)) #Contains ADA models
+ENM_model = list(np.zeros(n_iter,dtype=int)) #Contains Ensemble models 
 
 # Options for classification
-classifier_option = 3  # 1-LR, 2-SVM, 3-NN, 4-RF. Only the selected classifier will be used
+classifier_option = 6  # 1-LR, 2-SVM, 3-NN, 4-RF, 5-Ada,6-Ensemble... Only the selected classifier will be used
 x_validate_KxK_option = 1  # 1: cross-validate by KxK-fold; 0: cross-validate by K-fold only
 
 
@@ -672,6 +789,8 @@ max_unit_per_layer = 200
 step_size = 10
 n_iter_NN = (max_unit_per_layer-min_unit_per_layer)//step_size+1
 history = []
+if classifier_option!= 3:    
+    threshold_NN = 0.5 
 
 Y_val_prediction_TPD_rand = np.zeros((1, 1))
 Y_val_prediction_FPD_rand = np.zeros((1, 1))
@@ -904,7 +1023,101 @@ for i in range(n_iter):
                                         n_test_data_TPD_current, n_test_data_FPD_current)
     
 
+    elif classifier_option == 5:  # Ada Boost
+        
+        # Training the model
+        # ADA_model[i] = AdaBoostClassifier(n_estimators=100, algorithm="SAMME", random_state=0)
+        # ADA_model[i].fit(X_train_current, Y_train_current)
+        
+        # base_estimator = RandomForestClassifier(n_estimators=100, min_samples_leaf=50, class_weight=cost_function, n_jobs=-1, random_state=0)
+        # base_estimator = DecisionTreeClassifier(class_weight= cost_function, random_state = 0, max_depth=1)  # Commonly used base estimator
+        # base_estimator = ExtraTreeClassifier(class_weight = cost_function, splitter = 'best', max_depth = 1, random_state = 42, )
+        
+        base_estimator = GradientBoostingClassifier (n_estimators = 50, subsample = 0.75, max_depth = 1, random_state = 42,
+                                                     warm_start = True)
+        
+        t = AdaBoostClassifier(estimator = base_estimator, n_estimators=50, algorithm="SAMME.R", random_state=0)
 
+        
+        
+        # Define the hyperparameter grid for the optimization
+        param_grid = {
+            'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of boosting stages to be run
+            'learning_rate': [0.01, 0.1, 0.5, 1.0, 1.5, 2.0]  # Learning rate for the boosting algorithm
+        }
+        # Number of n_estimators and learning_rate to sample in each ada boost are determined based on a K-fold cross-validation.
+
+        # Create the Repeated Stratified K-Fold cross-validation object (assuming 5-fold cross-validation repeated 2 times)
+        cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=1)
+
+        # GridSearchCV for hyperparameter optimization
+        grid_search = GridSearchCV(
+            estimator=t,
+            param_grid=param_grid,
+            scoring='accuracy',  # Replace 'accuracy' with appropriate scoring metric
+            cv=cv,
+            n_jobs= -1,  # Use -1 for utilizing all available CPU cores
+            verbose=2
+        )
+
+        # Fit the model to the data and perform hyperparameter optimization
+        grid_search.fit(X_train_current, Y_train_current)
+
+        # Get the best model
+        ADA_model[i] = grid_search.best_estimator_
+
+        train_Accuracy[i], test_Accuracy[i], test_Accuracy_TPD[i], test_Accuracy_FPD[i]\
+            = get_prediction_accuracies(ADA_model[i], X_train_current, Y_train_current,
+                                        X_test_current, Y_test_current,
+                                        n_test_data_TPD_current, n_test_data_FPD_current)
+
+    elif classifier_option == 6:  # Ensemble
+        # Define individual classifiers
+        
+        log_clf = LogisticRegression(class_weight=cost_function, random_state=0, max_iter = 1000)
+        rf_clf = RandomForestClassifier(n_estimators=100, class_weight=cost_function, n_jobs=-1, criterion = 'entropy', random_state=0)
+        ada_clf = AdaBoostClassifier(random_state=0, algorithm = 'SAMME.R')
+        gb_clf = GradientBoostingClassifier(random_state=0, subsample = 0.75, n_estimators = 1000 , loss = 'exponential')
+        svc_clf = SVC(probability=True, random_state=0, class_weight = cost_function)  # Ensure probability=True for predict_proba to work
+        knn_clf = KNeighborsClassifier()
+        et_clf = ExtraTreesClassifier(n_estimators=100, class_weight=cost_function, n_jobs=-1, random_state=0)
+        mlp_clf = MLPClassifier(hidden_layer_sizes=(110,), random_state=0, max_iter=1000)
+
+        
+        # Create a list of (name, classifier) tuples
+        classifiers = [ ('logistic', log_clf), ('random_forest', rf_clf), ('adaboost', ada_clf), 
+                       ('gradient_boosting', gb_clf), ('svc', svc_clf), ('knn', knn_clf), ('extra_trees', et_clf), ('mlp', mlp_clf)]
+        
+        # Create the VotingClassifier
+        voting_clf = VotingClassifier(estimators=classifiers, voting='soft', n_jobs=-1)
+        # Define the hyperparameter grid for the optimization
+        param_grid = {
+            'voting': ['soft'],  # Voting scheme
+        }
+        
+        # Create the Repeated Stratified K-Fold cross-validation object
+        cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=1)
+        
+        # GridSearchCV for hyperparameter optimization
+        grid_search = GridSearchCV(
+            estimator=voting_clf,
+            param_grid=param_grid,
+            scoring='accuracy',  # Replace 'accuracy' with appropriate scoring metric
+            cv=cv,
+            n_jobs=-1,  # Use -1 for utilizing all available CPU cores
+            verbose=2
+        )
+        # Fit the model to the data and perform hyperparameter optimization
+        grid_search.fit(X_train_current, Y_train_current)
+        
+        # Get the best model
+        ENM_model[i] = grid_search.best_estimator_
+        
+        train_Accuracy[i], test_Accuracy[i], test_Accuracy_TPD[i], test_Accuracy_FPD[i]\
+            = get_prediction_accuracies(ENM_model[i], X_train_current, Y_train_current,
+                                        X_test_current, Y_test_current, 
+                                        n_test_data_TPD_current, n_test_data_FPD_current)
+                    
     else:
         print('\nWrong classifier option chosen.')
         break
@@ -921,6 +1134,7 @@ print("test_Accuracy_FPD\n", test_Accuracy_FPD)
 
 # Find the best model
 I_max = np.argmax(test_Accuracy)  # Index of the model with the maximum test accuracy
+cross_validation_time = time.time()- tic
 
 print('Model parameter selection is done.')
 print("Time taken: ", time.time()- tic)
@@ -957,8 +1171,11 @@ elif classifier_option == 3:  # NN
     NN_model_selected = list(np.zeros(n_iter,dtype=int))
 elif classifier_option == 4:  # Random forest
     RF_model_selected = list(np.zeros(n_iter,dtype=int))
-
-
+elif classifier_option == 5:  # ADA Boosting
+    ADA_model_selected = list(np.zeros(n_iter,dtype=int))  
+elif classifier_option == 6:  # Ensemble
+    ENM_model_selected = list(np.zeros(n_iter,dtype=int)) 
+    
 #Variable for Neural Network
 Y_test_prediction_TPD_rand = np.zeros((1, 1))
 Y_test_prediction_FPD_rand = np.zeros((1, 1))
@@ -1077,7 +1294,7 @@ for i in range(n_iter):
 
         # Calculate the number of units based on the best validation performance
         n_unit_per_layer_optimum = min_unit_per_layer+index_col_max*step_size
-        # n_unit_per_layer_optimum = 140 # 190 from recent optimization.
+        # n_unit_per_layer_optimum = 120 # 190 from recent optimization.
         # xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx #
 
         # TEST of THE ALGORITHM TO FIND THE GENERALIZED PERFORMANCE ~~~~~~~~~~~~~~~~~~~
@@ -1105,7 +1322,7 @@ for i in range(n_iter):
                                      shuffle=False, verbose=0)  # verbose = 0 stops displaying calcuation after each epoch
         history.append(training_history)
         # Evaluate the model
-        threshold_NN = 0.5  # threshold value for prediction
+        threshold_NN = 0.5 # threshold value for prediction
         
         #------------Calculating Taining Accuracy-------------
         Y_hat_train = model.predict(X_train_current)
@@ -1162,7 +1379,7 @@ for i in range(n_iter):
 
         print('Testing of the neural network is completed.')
         
-        final_train_Accuracy[i]     = train_accuracy
+        final_train_Accuracy[i]     = train_accuracy 
         final_test_Accuracy[i]      = test_accuracy
         final_test_Accuracy_TPD[i]  = test_accuracy_TPD
         final_test_Accuracy_FPD[i]  = test_accuracy_FPD
@@ -1176,7 +1393,7 @@ for i in range(n_iter):
 
         
         RF_model_selected[i] = RandomForestClassifier(n_estimators=100, max_features=t_selected.max_features,
-    min_samples_leaf=t_selected.min_samples_leaf, class_weight=cost_function, n_jobs=-1, random_state=0)
+                                                      min_samples_leaf=t_selected.min_samples_leaf, class_weight=cost_function, n_jobs=-1, random_state=0)
         
         RF_model_selected[i].fit(X_train_current, Y_train_current)
 
@@ -1191,7 +1408,64 @@ for i in range(n_iter):
         final_test_scores[i] = RF_model_selected[i].predict_proba(X_test_current)
         final_test_prediction[i] = RF_model_selected[i].predict(X_test_current)
 
+    elif classifier_option == 5:  # Ada Boost
+        # Training the model
+        # I_max is the index of the best model in AdaBoost_model
+
+        # Get the best model's parameters
+        best_model = ADA_model[I_max]
+
+        # Extract parameters from the best estimator
+        best_base_estimator = best_model.base_estimator_
+        n_estimators = best_model.n_estimators
+        learning_rate = best_model.learning_rate
+
+        # Recreate the AdaBoost model with the selected parameters
+        ADA_model_selected[i] = AdaBoostClassifier(estimator=best_base_estimator, n_estimators=n_estimators, learning_rate=learning_rate,
+                                                   random_state=0)
+
+        # Fit the selected model to the current training data
+        ADA_model_selected[i].fit(X_train_current, Y_train_current)
+
+        # Evaluate the model and get prediction accuracies
+        final_train_Accuracy[i], final_test_Accuracy[i], final_test_Accuracy_TPD[i], final_test_Accuracy_FPD[i] = get_prediction_accuracies(
+            ADA_model_selected[i], X_train_current, Y_train_current, X_test_current, Y_test_current, n_test_data_TPD_current, n_test_data_FPD_current)
+
+        # Use predict_proba and predict methods for predictions
+        final_test_scores[i] = ADA_model_selected[i].predict_proba(X_test_current)
+        final_test_prediction[i] = ADA_model_selected[i].predict(X_test_current)
+    
+    elif classifier_option == 6:
+        # Training the model:  I_max is the index of the best model in the voting_model
+        best_model = ENM_model[I_max]
+        # Extract parameters from the best estimator (if needed)
+        estimators = best_model.estimators_
+        voting = best_model.voting
+       
+        # Recreate the VotingClassifier with the selected parameters
+        classifiers = [
+            ('logistic', LogisticRegression(class_weight=cost_function, random_state=0, max_iter = 1000)),
+            ('random_forest', RandomForestClassifier(n_estimators=100, class_weight=cost_function, n_jobs=-1, criterion = 'entropy', random_state=0)),
+            ('adaboost', AdaBoostClassifier(random_state=0, algorithm = 'SAMME.R')),
+            ('gradient_boosting', GradientBoostingClassifier(random_state=0, subsample = 0.75, n_estimators = 1000 , loss = 'exponential' )),            
+            ('extra_trees', ExtraTreesClassifier(n_estimators=100, class_weight=cost_function, n_jobs=-1, random_state=0)),
+            ('svc', SVC(probability=True, random_state=0, class_weight = cost_function)),
+            ('knn', KNeighborsClassifier()), 
+            ('mlp', MLPClassifier(hidden_layer_sizes=(110,), random_state=0, max_iter=1000))
+        ]
+        ENM_model_selected[i] = VotingClassifier(estimators=classifiers, voting=voting, n_jobs=-1)
+
+        # Fit the selected model to the current training data
+        ENM_model_selected[i].fit(X_train_current, Y_train_current)
         
+        # Evaluate the model and get prediction accuracies
+        final_train_Accuracy[i], final_test_Accuracy[i], final_test_Accuracy_TPD[i], final_test_Accuracy_FPD[i] = get_prediction_accuracies(
+            ENM_model_selected[i], X_train_current, Y_train_current, X_test_current, Y_test_current, n_test_data_TPD_current, n_test_data_FPD_current)
+        
+        # Use predict_proba and predict methods for predictions
+        if voting == 'soft':
+            final_test_scores[i] = ENM_model_selected[i].predict_proba(X_test_current)
+        final_test_prediction[i] = ENM_model_selected[i].predict(X_test_current)        
 
 if classifier_option ==3:
     # Generate the cumulative test predctions
@@ -1286,6 +1560,15 @@ elif classifier_option == 4:  # Random Forest
     Accuracy_RF = [train_Accuracy_avg, train_Accuracy_SD, test_Accuracy_avg, test_Accuracy_SD,
                    test_Accuracy_TPD_avg, test_Accuracy_TPD_SD, test_Accuracy_FPD_avg, test_Accuracy_FPD_SD]
 
+elif classifier_option == 5:  # ADA Boost
+    I_max_ADA = I_max_final
+    Accuracy_ADA = [train_Accuracy_avg, train_Accuracy_SD, test_Accuracy_avg, test_Accuracy_SD,
+                   test_Accuracy_TPD_avg, test_Accuracy_TPD_SD, test_Accuracy_FPD_avg, test_Accuracy_FPD_SD]
+elif classifier_option == 6:  # Ensemble
+    I_max_ENM = I_max_final
+    Accuracy_ENM = [train_Accuracy_avg, train_Accuracy_SD, test_Accuracy_avg, test_Accuracy_SD,
+                   test_Accuracy_TPD_avg, test_Accuracy_TPD_SD, test_Accuracy_FPD_avg, test_Accuracy_FPD_SD]
+    
 print('\nTraining and testing of the algorithm is completed.\n')
 
 print('\nSettings for the algorithm were: ')
@@ -1296,7 +1579,7 @@ print(f'\n\tCost of getting TPD wrong: {cost_TPD:.2f}')
 print(f'\n\tClassifier: {classifier_option} (1- LR; 2- SVM, 3-NN, 4- RF)')
 
 print('Performance of the classifier were: ')
-print(f'\n\t Probabilistic Threshold: {threshold_NN:.2f}')
+# print(f'\n\t Probabilistic Threshold: {threshold_NN:.2f}')
 print(f'\n\tTraining accuracy: \n\t\tOverall = {train_Accuracy_avg:.2f}({train_Accuracy_SD:.3f})')
 print(f'\n\tTest accuracy: \n\t\tOverall = {test_Accuracy_avg:.2f}({test_Accuracy_SD:.3f}), \n\t\tfor TPD = {test_Accuracy_TPD_avg:.2f}({test_Accuracy_TPD_SD:.3f}),'
       f'\n\t\tfor FPD = {test_Accuracy_FPD_avg:.2f}({test_Accuracy_FPD_SD:.3f}).')
@@ -1361,6 +1644,12 @@ for k in range(n_ROC_iter):
 
             elif classifier_option == 4:  # RF
                 prediction_overall_dataset = RF_model_selected[I_max_RF].predict(X_norm)
+            
+            elif classifier_option == 5:  # ADA
+                prediction_overall_dataset = ADA_model_selected[I_max_ADA].predict(X_norm)
+        
+            elif classifier_option == 6:  # Ensemble
+                    prediction_overall_dataset = ENM_model_selected[I_max_ENM].predict(X_norm)
 
             prediction_overall_dataset_TPD = prediction_overall_dataset[:n_TPD]
             prediction_overall_dataset_FPD = prediction_overall_dataset[n_TPD:]
@@ -1518,7 +1807,7 @@ print(f'\n\tThreshold multiplier:\n\t\tAccelerometer = {FM_min_SN[0]}, Acoustic 
 # print(f"\n\tFPD/TPD ratio in the training data set: {FPD_TPD_ratio:.2f}")
 # print(f"\n\tCost of getting TPD wrong: {cost_TPD:.2f}")
 # print(f"\n\tClassifier: {classifier_option} (1- LR, 2- SVM, 3-NN, 4- RF)")
-
+print(f'\nClassifier Option: {classifier_option}')
 print('\nDetection stats:\n\tSEN = %.3f, PPV = %.3f, F1 score = %.3f,' % (SEN_overall[0], PPV_overall[0], FS_overall[0]))
 print('\n\tSPE = %.3f, ACC = %.3f, PABAK = %.3f' % (SPE_overall[0], ACC_overall[0], PABAK_overall))
 
@@ -1528,98 +1817,121 @@ print("\n\nTime taken: ", time.time()- tic)
 # Clearing variable
 # del sensor_data_fltd, sensor_data_sgmntd, sensor_data_sgmntd_cmbd_all_sensors, sensor_data_sgmntd_cmbd_all_sensors_labeled
 
+#%% Model saving and reloading
 
-# %% Export Result with ML
+save_model_path = "D:/Monaf/Training_testing/FeMo_Analysis_backup"
+# model.save(f'{save_model_path}/imu_feature_extracted_nn_model')
+# model = tf.keras.models.load_model(f'{save_model_path}/imu_feature_extracted_nn_model')
 
-print(f"Calculating Result of Desired Segementation Scheme: {scheme_strs[desired_scheme]}")
+    # Save the model to a pickle file for random forrest model
+    # =============================================================================
+    # with open('cost_TPD2rf_model_selected_all_sensor_aclr_SN30_Piezo_SN40_new_ML_scheme_3.pkl', 'wb') as f:
+    #     pickle.dump(RF_model_selected[1], f)
+    # =============================================================================
 
-column_heads = ['Scenario', 'SENSITIVITY', 'PRECISION', 'SPECIFICITY', 'ACCURACY', 'PABAK', 'FS_SCORE', 'TPD', 'FPD', 'TND', 'FND']
+# csv_file_path = "D:\Monaf\Training_testing\FeMo_Analysis_backup\Belt_B_5_5_Filewise_performances.csv"
+# # column_heads = ['File add','TPD' ,'FPD', 'TND', 'FND']
+# # Convert numpy arrays to integers
+# TPD_indv = [int(x[0]) for x in TPD_indv]
+# FPD_indv = [int(x[0]) for x in FPD_indv]
+# TND_indv = [int(x[0]) for x in TND_indv]
+# FND_indv = [int(x[0]) for x in FND_indv]
+
+# # Calculate sensitivity, precision, and F1 score
+# sensitivity = [tpd / (tpd + fnd) if (tpd + fnd) != 0 else 0 for tpd, fnd in zip(TPD_indv, FND_indv)]
+# precision = [tpd / (tpd + fpd) if (tpd + fpd) != 0 else 0 for tpd, fpd in zip(TPD_indv, FPD_indv)]
+# f1_score = [(2 * p * s) / (p + s) if (p + s) != 0 else 0 for p, s in zip(precision, sensitivity)]
+
+
+# # Create a DataFrame
+# df = pd.DataFrame({
+#     'File add': data_file_names,
+#     'TPD': TPD_indv,
+#     'FPD': FPD_indv,
+#     'TND': TND_indv,
+#     'FND': FND_indv,
+#     'Sensitivity': sensitivity,
+#     'Precision': precision,
+#     'F1 Score': f1_score
+# }, columns=['File add', 'TPD', 'FPD', 'TND', 'FND', 'Sensitivity', 'Precision', 'F1 Score'])
+
+# df.to_csv(csv_file_path, index=False)
+# del df
+
+
+#%% Excel Sheet 
+print("\nCalculating Results of all Segmentation Schemes...")
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~ Result Generation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+print(f"Calculating Result of Desired sensor_selection: {sensor_selection}")
+
+sensor_combinations = {
+    1: "Accelerometers only",
+    2: "Acoustic sensors only",
+    3: "Piezoelectric diaphragms only",
+    4: "Accelerometers and acoustic sensors",
+    5: "Accelerometers and piezoelectric diaphragms",
+    6: "Acoustic sensors and piezoelectric diaphragms",
+    7: "All the sensors"
+}
+classifier_models = {
+    1: "Logistic regression",
+    2: "SVM",
+    3: "Neural network",
+    4: "Random forest",
+    5: "ADA Boost", 
+    6: "Ensemble"
+}
+sensor_schemes = {
+    0: "sensor_data_sgmntd_atleast_1_type_of_sensor",
+    1: "sensor_data_sgmntd_atleast_2_type_of_sensor",
+    2: "sensor_data_sgmntd_atleast_3_type_of_sensor",
+    3: "sensor_data_sgmntd_atleast_1_sensor",
+    4: "sensor_data_sgmntd_atleast_2_sensor",
+    5: "sensor_data_sgmntd_atleast_3_sensor",
+    6: "sensor_data_sgmntd_atleast_4_sensor",
+    7: "sensor_data_sgmntd_atleast_5_sensor",
+    8: "sensor_data_sgmntd_atleast_6_sensor"
+}
+
+
+column_heads = ['sensor_scheme_combinations','classifier_option' ,'SENSITIVITY', 'PRECISION', 'SPECIFICITY', 'ACCURACY', 'PABAK', 'FS_SCORE', 'TPD', 'FPD', 'TND', 'FND', "Total features"]
 result_col = [0] * len(column_heads)
 
 SN_current = ','.join(map(str, FM_min_SN))
 
-result_col[0] =  f'Scheme {scheme_strs[desired_scheme]}({SN_current}_aclm_{IMU_aclm_threshold}_rot_{IMU_rot_threshold})'
-result_col[1]= SEN_overall[0]
-result_col[2]= PPV_overall[0]
-result_col[3]= SPE_overall[0]
-result_col[4]= ACC_overall[0]
-result_col[5]= PABAK_overall
-result_col[6]= FS_overall[0]
-result_col[7]= int(TPD_overall[0])
-result_col[8]= int(FPD_overall[0])
-result_col[9]= int(TND_overall[0])
-result_col[10]= int(FND_overall[0])
-
-## %%Data frame and results saving
-
+result_col[0] = f'Probabilistic hyperparameter: {thd[0]}'
+# result_col[0] = f'Ensemble 7 classifiers-> Time: {cross_validation_time}. with NN -> THD-> {thd}' 
+result_col[1]= classifier_models[classifier_option]
+result_col[2]= SEN_overall[0]
+result_col[3]= PPV_overall[0]
+result_col[4]= SPE_overall[0]
+result_col[5]= ACC_overall[0]
+result_col[6]= PABAK_overall
+result_col[7]= FS_overall[0]
+result_col[8]= int(TPD_overall[0])
+result_col[9]= int(FPD_overall[0])
+result_col[10]= int(TND_overall[0])
+result_col[11]= int(FND_overall[0])
+result_col[12]= len(index_top_features)
 
 df = pd.DataFrame([result_col], columns=column_heads)
-# Print the DataFrame
 
-file_path = rf'FMM_analysis_with_ML_6schemes_Dilation_time_{scheme_strs[desired_scheme]}.csv'
-
-# Save the DataFrame to a CSV file
-df.to_csv(file_path, index=False)
-
-print("results Generated")
-
-#%%
-'''
-print("\nCalculating Results of all Segmentation Schemes...")
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~ Result Generation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-for scheme_ind, scheme in enumerate(schemes):
-
-    SEN_indv, PPV_indv, SPE_indv, ACC_indv, FS_indv, FPR_indv = get_performance_params(
-        TPD_indv[:, scheme_ind], FPD_indv[:, scheme_ind], TND_indv[:, scheme_ind], FND_indv[:, scheme_ind])
-    indv_detections = np.concatenate(
-        (TPD_indv[:, scheme_ind], FPD_indv[:, scheme_ind], TND_indv[:, scheme_ind], FND_indv[:, scheme_ind]), axis=0)
-    TPD_overall = [np.sum(TPD_indv[:, scheme_ind])]
-    FPD_overall = [np.sum(FPD_indv[:, scheme_ind])]
-    TND_overall = [np.sum(TND_indv[:, scheme_ind])]
-    FND_overall = [np.sum(FND_indv[:, scheme_ind])]
-    overall_detections[scheme_ind, :] = [ TPD_overall[0], FPD_overall[0], TND_overall[0], FND_overall[0] ]
-
-    SEN_overall, PPV_overall, SPE_overall, ACC_overall, FS_overall, FPR_overall = get_performance_params(
-        TPD_overall, FPD_overall, TND_overall, FND_overall)
-    PABAK_overall = 2 * ACC_overall[0] - 1
-    detection_stats = [SEN_overall[0], PPV_overall[0],
-                       FS_overall, SPE_overall[0], ACC_overall[0], PABAK_overall]
-    
-    SN_current = ','.join(map(str, FM_min_SN))
-    result_cell[scenario_count, 0] = f'Scheme {scheme_strs[scheme_ind]}({SN_current})'
-
-    metrics_dict = {
-        "SENSITIVITY": SEN_overall[0],
-        "PRECISION": PPV_overall[0],
-        "SPECIFICITY": SPE_overall[0],
-        "ACCURACY": ACC_overall[0],
-        "FS_SCORE": FS_overall
-    }
-    result_cell[scenario_count, 1] = SEN_overall[0]
-    result_cell[scenario_count, 2] = PPV_overall[0]
-    result_cell[scenario_count, 3] = SPE_overall[0]
-    result_cell[scenario_count, 4] = ACC_overall[0]
-    result_cell[scenario_count, 5] = FS_overall[0]
-    result_cell[scenario_count, 6] = n_Maternal_detected_movement_raw
-    result_cell[scenario_count, 7] = n_Maternal_detected_movement_after
-    scenario_count = scenario_count + 1
-print("Complete\n")
-
-print("Total time ", time.time()-tic) 
-
-
-## %%Data frame and results saving
-
-
-df = pd.DataFrame(result_cell, columns=column_names)
-# Print the DataFrame
-
-file_path = rf'FMM_analysis_without_ML_6schemes_Dilation_time.csv'
+csv_file_path = "D:\Monaf\Training_testing\FeMo_Analysis_backup\Belt_A_proba_5_2_performances.csv"
 
 # Save the DataFrame to a CSV file
-df.to_csv(file_path, index=False)
-'''
+# df.to_csv(file_path, index=False)
+  
+# Check if the CSV file exists
+if not os.path.exists(csv_file_path):
+    # Create the file and write the header and the first row
+    df.to_csv(csv_file_path, index=False)
+else:
+    # Append the new row to the existing file
+    df.to_csv(csv_file_path, mode='a', header=False, index=False)
+
+print("Results Generated to 'performance_metrics.csv'")
+
+
 # %% ML Prediction
 '''
 #==================================================================================
@@ -1677,6 +1989,131 @@ for k in range(1, segment + 1):
 
 '''
 
+
+
+# %% Updated Plot 5/6/2024
+
+#==================================================================================
+#================================    Plot   =======================================
+#==================================================================================
+
+
+num_sensors = 6
+# file_idx = 25
+file_idx = 2
+
+
+# if len(s1_fltd[file_idx])< Fs_sensor*60:
+#     x_axis_type_ = 's'
+# else:
+# x_axis_type_ = 'm'
+x_axis_type_ = 'm'
+# Plot the combined sensor data
+def plotData(axisIdx, data_y, label, ylabel, xlabel, legend=False, xticks=True, plot_type='line', x_axis_type= x_axis_type_, color=False, remove_border= True, multiply=0.1):
+    # x_axis_type = 's'
+    if plot_type == 'line':
+        time_each_data_point = np.arange(0, len(data_y), 1)
+        if x_axis_type == 'm':
+            time_ticks = time_each_data_point / 1024 / 60
+        elif x_axis_type == 's':
+            time_ticks = time_each_data_point / 1024
+    else: #if scatter
+        time_each_data_point = np.where(data_y > 0)[0]
+        if x_axis_type == 'm':
+            time_ticks = time_each_data_point / 1024 / 60
+        elif x_axis_type == 's':
+            time_ticks = time_each_data_point / 1024
+    # return time_ticks
+   
+    if plot_type == 'line':
+        if color == False:
+            axs[axisIdx].plot(time_ticks, data_y, label=label, linewidth=3)
+        else:
+            axs[axisIdx].plot(time_ticks, data_y, label=label, color=color)
+    else:
+        #if scatter
+        data_y = np.ones_like(time_ticks)
+        axs[axisIdx].scatter(time_ticks, data_y*multiply, label=label, color='red', marker='*', s=5)
+    # axs[axisIdx].plot(time_ticks, data_y, label=label)  
+
+    axs[axisIdx].set_xlabel(xlabel)
+    axs[axisIdx].set_ylabel(ylabel)
+    # if legend: axs[axisIdx].legend()
+    if xticks: axs[axisIdx].set_xticks(np.arange(0, max(time_ticks) + 5, 5))
+   
+    #Remove Y axis ticks
+    axs[axisIdx].set_yticks([])
+   
+    # Change the xtick font size
+    axs[axisIdx].xaxis.set_tick_params(labelsize=15)
+   
+    #Border removal logic
+
+
+    if remove_border:
+        axs[axisIdx].axis('off')
+    else:
+        axs[axisIdx].spines['top'].set_visible(False)
+        axs[axisIdx].spines['right'].set_visible(False)
+        axs[axisIdx].spines['left'].set_visible(False)
+
+
+fig, axs = plt.subplots(num_sensors + 2, 1, figsize=(15, 8), sharex=True)
+
+start_idx = Fs_sensor*1*60
+plotData(0, IMU_aclm_fltd[file_idx], 'IMU data', '', '', legend=False)
+plotData(0, IMU_map[file_idx]*3, 'IMU_Map', '', '', legend=False, color="red")
+
+
+plotData(1, s1_fltd[file_idx], 'Accelerometer_1', 'Signal', '' )
+# plotData(1, sensor_data_sgmntd_all[file_idx][0]*np.max(s1_fltd[file_idx])*0.7, '', '', '' )
+plotData(1, sensation_data_trimd[file_idx], '', '', '', plot_type='scatter', multiply=np.max(s1_fltd[file_idx])*0.7)
+
+# data_y = sensation_data_trimd[file_idx]
+# indices = np.where(data_y == 1)[0]
+# time_ticks = indices / 1024 / 60
+# axs[1].scatter(time_ticks, np.ones_like(time_ticks)*0.1, color='red', marker='*', s=1)
+
+
+plotData(2, s2_fltd[file_idx], 'Accelerometer_2', 'Signal', '' )
+# plotData(2, sensor_data_sgmntd_all[file_idx][1]*np.max(s2_fltd[file_idx])*0.7, '', '', '' )
+plotData(2, sensation_data_trimd[file_idx], '', '', '', plot_type='scatter', multiply=np.max(s2_fltd[file_idx])*0.7 )
+
+
+plotData(3, s3_fltd[file_idx], 'Piezo_1', 'Signal', '' )
+# plotData(3, sensor_data_sgmntd_all[file_idx][2]*np.max(s3_fltd[file_idx])*0.7, '', '', '' )
+plotData(3, sensation_data_trimd[file_idx], '', '', '', plot_type='scatter' , multiply=np.max(s3_fltd[file_idx])*0.7)
+
+plotData(4, s4_fltd[file_idx], 'Piezo_2', 'Signal', '' )
+# plotData(4, sensor_data_sgmntd_all[file_idx][3]*np.max(s4_fltd[file_idx])*0.14, '', '', '' )
+plotData(4, sensation_data_trimd[file_idx], '', '', '', plot_type='scatter', multiply=np.max(s4_fltd[file_idx])*0.2 )
+
+plotData(5, s5_fltd[file_idx], 'Piezo_3', 'Signal', '' )
+# plotData(5, sensor_data_sgmntd_all[file_idx][4]*np.max(s5_fltd[file_idx])*0.7, '', '', '' )
+plotData(5, sensation_data_trimd[file_idx], '', '', '', plot_type='scatter' , multiply=np.max(s5_fltd[file_idx])*0.7)
+
+plotData(6, s6_fltd[file_idx], 'Piezo_4', 'Signal', '' )
+# plotData(6, sensor_data_sgmntd_all[file_idx][5]*np.max(s6_fltd[file_idx])*0.7, '', '', '' )
+plotData(6, sensation_data_trimd[file_idx], '', '', '', plot_type='scatter' , multiply=np.max(s6_fltd[file_idx])*0.7)
+# plotData(7, sensor_data_sgmntd_2_type_sensor_list[file_idx], 'All Events', 'Detection', '', color= 'green', remove_border=True)
+# # plotData(7, M_sntn_map[file_idx]*0.6, 'Ground Truth', '', 'Time(minutes)', legend=False, plot_type='line', remove_border=False)
+# plotData(7, sensation_data_trimd[file_idx], 'Ground Truth', '', '', 'Time(minutes)', plot_type='scatter', remove_border=True, multiply= 0.6)
+
+plotData(7, sensor_data_sgmntd_cmbd_all_sensors_ML[file_idx], 'ML_detection', 'Signal', '', remove_border=False, color= 'green' )
+plotData(7, sensation_data_trimd[file_idx], 'Ground Truth', '', '', 'Time(minutes)', plot_type='scatter', remove_border=False, multiply= 0.6)
+# plotData(8, M_sntn_map[file_idx]*0.6, 'Ground Truth', '', '', legend=True, plot_type='line')
+
+# plotData(6, IMU_RPY_map[file_idx]*.6, 'IMU_RPY_map', '', '', legend=True, plot_type='scatter')
+# plotData(7, sensor_data_sgmntd_cmbd_all_sensors_ML, 'Fetal movement', 'Detection', 'Time(second)', legend=True, xticks=True )
+
+plt.tight_layout()
+plt.show()
+
+img_dir_path = "D:/Monaf/Training_testing/FeMo_Analysis_backup"
+fig.savefig(f"{img_dir_path}/performance on file no. {file_idx}.png")
+# plt.close(fig)
+# print(file_idx)
+
 # %% Plot
 
 
@@ -1687,15 +2124,15 @@ for k in range(1, segment + 1):
 
 
 num_sensors = 6 
-file_idx = 0
+file_idx = 12
 
 if len(s1_fltd[file_idx])< Fs_sensor*60:
     x_axis_type_ = 's'
 else:
     x_axis_type_ = 'm'
 
-fig, axs = plt.subplots(num_sensors + 2, 1, figsize=(15, 8), sharex=True)
-
+# fig, axs = plt.subplots(num_sensors + 2, 1, figsize=(15, 8), sharex=True)
+fig, axs = plt.subplots(num_sensors + 3, 1, figsize=(15, 8), sharex=True)
 # Plot the combined sensor data
 def plotData(axisIdx, data_y, label, ylabel, xlabel, legend=True, xticks=True, plot_type='line', x_axis_type= x_axis_type_):
     # x_axis_type = 's'
@@ -1717,21 +2154,34 @@ def plotData(axisIdx, data_y, label, ylabel, xlabel, legend=True, xticks=True, p
     if legend: axs[axisIdx].legend()
     if xticks: axs[axisIdx].set_xticks(np.arange(0, max(time_ticks) + 5, 5))
 
-plotData(0, s1_fltd[file_idx], 'Accelerometer_1', 'Signal', '' )
-plotData(1, s2_fltd[file_idx], 'Accelerometer_2', 'Signal', '' )
-plotData(2, s3_fltd[file_idx], 'Piezo_1', 'Signal', '' )
-plotData(3, s4_fltd[file_idx], 'Piezo_2', 'Signal', '' )
-plotData(4, s5_fltd[file_idx], 'Piezo_3', 'Signal', '' )
-plotData(5, s6_fltd[file_idx], 'Piezo_4', 'Signal', '' )
+plotData(0, IMU_aclm_fltd[file_idx], 'IMU data', '', '', legend=True)
+plotData(0, IMU_map[file_idx]*.5, 'IMU_Map', '', '', legend=True)
 
-# plotData(6, sensor_data_sgmntd_cmbd_all_sensors, 'All Events', 'Detection', '', legend=True )
-plotData(6, sensation_data_trimd[file_idx], 'Ground Truth', '', '', legend=True, plot_type='scatter')
-plotData(6, IMU_aclm_map[file_idx]*.5, 'IMU_aclm_Map', '', '', legend=True, plot_type='scatter')
-# plotData(6, IMU_RPY_map[file_idx]*.6, 'IMU_RPY_map', '', '', legend=True, plot_type='scatter')
-# plotData(6, IMU_merged_map[file_idx]*.8, 'IMU_merged_map', '', '', legend=True, plot_type='scatter')
 
-plotData(7, IMU_aclm_fltd[file_idx], 'IMU data', '', '', legend=True, plot_type='scatter')
-# plotData(7, sensor_data_sgmntd_cmbd_all_sensors_ML, 'Fetal movement', 'Detection', 'Time(second)', legend=True, xticks=True )
+plotData(1, s1_fltd[file_idx], 'Accelerometer_1', 'Signal', '' )
+plotData(1, sensor_data_sgmntd_all[file_idx][0]*np.max(s1_fltd[file_idx])*0.7, '', '', '' )
+
+plotData(2, s2_fltd[file_idx], 'Accelerometer_2', 'Signal', '' )
+plotData(2, sensor_data_sgmntd_all[file_idx][1]*np.max(s2_fltd[file_idx])*0.7, '', '', '' )
+
+plotData(3, s3_fltd[file_idx], 'Piezo_1', 'Signal', '' )
+plotData(3, sensor_data_sgmntd_all[file_idx][2]*np.max(s3_fltd[file_idx])*0.7, '', '', '' )
+
+plotData(4, s4_fltd[file_idx], 'Piezo_2', 'Signal', '' )
+plotData(4, sensor_data_sgmntd_all[file_idx][3]*np.max(s4_fltd[file_idx])*0.7, '', '', '' )
+
+plotData(5, s5_fltd[file_idx], 'Piezo_3', 'Signal', '' )
+plotData(5, sensor_data_sgmntd_all[file_idx][4]*np.max(s5_fltd[file_idx])*0.7, '', '', '' )
+
+plotData(6, s6_fltd[file_idx], 'Piezo_4', 'Signal', '' )
+plotData(6, sensor_data_sgmntd_all[file_idx][5]*np.max(s6_fltd[file_idx])*0.7, '', '', '' )
+
+plotData(7, sensor_data_sgmntd_2_type_sensor_list[file_idx], 'All Events', 'Detection', '', legend=True )
+# plotData(7, sensation_data_trimd[file_idx], 'Ground Truth', '', '', legend=True, plot_type='scatter')
+plotData(7, M_sntn_map[file_idx]*0.6, 'Ground Truth', '', '', legend=True, plot_type='line')
+
+plotData(8, sensor_data_sgmntd_cmbd_all_sensors_ML[file_idx], 'ML_detection', 'Signal', '' )
+plotData(8, M_sntn_map[file_idx]*0.6, 'Ground Truth', '', '', legend=True, plot_type='line')
 
 plt.tight_layout()
 plt.show()
