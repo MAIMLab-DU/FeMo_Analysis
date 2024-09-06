@@ -152,9 +152,9 @@ class DataPreprocessor:
 
         return loaded_data
     
-    def preprocess_data(self, data):
+    def preprocess_data(self, loaded_data):
         start = time.time()
-        preprocessed_data = data.copy()
+        preprocessed_data = loaded_data.copy()
         
         # ---------------------------- Filter design -----------------------------#
         # 3 types of filters are designed-
@@ -169,7 +169,7 @@ class DataPreprocessor:
         highCutoff_IMU = 10
         highCutoff_force = 10
             
-        if len(data['sensor_1']) > self.sensor_freq*5*60:  # If greater than 5 minutes remove last and first 30 seconds
+        if len(loaded_data['sensor_1']) > self.sensor_freq*5*60:  # If greater than 5 minutes remove last and first 30 seconds
             removal_period = 30  # Removal period in seconds   
         else:  # Else remove just 5 seconds
             removal_period = 5  # Removal period in seconds
