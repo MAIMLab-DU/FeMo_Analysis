@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 from functools import wraps
+from .settings import SENSOR_MAP
 
 
 class DetectionExtractor:
@@ -54,6 +55,7 @@ class DetectionExtractor:
     def _extraction_detections_for_train(self):
         pass
 
+    @staticmethod
     def decorator(method):
         """Decorator that checks the `inference` flag and calls the appropriate method."""
         @wraps(method)

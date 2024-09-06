@@ -26,7 +26,7 @@ def compare_dictionaries(actual_dict: dict, desired_dict: dict):
                     rtol=1e-4,
                     atol=1
                 )
-            if actual.dtype == int:
+            if actual.dtype == int or actual.dtype == bool:
                 np.testing.assert_equal(
                     actual=actual,
                     desired=desired,
