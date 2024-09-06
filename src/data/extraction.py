@@ -52,10 +52,12 @@ class DetectionExtractor:
             'extracted_imu_rotation': extracted_imu_rotation
         }
     
-    def _extraction_detections_for_train(self):
-        pass
+    # TODO: implement functionality
+    def _extract_detections_for_train(self,
+                                      preprocessed_data: dict,
+                                      scheme_dict: dict):
+        ...
 
-    @staticmethod
     def decorator(method):
         """Decorator that checks the `inference` flag and calls the appropriate method."""
         @wraps(method)
@@ -72,4 +74,49 @@ class DetectionExtractor:
 
 
 class FeatureExtractor:
-    ...
+    @property
+    def _logger(self):
+        return logging.getLogger(__name__)
+    
+    def __init__(self, base_dir,
+                 inferece: bool = True,
+                 sensor_freq: int = 1024,
+                 sensor_selection: list = ['accelerometer', 
+                                           'piezoelectric_small', 
+                                           'piezoelectric_large']) -> None:
+        
+        self._base_dir = base_dir
+        self.inference = inferece
+        self.sensor_freq = sensor_freq
+        self.sensor_selection = sensor_selection
+        self.sensors = [item for s in self.sensor_selection for item in SENSOR_MAP[s]]
+        self.num_sensors = len(self.sensors)
+
+    # TODO: implement functionality
+    def _extract_features_for_inference(self, 
+                                          extracted_detections: dict, 
+                                          fm_dict: dict):
+        
+        extracted_sensor_data = extracted_detections['extracted_sensor_data']
+        extracted_imu_acceleration = extracted_detections['extracted_imu_acceleration']
+        extracted_imu_rotation = extracted_detections['extracted_imu_rotation']
+
+        threshold = fm_dict['fm_threshold']
+    
+    # TODO: implement functionality
+    def _extract_features_for_train(self):
+        ...
+
+    def decorator(method):
+        """Decorator that checks the `inference` flag and calls the appropriate method."""
+        @wraps(method)
+        def wrapper(self, *args, **kwargs):
+            if self.inference:
+                return self._extract_features_for_inference(*args, **kwargs)
+            else:
+                return self._extract_features_for_train(*args, **kwargs)
+        return wrapper
+    
+    @decorator
+    def extract_features(self):
+        pass
