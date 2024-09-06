@@ -2,7 +2,7 @@ import unittest
 from unittest import TestCase
 import os
 import joblib
-from utils import list_folders, test_dictionaries
+from utils import list_folders, compare_dictionaries
 from data.fusion import SensorFusion
 
 
@@ -29,7 +29,7 @@ class TestFusion(TestCase):
                 os.path.join(self.data_folder, folder, "labeled_user_scheme.pkl")
             )
 
-            test_dictionaries(
+            compare_dictionaries(
                 actual_dict=actual_user_scheme,
                 desired_dict=desired_user_scheme
             )

@@ -9,7 +9,7 @@ def list_folders(directory):
     return folders
 
 
-def test_dictionaries(actual_dict: dict, desired_dict: dict):
+def compare_dictionaries(actual_dict: dict, desired_dict: dict):
 
     for key in actual_dict.keys():
         actual = actual_dict[key]

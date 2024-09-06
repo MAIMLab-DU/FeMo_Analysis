@@ -2,7 +2,7 @@ import os
 import joblib
 import unittest
 from unittest import TestCase
-from utils import list_folders, test_dictionaries
+from utils import list_folders, compare_dictionaries
 from data.preprocess import DataPreprocessor
 
 
@@ -26,7 +26,7 @@ class TestPreprocess(TestCase):
                 os.path.join(self.data_folder, folder, "loaded_data.pkl")
             )
 
-            test_dictionaries(
+            compare_dictionaries(
                 actual_dict=actual_loaded_data,
                 desired_dict=desired_loaded_data
             )
@@ -47,7 +47,7 @@ class TestPreprocess(TestCase):
                 os.path.join(self.data_folder, folder, "preprocessed_data.pkl")
             )
 
-            test_dictionaries(
+            compare_dictionaries(
                 actual_dict=actual_preprocessed_data,
                 desired_dict=desired_preprocessed_data
             )

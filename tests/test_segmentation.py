@@ -3,7 +3,7 @@ from unittest import TestCase
 import os
 import joblib
 import numpy as np
-from utils import list_folders, test_dictionaries
+from utils import list_folders, compare_dictionaries
 from data.segmentation import DataSegmentor
 
 
@@ -52,7 +52,7 @@ class TestSegmenation(TestCase):
                 os.path.join(self.data_folder, folder, "fm_dict.pkl")
             )
 
-            test_dictionaries(
+            compare_dictionaries(
                 actual_dict=actual_fm_dict,
                 desired_dict=desired_fm_dict
             )

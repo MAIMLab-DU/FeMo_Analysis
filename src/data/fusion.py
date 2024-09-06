@@ -76,7 +76,10 @@ class SensorFusion:
             num_labels = len(np.unique(labeled_user_scheme)) - 1  # -1 to exclude background
             labeled_user_scheme = labeled_user_scheme.reshape((labeled_user_scheme.size, ))
         
-        return labeled_user_scheme, num_labels
+        return {
+            'labeled_user_scheme': labeled_user_scheme,
+            'num_labels': num_labels,
+        }
             
 
 
