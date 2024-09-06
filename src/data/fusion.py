@@ -1,8 +1,5 @@
-# TODO: implement functionality
-import time
 import numpy as np
 import logging
-import pandas as pd
 from collections import defaultdict
 from skimage.measure import label
 from functools import reduce
