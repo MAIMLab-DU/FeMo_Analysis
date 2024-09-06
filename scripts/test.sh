@@ -6,7 +6,7 @@ VIRTUAL_ENV=.venv
 TEST_REPORT_PATH=reports/reports.xml
 
 # Set up virtual env
-virtualenv -p python3 $VIRTUAL_ENV
+virtualenv -p python3.10 $VIRTUAL_ENV
 . $VIRTUAL_ENV/bin/activate
 
 #Install requirements

@@ -161,6 +161,18 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# Ignore common compressed files
+*.zip
+*.tar
+*.gz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.iso
+*.lz
+*.zst
+
 # Data files
 *.dat
 *.npz
