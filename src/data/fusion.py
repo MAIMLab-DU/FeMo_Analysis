@@ -54,7 +54,7 @@ class SensorFusion:
 
                 for idx in range(1, num_labels+1):
                     label_start = np.where(labeled_fm_map == idx)[0][0]  # start of the label
-                    label_end = np.where(labeled_fm_map == idx)[0][-1]  # end of the label
+                    label_end = np.where(labeled_fm_map == idx)[0][-1] + 1  # end of the label
 
                     individual_map = np.zeros_like(fm_segmented[0])
                     individual_map[label_start:label_end] = 1
