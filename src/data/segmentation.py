@@ -5,7 +5,7 @@ import pandas as pd
 import concurrent.futures
 from skimage.measure import label
 from functools import reduce
-from .settings import SENSOR_MAP
+from .config import SENSOR_MAP
 from .utils import (
     custom_binary_dilation
 )

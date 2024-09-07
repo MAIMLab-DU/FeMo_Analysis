@@ -3,7 +3,7 @@ import logging
 from collections import defaultdict
 from skimage.measure import label
 from functools import reduce
-from .settings import (
+from .config import (
     SENSOR_MAP,
     SCHEME_MAP
 )

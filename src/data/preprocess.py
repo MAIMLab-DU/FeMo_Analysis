@@ -1,6 +1,5 @@
 import time
 import logging
-import json
 import pathlib
 import boto3
 import numpy as np
@@ -11,7 +10,6 @@ from .femo import FeMo
 from .utils import apply_pca
 
 
-# TODO: support for multiple files
 class DataPreprocessor: 
     @property
     def _logger(self):

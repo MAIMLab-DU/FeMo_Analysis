@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 from functools import wraps
-from .settings import SENSOR_MAP
+from .config import SENSOR_MAP
 
 
 class DetectionExtractor:
