@@ -1,8 +1,8 @@
-tests/datafiles/test-data_large/loaded_data.pkl filter=lfs diff=lfs merge=lfs -text
-tests/datafiles/test-data_large/preprocessed_data.pkl filter=lfs diff=lfs merge=lfs -text
+tests/datafiles/log_2024_04_20_18_03_04/labeled_user_scheme.pkl filter=lfs diff=lfs merge=lfs -text
+tests/datafiles/log_2024_04_20_18_03_04/loaded_data.pkl filter=lfs diff=lfs merge=lfs -text
+tests/datafiles/log_2024_04_20_18_03_04/preprocessed_data.pkl filter=lfs diff=lfs merge=lfs -text
+tests/datafiles/log_2024_04_20_18_03_04/raw_data.dat filter=lfs diff=lfs merge=lfs -text
 tests/datafiles/data_manifest.json filter=lfs diff=lfs merge=lfs -text
-tests/datafiles/test-data_large/extracted_detections.pkl filter=lfs diff=lfs merge=lfs -text
-tests/datafiles/test-data_large/fm_dict.pkl filter=lfs diff=lfs merge=lfs -text
-tests/datafiles/test-data_large/imu_map.pkl filter=lfs diff=lfs merge=lfs -text
-tests/datafiles/test-data_large/labeled_user_scheme.pkl filter=lfs diff=lfs merge=lfs -text
-tests/datafiles/test-data_large/log_2024_04_20_18_03_04.dat filter=lfs diff=lfs merge=lfs -text
+tests/datafiles/log_2024_04_20_18_03_04/extracted_detections.pkl filter=lfs diff=lfs merge=lfs -text
+tests/datafiles/log_2024_04_20_18_03_04/fm_dict.pkl filter=lfs diff=lfs merge=lfs -text
+tests/datafiles/log_2024_04_20_18_03_04/imu_map.pkl filter=lfs diff=lfs merge=lfs -text

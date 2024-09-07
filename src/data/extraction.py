@@ -10,13 +10,13 @@ class DetectionExtractor:
         return logging.getLogger(__name__)
     
     def __init__(self, base_dir,
-                 inferece: bool = True,
+                 inference: bool = True,
                  sensor_selection: list = ['accelerometer', 
                                            'piezoelectric_small', 
                                            'piezoelectric_large']) -> None:
         
         self._base_dir = base_dir
-        self.inference = inferece
+        self.inference = inference
         self.sensor_selection = sensor_selection
         self.sensors = [item for s in self.sensor_selection for item in SENSOR_MAP[s]]
         self.num_sensors = len(self.sensors)
