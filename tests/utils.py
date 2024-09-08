@@ -22,7 +22,8 @@ def compare_dictionaries(actual_dict: dict, desired_dict: dict):
         if isinstance(actual, np.ndarray):
             if actual.dtype == float:
                 np.testing.assert_allclose(
-                    actual=actual, desired=desired, rtol=1e-4, atol=1
+                    actual=actual, desired=desired, rtol=1e-4, atol=1,
+                    err_msg=f"{key} mismatched {np.argwhere(~np.isclose(actual, desired, rtol=1e-4, atol=1))}"
                 )
             if actual.dtype == int or actual.dtype == bool:
                 np.testing.assert_equal(

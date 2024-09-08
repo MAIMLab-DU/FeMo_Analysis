@@ -1,7 +1,7 @@
 import pywt
 import numpy as np
 from scipy.fft import fft
-from scipy.integrate import simps
+from scipy.integrate import simpson
 from scipy.stats import skew, kurtosis
 from scipy.signal import convolve, hilbert, spectrogram
 
@@ -119,6 +119,21 @@ def get_wavelet_coeff(data):
 
 
 def get_conv1D(convolved_signal, key):
+
+    def calculate_entropy(x):
+        # Monaf's implementation
+        # Flatten the array and count occurrences of each unique value
+        unique, counts = np.unique(x.flatten(), return_counts=True) 
+        # Compute probabilities
+        probs = counts / np.sum(counts)
+        # Compute and return entropy
+        return -np.sum(probs * np.log2(probs))
+    
+    def calculate_crest_factor(x):
+        peak_value = np.max(np.abs(x))
+        rms_value = np.sqrt(np.mean(x**2))
+        # Crest factor
+        return peak_value / rms_value 
     
     operations = {
         1: lambda x: np.mean(x),
@@ -128,7 +143,8 @@ def get_conv1D(convolved_signal, key):
         5: lambda x: np.ptp(x),
         6: lambda x: np.max(np.abs(x)),
         7: lambda x: np.sum(x**2),
-        8: lambda x: np.sum(np.where(np.diff(np.sign(x)))[0]) / len(x),
+        # Zero crossing rate
+        8: lambda x: len(np.where(np.diff(np.sign(x)))[0]) / len(x),
         9: lambda x: np.mean(np.gradient(x)),
         10: lambda x: np.max(x) - np.min(x),
         11: lambda x: skew(x),
@@ -139,10 +155,10 @@ def get_conv1D(convolved_signal, key):
         16: lambda x: np.mean(np.abs(x)),
         17: lambda x: np.sum(x[x > 0]),
         18: lambda x: np.sum(x[x < 0]),
+        # Mean crossing rate
         19: lambda x: len(np.where(np.diff(np.sign(x - np.mean(x))))[0]) / len(x),
-        20: lambda x: -np.sum((np.unique(x, return_counts=True)[1] / len(x)) * 
-                              np.log2(np.unique(x, return_counts=True)[1] / len(x))),
-        21: lambda x: np.max(np.abs(x)) / np.sqrt(np.mean(x**2))
+        20: lambda x: calculate_entropy(x),
+        21: lambda x: calculate_crest_factor(x)
     }
     
     return operations.get(key, lambda x: None)(convolved_signal)
@@ -188,13 +204,13 @@ def get_morphology(signal, sampling_freq):
     time_interval = 1 / sampling_freq
     
     # Calculate absolute area
-    absolute_area = simps(np.abs(signal), dx=time_interval)
+    absolute_area = simpson(np.abs(signal), dx=time_interval)
     
     # Calculate differential
     differential = np.diff(signal) # Taking numerical derivative
     
     # Calculate absolute area of the differential
-    absolute_area_differential = simps(np.abs(differential), dx=time_interval)
+    absolute_area_differential = simpson(np.abs(differential), dx=time_interval)
     
     # Calculate relative area
     relative_area = absolute_area_differential / absolute_area * 100

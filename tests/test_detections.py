@@ -26,7 +26,7 @@ def test_detections_for_inference(folder):
         preprocessed_data=preprocessed_data, scheme_dict=scheme_dict
     )
     desired_extracted_detections = joblib.load(
-        os.path.join(data_folder, folder, "extracted_detections.pkl")
+        os.path.join(data_folder, folder, "extracted_detections_inf.pkl")
     )
 
     compare_dictionaries(
