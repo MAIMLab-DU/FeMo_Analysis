@@ -2,16 +2,20 @@ import pytest
 import joblib
 import os
 from utils import list_folders, compare_dictionaries
-from data.extraction import DetectionExtractor
+from data.detections import DetectionExtractor
 
-# Define the folder path globally to be used in parameterization
 data_folder = "tests/datafiles"
 folders = list_folders(data_folder)
-detection_extractor = DetectionExtractor(base_dir=data_folder, inference=True)
 
 
 @pytest.mark.parametrize("folder", folders)
-def test_user_scheme_for_inference(folder):
+def test_detections_for_inference(folder):
+    
+    detection_extractor = DetectionExtractor(
+        base_dir=data_folder,
+        inference=True
+    )
+
     preprocessed_data = joblib.load(
         os.path.join(data_folder, folder, "preprocessed_data.pkl")
     )

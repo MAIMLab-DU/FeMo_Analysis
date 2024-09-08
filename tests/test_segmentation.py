@@ -5,7 +5,6 @@ import os
 from utils import list_folders, compare_dictionaries
 from data.segmentation import DataSegmentor
 
-# Define the folder path globally to be used in parameterization
 data_folder = "tests/datafiles"
 folders = list_folders(data_folder)
 data_segmentor = DataSegmentor(base_dir=data_folder)

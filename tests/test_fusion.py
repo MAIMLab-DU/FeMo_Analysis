@@ -10,7 +10,7 @@ data_fusion = SensorFusion(base_dir=data_folder)
 
 
 @pytest.mark.parametrize("folder", folders)
-def test_load_data(folder):
+def test_user_scheme(folder):
     """
     Test loading data from fm_dict and comparing it with pre-stored expected results.
     """
