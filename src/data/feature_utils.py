@@ -136,32 +136,32 @@ def get_conv1D(convolved_signal, key):
         return peak_value / rms_value 
     
     operations = {
-        1: lambda x: np.mean(x),
-        2: lambda x: np.std(x),
-        3: lambda x: np.max(x),
-        4: lambda x: np.min(x),
-        5: lambda x: np.ptp(x),
-        6: lambda x: np.max(np.abs(x)),
-        7: lambda x: np.sum(x**2),
+        1: (lambda x: np.mean(x), 'mean'),
+        2: (lambda x: np.std(x), 'std'),
+        3: (lambda x: np.max(x), 'max'),
+        4: (lambda x: np.min(x), 'min'),
+        5: (lambda x: np.ptp(x), 'ptp'),
+        6: (lambda x: np.max(np.abs(x)), 'max_abs'),
+        7: (lambda x: np.sum(x**2), 'sum_sq'),
         # Zero crossing rate
-        8: lambda x: len(np.where(np.diff(np.sign(x)))[0]) / len(x),
-        9: lambda x: np.mean(np.gradient(x)),
-        10: lambda x: np.max(x) - np.min(x),
-        11: lambda x: skew(x),
-        12: lambda x: kurtosis(x),
-        13: lambda x: np.sqrt(np.mean(x**2)),
-        14: lambda x: np.percentile(x, 75) - np.percentile(x, 25),
-        15: lambda x: np.mean(np.abs(x - np.mean(x))),
-        16: lambda x: np.mean(np.abs(x)),
-        17: lambda x: np.sum(x[x > 0]),
-        18: lambda x: np.sum(x[x < 0]),
+        8: (lambda x: len(np.where(np.diff(np.sign(x)))[0]) / len(x), 'zero_cross_rate'),
+        9: (lambda x: np.mean(np.gradient(x)), 'slope'),
+        10: (lambda x: np.max(x) - np.min(x), 'ptb'),
+        11: (lambda x: skew(x), 'skew'),
+        12: (lambda x: kurtosis(x), 'kurtosis'),
+        13: (lambda x: np.sqrt(np.mean(x**2)), 'rms'),
+        14: (lambda x: np.percentile(x, 75) - np.percentile(x, 25), 'iq_rng'),
+        15: (lambda x: np.mean(np.abs(x - np.mean(x))), 'mean_ad'),
+        16: (lambda x: np.mean(np.abs(x)), 'mean_abs'),
+        17: (lambda x: np.sum(x[x > 0]), 'area_pos'),
+        18: (lambda x: np.sum(x[x < 0]), 'area_neg'),
         # Mean crossing rate
-        19: lambda x: len(np.where(np.diff(np.sign(x - np.mean(x))))[0]) / len(x),
-        20: lambda x: calculate_entropy(x),
-        21: lambda x: calculate_crest_factor(x)
+        19: (lambda x: len(np.where(np.diff(np.sign(x - np.mean(x))))[0]) / len(x), 'mean_cross_rate'),
+        20: (lambda x: calculate_entropy(x), 'entropy'),
+        21: (lambda x: calculate_crest_factor(x), 'crest_factor')
     }
     
-    return operations.get(key, lambda x: None)(convolved_signal)
+    return operations.get(key, (lambda x: None, ''))[0](convolved_signal), operations.get(key, (lambda x: None, ''))[1]
 
 
 def get_convolved_signal(data):
@@ -180,7 +180,7 @@ def get_convolved_signal(data):
     return convolved_signal
 
 
-def get_time_freq_mod_filter(S):
+def get_time_freq_matched_filter(S):
     # Set parameters
     windowSize = 256
     hopSize = 128

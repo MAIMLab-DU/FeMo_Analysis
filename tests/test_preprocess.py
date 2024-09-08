@@ -3,9 +3,11 @@ import joblib
 import pytest
 from utils import list_folders, compare_dictionaries
 from data.preprocess import DataPreprocessor
+from data.loader import DataLoader
 
 data_folder = "tests/datafiles"
 folders = list_folders(data_folder)
+data_loader = DataLoader(base_dir=data_folder)
 data_preprocessor = DataPreprocessor(base_dir=data_folder)
 
 
@@ -14,7 +16,7 @@ def test_load_data(folder):
     """
     Test loading data from raw .dat files and comparing it with pre-stored expected results.
     """
-    actual_loaded_data = data_preprocessor.load_data_file(
+    actual_loaded_data = data_loader.load_data_file(
         os.path.join(data_folder, folder, "raw_data.dat")
     )
     desired_loaded_data = joblib.load(

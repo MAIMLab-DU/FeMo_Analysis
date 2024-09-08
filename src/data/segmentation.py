@@ -16,10 +16,13 @@ class DataSegmentor:
 
     def __init__(self, base_dir,  
                  sensor_freq: int = 1024,
+                 sensation_freq: int = 1024,
                  imu_acceleration_threshold: float = 0.2,
-                 imu_rotation_threshold: int = 4,
-                 imu_dilation: int = 4,
-                 fm_dilation: int = 3,
+                 imu_rotation_threshold: float = 4,
+                 maternal_dilation_forward: float = 2.0,
+                 maternal_dilation_backward: float = 5.0,
+                 imu_dilation: float = 4.0,
+                 fm_dilation: float = 3.0,
                  fm_min_sn: list = 40,
                  fm_signal_cutoff: list = 0.0001,
                  sensor_selection: list = ['accelerometer', 
@@ -28,19 +31,25 @@ class DataSegmentor:
         
         self._base_dir = base_dir
         self.sensor_freq = sensor_freq
+        self.sensation_freq = sensation_freq
         self.imu_acceleration_threshold = imu_acceleration_threshold
-        self.imu_rotation_threshold = imu_rotation_threshold
+        self.imu_rotation_threshold = imu_rotation_threshold        
+        # Dilation length in seconds
         self.imu_dilation = imu_dilation
         self.fm_dilation = fm_dilation
+        self.maternal_dilation_forward = maternal_dilation_forward
+        self.maternal_dilation_backward: maternal_dilation_forward
         self.sensor_selection = sensor_selection
         
         self.sensors = [item for s in self.sensor_selection for item in SENSOR_MAP[s]]
         self.num_sensors = len(self.sensors)
         self.fm_min_sn = [fm_min_sn for _ in range(self.num_sensors)]
         self.segmentation_signal_cutoff = [fm_signal_cutoff for _ in range(self.num_sensors)]
-        # Dilation length in seconds
-        self.imu_dilation_size = round(imu_dilation * sensor_freq)  # Dilation length in sample number 
-        self.fm_dilation_size = round(fm_dilation * sensor_freq)  # Dilation length in sample number
+        # Dilation length in sample number 
+        self.imu_dilation_size = round(imu_dilation * sensor_freq)
+        self.fm_dilation_size = round(fm_dilation * sensor_freq)
+        self.extension_forward = round(maternal_dilation_forward * sensor_freq)
+        self.extension_backward = round(maternal_dilation_backward * sensor_freq)
     
     def _create_imu_accleration_map(self, imu_accleration):
     
@@ -207,6 +216,42 @@ class DataSegmentor:
             'fm_segmented': segmented_sensor_data  # sensor_data_sgmntd
         }
 
+    def create_maternal_sens_map(self, preprocessed_data: dict, imu_map=None):
+
+        if imu_map is None:
+            imu_map = self.create_imu_map(preprocessed_data)
+
+        sensation_data = preprocessed_data['sensation_data']
+
+        # Sample numbers for maternal sensation detection
+        M_event_index = np.where(sensation_data)[0]
+        # Initializing the map with zeros everywhere
+        maternal_sens_map = np.zeros(len(imu_map))
+
+        # M_event_index contains index of all the maternal sensation detections
+        for j in range(len(M_event_index)):
+            # Getting the index values for the map
+            # Sample no. corresponding to a maternal sensation
+            L = M_event_index[j]
+            # Sample no. for the starting point of this sensation in the map
+            L1 = L * round(self.sensor_freq / self.sensation_freq) - self.extension_backward
+            # Sample no. for the ending point of this sensation in the map
+            L2 = L * round(self.sensor_freq / self.sensation_freq) + self.extension_forward
+            # Just a check so that L1 remains higher than or equal to 0
+            L1 = max(L1, 0)
+            # Just a check so that L1 remains higher than or equal to 0
+            L2 = min(L2, len(maternal_sens_map))
+
+            # Generating the map - a single vector with all the sensation data mapping
+            maternal_sens_map[L1:L2 + 1] = 1  # Assigns 1 to the locations defined by L1:L2
+
+            # Removal of the maternal sensation that has coincided with the body movement
+            X = np.sum(maternal_sens_map[L1:L2 + 1] * imu_map[L1:L2 + 1])
+            if X:
+                # Removes the sensation data from the map
+                maternal_sens_map[L1:L2 + 1] = 0
+
+        return maternal_sens_map
 
 
 

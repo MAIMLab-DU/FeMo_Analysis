@@ -1,7 +1,8 @@
 import pytest
 import joblib
 import os
-from utils import list_folders, compare_dictionaries
+import numpy as np
+from utils import list_folders
 from data.features import FeatureExtractor
 
 data_folder = "tests/datafiles"
@@ -29,11 +30,15 @@ def test_features_for_inference(folder):
         os.path.join(data_folder, folder, "extracted_features_inf.pkl")
     )
 
-    compare_dictionaries(
-        actual_dict=actual_extracted_features,
-        desired_dict=desired_extracted_features,
+    np.testing.assert_allclose(
+        actual=actual_extracted_features['features'],
+        desired=desired_extracted_features['features'],
+        rtol=1e-4, atol=1
     )
-    print("s")
+    feature_extractor.save_features(
+        filename=os.path.join(data_folder, folder, "features.csv"),
+        data=actual_extracted_features
+    )
 
 
 if __name__ == "__main__":

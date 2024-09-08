@@ -21,9 +21,9 @@ class DetectionExtractor:
         self.sensors = [item for s in self.sensor_selection for item in SENSOR_MAP[s]]
         self.num_sensors = len(self.sensors)
 
-    def _extract_detections_for_inference(self, 
-                           preprocessed_data: dict,
-                           scheme_dict: dict):
+    def _extract_detections_for_inference(self,
+                                          preprocessed_data: dict,
+                                          scheme_dict: dict):
         
         num_labels = scheme_dict['num_labels']
         labeled_user_scheme = scheme_dict['labeled_user_scheme']
@@ -47,9 +47,9 @@ class DetectionExtractor:
             extracted_imu_rotation.append(preprocessed_data['imu_rotation_1D'][label_start:label_end])            
                 
         return {
-            'extracted_sensor_data': extracted_sensor_data,
-            'extracted_imu_acceleration': extracted_imu_acceleration, 
-            'extracted_imu_rotation': extracted_imu_rotation
+            'extracted_sensor_data': np.array(extracted_sensor_data),
+            'extracted_imu_acceleration': np.array(extracted_imu_acceleration), 
+            'extracted_imu_rotation': np.array(extracted_imu_rotation)
         }
     
     # TODO: implement functionality

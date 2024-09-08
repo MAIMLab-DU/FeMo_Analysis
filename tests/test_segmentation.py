@@ -32,5 +32,16 @@ def test_fm_map(folder):
     compare_dictionaries(actual_dict=actual_fm_dict, desired_dict=desired_fm_dict)
 
 
+# @pytest.mark.parametrize("folder", folders)
+# def test_sensation_map(folder):
+#     preprocessed_data = joblib.load(
+#         os.path.join(data_folder, folder, "preprocessed_data.pkl")
+#     )
+#     actual_sens_dict = data_segmentor.create_maternal_sens_map(preprocessed_data=preprocessed_data)
+#     desired_sens_dict = joblib.load(os.path.join(data_folder, folder, "sens_dict.pkl"))
+
+#     compare_dictionaries(actual_dict=actual_sens_dict, desired_dict=desired_sens_dict)
+
+
 if __name__ == "__main__":
     pytest.main()

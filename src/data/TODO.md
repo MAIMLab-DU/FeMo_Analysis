@@ -2,7 +2,7 @@
 
 ```
 [ load ] → [ preprocess ] → [ segmentation ] → [ fusion ] → 
-[ extraction ] → [ build dataset ]
+[ extraction ] → [ build dataset]
 ```
 
 
