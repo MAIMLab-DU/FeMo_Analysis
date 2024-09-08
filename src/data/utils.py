@@ -1,7 +1,4 @@
-import copy
 import numpy as np
-import pandas as pd
-from .femo import FeMo
 from skimage.measure import label
 
 

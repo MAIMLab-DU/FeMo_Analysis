@@ -96,12 +96,7 @@ class FeatureExtractor:
     def _extract_features_for_inference(self, 
                                           extracted_detections: dict, 
                                           fm_dict: dict):
-        
-        extracted_sensor_data = extracted_detections['extracted_sensor_data']
-        extracted_imu_acceleration = extracted_detections['extracted_imu_acceleration']
-        extracted_imu_rotation = extracted_detections['extracted_imu_rotation']
-
-        threshold = fm_dict['fm_threshold']
+        ...
     
     # TODO: implement functionality
     def _extract_features_for_train(self):

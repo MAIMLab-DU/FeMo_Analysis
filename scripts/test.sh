@@ -13,8 +13,8 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 pip install -r tests/requirements.txt
 pip install pyflakes==2.1.1
 
-echo "Running pyflakes to detect any import / syntax issues"
-pyflakes ./**/*.py
+echo "Running ruff to check for linting issues"
+ruff check ./**/*.py
 
 echo "Running tests"
 export PYTHONPATH=./src

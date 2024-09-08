@@ -83,7 +83,7 @@ class FeMo:
 
         with open(self.inputfile, 'rb') as file:
             file.seek(0, 2)
-            file_len = file.tell()
+            file_len = file.tell()  # noqa: F841
             file.seek(0)
 
             self.header = Header(struct.unpack("<LH",file.read(6)),

@@ -1,9 +1,7 @@
 import time
 import numpy as np
 import logging
-import pandas as pd
 import concurrent.futures
-from skimage.measure import label
 from functools import reduce
 from .config import SENSOR_MAP
 from .utils import (
@@ -119,7 +117,7 @@ class DataSegmentor:
     def _get_segmented_sensor_data(self, preprocessed_sensor_data, imu_map):  
 
         low_signal_quantile = 0.25
-        SE = np.ones((self.fm_dilation_size + 1))  # linear element necessary for dilation operation
+        SE = np.ones((self.fm_dilation_size + 1))  # linear element necessary for dilation operation  # noqa: F841
 
         h = np.zeros(self.num_sensors)  # Variable for threshold
         segmented_sensor_data = [None] * self.num_sensors

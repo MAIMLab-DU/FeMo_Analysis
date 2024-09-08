@@ -111,7 +111,7 @@ class DataPreprocessor:
                                             'accel_x','accel_y','accel_z']]
         
         IMU_aclm_single_file    = (IMU_all[['accel_x', 'accel_y', 'accel_z']]/1000)
-        IMU_mag_single_file     = (IMU_all[['magnet_x', 'magnet_y', 'magnet_z']]/100)
+        IMU_mag_single_file     = (IMU_all[['magnet_x', 'magnet_y', 'magnet_z']]/100)  # noqa: F841
         IMU_rotation_quat       = (IMU_all[['rotation_i', 'rotation_j', 'rotation_k', 'rotation_r']]/10000)  
         
         # --------- Quaternion to euler conversion is not possible with zero-magnitude rows -----
@@ -165,7 +165,7 @@ class DataPreprocessor:
         highCutoff_FM = 30
         lowCutoff_IMU = 1
         highCutoff_IMU = 10
-        highCutoff_force = 10
+        highCutoff_force = 10  # noqa: F841
             
         if len(loaded_data['sensor_1']) > self.sensor_freq*5*60:  # If greater than 5 minutes remove last and first 30 seconds
             removal_period = 30  # Removal period in seconds   
