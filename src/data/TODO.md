@@ -13,6 +13,29 @@
 - [x] `create_fm_map` function test passed
 - [x] `get_labeled_user_scheme` function test passed
 - [x] `extract_detections_for_inference` function test passed
-- [ ] `extract_detections_for_train` function test passed
-- [ ] `extract_features` function test passed
-- [ ] Save features as `.csv` or `.parquet` files
+- [x] `extract_detections_for_train` function test passed
+- [x] `extract_features` function test passed
+- [x] Save features as `.csv` or `.parquet` files
+
+
+Add during build dataset
+```
+
+    def save_features(self, filename, data: dict) -> None:
+        """Saves the extracted features (and labels) to a .csv file"""
+
+        features = data.get('features', None)
+        labels = data.get('labels', None)
+        columns = data.get('columns', None)
+        
+        if features is None:
+            self.logger.warning('No features provided')
+            return
+        else:
+            features_df = pd.DataFrame(features, columns=columns)
+            header = True if columns is not None else False
+            if labels is not None:
+                labels_df = pd.DataFrame(labels, columns=['label'])
+                features_df = pd.concat([features_df, labels_df], axis=1)
+            features_df.to_csv(filename, header=header, index=False)
+```

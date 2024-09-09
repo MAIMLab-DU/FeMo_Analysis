@@ -1,7 +1,4 @@
-import logging
 import numpy as np
-import pandas as pd
-from typing import Union
 from functools import wraps
 from tqdm import tqdm
 from scipy.stats import skew, kurtosis
@@ -16,18 +13,12 @@ from .feature_utils import (
     get_time_freq_matched_filter,
     get_morphology
 )
-from .config import SENSOR_MAP
+from .base import BaseTransform
 
 
-class FeatureExtractor:
-    @property
-    def _logger(self):
-        return logging.getLogger(__name__)
+class FeatureExtractor(BaseTransform):
     
     def __init__(self,
-                 base_dir,
-                 inference: bool,
-                 sensor_freq: int = 1024,
                  freq_bands: list[int] = [
                      [1, 2],
                      [2, 5],
@@ -36,21 +27,14 @@ class FeatureExtractor:
                      [20, 30]
                  ],
                  freq_mode_threshold: int = 1,
-                 sensor_selection: list = ['accelerometer', 
-                                           'piezoelectric_small', 
-                                           'piezoelectric_large']) -> None:
-        
-        self._base_dir = base_dir
-        self.inference = inference
-        self.sensor_freq = sensor_freq
+                 **kwargs) -> None:
+        super().__init__(**kwargs)
+
         # Band energy feature for min, max in frequency bands
         self.freq_bands = freq_bands        
         # Main frequency mode above threshold (in Hz)
         self.freq_mode_threshold = freq_mode_threshold
         assert len(self.freq_bands) == 5, "Only 5 band energy features supported"
-        self.sensor_selection = sensor_selection
-        self.sensors = [item for s in self.sensor_selection for item in SENSOR_MAP[s]]
-        self.num_sensors = len(self.sensors)
 
     def _extract_features_of_signal(self,
                                     threshold: np.ndarray,
@@ -67,7 +51,7 @@ class FeatureExtractor:
         # Features array
         X_extracted = np.zeros((num_segments, total_feats))
         columns = ['' for _ in range(total_feats)]
-        self._logger.debug("Extracting features...")
+        self.logger.debug("Extracting features...")
 
         # For each segment
         for i in tqdm(range(num_segments), desc="Processing segments"):
@@ -117,7 +101,6 @@ class FeatureExtractor:
                 columns[k*num_common_feats+25] = f"{sensor_name}_std_wavelet_coeff"
                 
                 # ------------ 1D convolutional features ------------
-                # TODO: columns names
                 convolved_signal = get_convolved_signal(signal_below_threshold)
                 for conv_index in range(21):
                     X_extracted[i, k*num_common_feats+26+conv_index], col = get_conv1D(convolved_signal, conv_index + 1)
@@ -262,37 +245,17 @@ class FeatureExtractor:
         """Decorator that checks the `inference` flag and calls the appropriate method."""
         @wraps(method)
         def wrapper(self, *args, **kwargs):
-            if self.inference:
+            inference = kwargs.pop('inference', False)
+            if inference:
                 return self._extract_features_for_inference(*args, **kwargs)
             else:
                 return self._extract_features_for_train(*args, **kwargs)
         return wrapper
     
     @decorator
-    def extract_features(self):
+    def transform(self):
         # Placeholder method for decorator function
         pass
 
-    def save_features(self, filename, data: dict) -> None:
-        """Saves the extracted features (and labels) to .csv file(s)"""
-        # TODO: Save the dict as .csv, i.e., merge features and labels (if exists)
-        ...
-        # features = data.get('features', None)
-        # labels = data.get('labels', None)
-        # columns = data.get('columns', None)
-        # if features is None and labels is None:
-        #     raise ValueError("No features or labels provided")
-        # else:
-        #     if not len(features):
-        #         self._logger.warning("No features provided")
-        #         return
-        #     else:
-        #         features_df = pd.DataFrame(features, columns=columns)
-        #         header = True if columns is not None else False
-        #         features_df.to_csv(filename, header=header, index=False)
-        #     if labels is not None and len(labels):
-        #         labels_df = pd.DataFrame(labels, columns=['label'])
-        #         labels_df.to_csv(filename.replace('.csv', '_labels.csv'), index=False)
-            
 
         

@@ -1,37 +1,25 @@
 import time
 import numpy as np
-import logging
 import concurrent.futures
 from functools import reduce
-from .config import SENSOR_MAP
-from .utils import (
-    custom_binary_dilation
-)
+from .utils import custom_binary_dilation
+from .base import BaseTransform
 
 
-class DataSegmentor:
-    @property
-    def _logger(self):
-        return logging.getLogger(__name__)
+class DataSegmentor(BaseTransform):
 
-    def __init__(self, base_dir,  
-                 sensor_freq: int = 1024,
-                 sensation_freq: int = 1024,
+    def __init__(self,
                  imu_acceleration_threshold: float = 0.2,
                  imu_rotation_threshold: float = 4,
                  maternal_dilation_forward: float = 2.0,
                  maternal_dilation_backward: float = 5.0,
                  imu_dilation: float = 4.0,
                  fm_dilation: float = 3.0,
-                 fm_min_sn: list = 40,
-                 fm_signal_cutoff: list = 0.0001,
-                 sensor_selection: list = ['accelerometer', 
-                                           'piezoelectric_small', 
-                                           'piezoelectric_large']) -> None:
+                 fm_min_sn: int = 40,
+                 fm_signal_cutoff: float = 0.0001,
+                 **kwargs) -> None:
         
-        self._base_dir = base_dir
-        self.sensor_freq = sensor_freq
-        self.sensation_freq = sensation_freq
+        super().__init__(**kwargs)
         self.imu_acceleration_threshold = imu_acceleration_threshold
         self.imu_rotation_threshold = imu_rotation_threshold        
         # Dilation length in seconds
@@ -39,17 +27,24 @@ class DataSegmentor:
         self.fm_dilation = fm_dilation
         self.maternal_dilation_forward = maternal_dilation_forward
         self.maternal_dilation_backward: maternal_dilation_forward
-        self.sensor_selection = sensor_selection
-        
-        self.sensors = [item for s in self.sensor_selection for item in SENSOR_MAP[s]]
-        self.num_sensors = len(self.sensors)
         self.fm_min_sn = [fm_min_sn for _ in range(self.num_sensors)]
         self.segmentation_signal_cutoff = [fm_signal_cutoff for _ in range(self.num_sensors)]
         # Dilation length in sample number 
-        self.imu_dilation_size = round(imu_dilation * sensor_freq)
-        self.fm_dilation_size = round(fm_dilation * sensor_freq)
-        self.extension_forward = round(maternal_dilation_forward * sensor_freq)
-        self.extension_backward = round(maternal_dilation_backward * sensor_freq)
+        self.imu_dilation_size = round(imu_dilation * self.sensor_freq)
+        self.fm_dilation_size = round(fm_dilation * self.sensor_freq)
+        self.extension_forward = round(maternal_dilation_forward * self.sensor_freq)
+        self.extension_backward = round(maternal_dilation_backward * self.sensor_freq)
+    
+    def transform(self, map_name: str, *args, **kwargs):
+        if map_name == 'imu':
+            return self.create_imu_map(*args, **kwargs)
+        elif map_name == 'fm_sensor':
+            return self.create_fm_map(*args, **kwargs)
+        elif map_name == 'sensation':
+            return self.create_sensation_map(*args, **kwargs)
+        else:
+            raise ValueError(f"Invalid map_name: {map_name}. "
+                             f"Allowed values - ('imu', 'fm_sensor', 'sensation')")
     
     def _create_imu_accleration_map(self, imu_accleration):
     
@@ -120,7 +115,7 @@ class DataSegmentor:
             else:
                 map_final[start:] = 1        
 
-        self._logger.info(f"IMU rotation map created in {(time.time()-tic)*1000:.2f} ms")                
+        self.logger.info(f"IMU rotation map created in {(time.time()-tic)*1000:.2f} ms")                
         return map_final.astype(dtype=bool)
     
     def _get_segmented_sensor_data(self, preprocessed_sensor_data, imu_map):  
@@ -216,7 +211,7 @@ class DataSegmentor:
             'fm_segmented': segmented_sensor_data  # sensor_data_sgmntd
         }
 
-    def create_maternal_sens_map(self, preprocessed_data: dict, imu_map=None):
+    def create_sensation_map(self, preprocessed_data: dict, imu_map=None):
 
         if imu_map is None:
             imu_map = self.create_imu_map(preprocessed_data)

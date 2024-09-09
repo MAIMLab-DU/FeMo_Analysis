@@ -1,24 +1,16 @@
 import time
-import logging
 import numpy as np
 import pandas as pd
 from scipy.spatial.transform import Rotation as R
-from .femo import FeMo
+from .base import BaseTransform, FeMo
 
 
-class DataLoader: 
-    @property
-    def _logger(self):
-        return logging.getLogger(__name__)
+class DataLoader(BaseTransform): 
 
-    def __init__(self,
-                 base_dir,
-                 sensor_freq: int = 1024) -> None:
-        
-        self._base_dir = base_dir
-        self.sensor_freq = sensor_freq
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
     
-    def load_data_file(self, filename):
+    def transform(self, filename):
 
         start = time.time()
         keys = [
@@ -81,6 +73,7 @@ class DataLoader:
         max_sensor_value = 2**16 - 1  
         max_voltage = 3.3  
 
+        selected_sensor_data = selected_sensor_data.copy()
         for column in selected_sensor_data.columns:
             if column in FM_sensor_columns:
                 selected_sensor_data.loc[:, column] = (selected_sensor_data[column] / max_sensor_value) * max_voltage
@@ -138,7 +131,7 @@ class DataLoader:
         except KeyError:
             loaded_data['sensation_data'] = np.array([])
 
-        self._logger.debug(f"Loaded data file {filename} in {(time.time()-start)*1000} ms")
+        self.logger.debug(f"Loaded data file {filename} in {(time.time()-start)*1000} ms")
 
         return loaded_data
 

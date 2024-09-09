@@ -1,35 +1,21 @@
 import numpy as np
-import logging
 from collections import defaultdict
 from skimage.measure import label
 from functools import reduce
-from .config import (
-    SENSOR_MAP,
-    SCHEME_MAP
-)
+from .base import BaseTransform
 
 
-class SensorFusion:
-    @property
-    def _logger(self):
-        return logging.getLogger(__name__)
+class SensorFusion(BaseTransform):
 
-    def __init__(self, base_dir,
+    def __init__(self,
                  desired_scheme: int = 1,
-                 sensor_selection: list = ['accelerometer', 
-                                           'piezoelectric_small', 
-                                           'piezoelectric_large']) -> None:
-        
-        self._base_dir = base_dir
-        self.sensor_selection = sensor_selection
-        self.sensors = [item for s in self.sensor_selection for item in SENSOR_MAP[s]]
-        self.num_sensors = len(self.sensors)
-        self.desired_scheme = desired_scheme
-        assert self.desired_scheme in range(9), f"{desired_scheme} must be in range(0, 9)"
+                 **kwargs) -> None:
+        super().__init__(**kwargs)
 
-        self.use_all_sensors = True if len(sensor_selection) == len(SENSOR_MAP) else False
+        assert desired_scheme in range(9), f"{desired_scheme} must be in range(0, 9)"
+        self.desired_scheme = self.scheme_map[desired_scheme]
 
-    def get_labeled_user_scheme(self, fm_dict: dict):
+    def transform(self, fm_dict: dict):
 
         labeled_fm_map = label(fm_dict['fm_map'])
         num_labels = len(np.unique(labeled_fm_map)) - 1  # -1 to exclude background
@@ -43,9 +29,9 @@ class SensorFusion:
             
             if num_labels > 0:
 
-                if SCHEME_MAP[self.desired_scheme][0] == 'type':
+                if self.desired_scheme[0] == 'type':
                     fm_segmented_by_type = defaultdict()
-                    for key, value in SENSOR_MAP.items():
+                    for key, value in self.sensor_map.items():
                         indices = [int(value[i].split('_')[1])-1 for i in range(len(value))]
                         fm_segmented_by_type[key] = [reduce(lambda x, y: x | y, (fm_segmented[i] for i in indices))]
 
@@ -57,16 +43,16 @@ class SensorFusion:
                     individual_map[label_start:label_end] = 1
                     
                     # Check if detection is in at least n sensors
-                    if SCHEME_MAP[self.desired_scheme][0] == 'number':
+                    if self.desired_scheme[0] == 'number':
                         tmp_var = sum([np.any(individual_map * each_fm_segmented) \
                                        for each_fm_segmented in fm_segmented])                        
                     
                     # Check if detection is in at least n type of sensors
-                    elif SCHEME_MAP[self.desired_scheme][0] == 'type':
+                    elif self.desired_scheme[0] == 'type':
                         tmp_var = sum([np.any(individual_map * each_fm_segmented_type) 
                                        for each_fm_segmented_type in fm_segmented_by_type.values()])                
 
-                    if tmp_var >= SCHEME_MAP[self.desired_scheme][1]:
+                    if tmp_var >= self.desired_scheme[1]:
                         user_scheme[label_start:label_end] = 1
             
             labeled_user_scheme = label(np.array(user_scheme))

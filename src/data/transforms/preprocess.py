@@ -1,23 +1,16 @@
 import time
-import logging
 import numpy as np
 from scipy.signal import butter, sosfiltfilt
 from .utils import apply_pca
+from .base import BaseTransform
 
 
-class DataPreprocessor: 
-    @property
-    def _logger(self):
-        return logging.getLogger(__name__)
+class DataPreprocessor(BaseTransform): 
 
-    def __init__(self,
-                 base_dir,
-                 sensor_freq: int = 1024) -> None:
-        
-        self._base_dir = base_dir
-        self.sensor_freq = sensor_freq
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
     
-    def preprocess_data(self, loaded_data):
+    def transform(self, loaded_data):
         start = time.time()
         preprocessed_data = loaded_data.copy()
         
@@ -39,11 +32,11 @@ class DataPreprocessor:
         else:  # Else remove just 5 seconds
             removal_period = 5  # Removal period in seconds
 
-        self._logger.debug(f"Filter order: {filter_order:.1f}")
-        self._logger.debug(f"IMU band-pass: {lowCutoff_IMU}-{highCutoff_IMU} Hz")
-        self._logger.debug(f"FM band-pass: {lowCutoff_FM}-{highCutoff_FM} Hz")
-        # self._logger.debug(f'\tForce sensor low-pass: {highCutoff_force} Hz')
-        self._logger.debug(f"Removal period: {removal_period} s")
+        self.logger.debug(f"Filter order: {filter_order:.1f}")
+        self.logger.debug(f"IMU band-pass: {lowCutoff_IMU}-{highCutoff_IMU} Hz")
+        self.logger.debug(f"FM band-pass: {lowCutoff_FM}-{highCutoff_FM} Hz")
+        # self.logger.debug(f'\tForce sensor low-pass: {highCutoff_force} Hz')
+        self.logger.debug(f"Removal period: {removal_period} s")
 
 
 
@@ -104,6 +97,6 @@ class DataPreprocessor:
         preprocessed_data['imu_rotation']            = preprocessed_data['imu_rotation'].iloc[start_index:end_index]           
 
         preprocessed_data['imu_rotation_1D'] = apply_pca(preprocessed_data['imu_rotation'])
-        self._logger.debug(f"Data preprocessed in {(time.time()-start)*1000} ms")
+        self.logger.debug(f"Data preprocessed in {(time.time()-start)*1000} ms")
 
         return preprocessed_data

@@ -1,25 +1,13 @@
-import logging
 import numpy as np
 from functools import wraps
-from .config import SENSOR_MAP
+from .base import BaseTransform
 
 
-class DetectionExtractor:
-    @property
-    def _logger(self):
-        return logging.getLogger(__name__)
+class DetectionExtractor(BaseTransform):
     
-    def __init__(self, base_dir,
-                 inference: bool = True,
-                 sensor_selection: list = ['accelerometer', 
-                                           'piezoelectric_small', 
-                                           'piezoelectric_large']) -> None:
-        
-        self._base_dir = base_dir
-        self.inference = inference
-        self.sensor_selection = sensor_selection
-        self.sensors = [item for s in self.sensor_selection for item in SENSOR_MAP[s]]
-        self.num_sensors = len(self.sensors)
+    def __init__(self,
+                 **kwargs) -> None:
+        super().__init__(**kwargs)
 
     def _extract_detections_for_inference(self,
                                           preprocessed_data: dict,
@@ -47,9 +35,9 @@ class DetectionExtractor:
             extracted_imu_rotation.append(preprocessed_data['imu_rotation_1D'][label_start:label_end])            
                 
         return {
-            'extracted_sensor_data': np.array(extracted_sensor_data),
-            'extracted_imu_acceleration': np.array(extracted_imu_acceleration), 
-            'extracted_imu_rotation': np.array(extracted_imu_rotation)
+            'extracted_sensor_data': extracted_sensor_data,
+            'extracted_imu_acceleration': extracted_imu_acceleration, 
+            'extracted_imu_rotation': extracted_imu_rotation
         }
     
     # TODO: implement functionality
@@ -62,14 +50,15 @@ class DetectionExtractor:
         """Decorator that checks the `inference` flag and calls the appropriate method."""
         @wraps(method)
         def wrapper(self, *args, **kwargs):
-            if self.inference:
+            inference = kwargs.pop('inference', False)
+            if inference:
                 return self._extract_detections_for_inference(*args, **kwargs)
             else:
                 return self._extract_detections_for_train(*args, **kwargs)
         return wrapper
     
     @decorator
-    def extract_detections(self):
+    def transform(self):
         pass
 
 
