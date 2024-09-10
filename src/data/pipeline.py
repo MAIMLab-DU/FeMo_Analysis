@@ -42,7 +42,7 @@ class Pipeline(object):
 
         return stages
 
-    def run(self, filename):
+    def process(self, filename):
         
         # Step-0: Load data
         loaded_data = self.stages[0](filename=filename)

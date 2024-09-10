@@ -1,7 +1,6 @@
 import os
 import joblib
 import pytest
-import numpy as np
 from utils import (
     list_folders,
     compare_dictionaries,
