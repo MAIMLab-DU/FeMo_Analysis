@@ -2,6 +2,7 @@ import time
 import numpy as np
 import concurrent.futures
 from functools import reduce
+from skimage.measure import label
 from .utils import custom_binary_dilation
 from .base import BaseTransform
 
@@ -10,11 +11,11 @@ class DataSegmentor(BaseTransform):
 
     def __init__(self,
                  imu_acceleration_threshold: float = 0.2,
-                 imu_rotation_threshold: float = 4,
-                 maternal_dilation_forward: float = 2.0,
-                 maternal_dilation_backward: float = 5.0,
-                 imu_dilation: float = 4.0,
-                 fm_dilation: float = 3.0,
+                 imu_rotation_threshold: int = 4,
+                 maternal_dilation_forward: int = 2,
+                 maternal_dilation_backward: int = 5,
+                 imu_dilation: int = 4,
+                 fm_dilation: int = 3,
                  fm_min_sn: int = 40,
                  fm_signal_cutoff: float = 0.0001,
                  **kwargs) -> None:
@@ -167,7 +168,6 @@ class DataSegmentor(BaseTransform):
         
         segmented_sensor_data, threshold = self._get_segmented_sensor_data(preprocessed_sensor_data, 
                                                                            imu_map)
-        print(f"{self.num_sensors = }, {len(segmented_sensor_data) = }")
 
         for i in range(self.num_sensors):
             map_added = imu_map.astype(int) + segmented_sensor_data[i].astype(int)
@@ -203,7 +203,8 @@ class DataSegmentor(BaseTransform):
 
             segmented_sensor_data[i] = map_final.astype(int)
             
-        combined_fm_map = reduce(lambda x, y: x | y, (data for data in segmented_sensor_data)) 
+        combined_fm_map = reduce(lambda x, y: x | y, (data for data in segmented_sensor_data))
+        print(f"{len(np.unique(label(combined_fm_map)))-1 = }") 
 
         return {
             'fm_map': combined_fm_map,  # sensor_data_sgmntd_cmbd_all_sensors

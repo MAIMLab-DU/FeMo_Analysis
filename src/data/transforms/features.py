@@ -37,10 +37,10 @@ class FeatureExtractor(BaseTransform):
         assert len(self.freq_bands) == 5, "Only 5 band energy features supported"
 
     def _extract_features_of_signal(self,
-                                    threshold: np.ndarray,
-                                    extracted_sensor_data: np.ndarray,
-                                    extracted_imu_acceleration: np.ndarray,
-                                    extracted_imu_rotation: np.ndarray) -> np.ndarray:
+                                    threshold,
+                                    extracted_sensor_data,
+                                    extracted_imu_acceleration,
+                                    extracted_imu_rotation):
         
         num_segments = len(extracted_sensor_data)
 
@@ -131,12 +131,12 @@ class FeatureExtractor(BaseTransform):
                                         fm_dict: dict):
         
         threshold = fm_dict['fm_threshold']        
-        extracted_sensor_data = extracted_detections['extracted_sensor_data']
-        extracted_imu_acceleration = extracted_detections['extracted_imu_acceleration']
-        extracted_imu_rotation = extracted_detections['extracted_imu_rotation']
+        detections_sensor_data = extracted_detections['detections_sensor_data']
+        detections_imu_acceleration = extracted_detections['detections_imu_acceleration']
+        detections_imu_rotation = extracted_detections['detections_imu_rotation']
 
-        X_extracted, columns = self._extract_features_of_signal(threshold, extracted_sensor_data,
-                                                       extracted_imu_acceleration, extracted_imu_rotation)
+        X_extracted, columns = self._extract_features_of_signal(threshold, detections_sensor_data,
+                                                                detections_imu_acceleration, detections_imu_rotation)
         
         return {
             'features': X_extracted,
@@ -144,25 +144,24 @@ class FeatureExtractor(BaseTransform):
         }
 
     def _extract_features_for_train(self,
-                                    extracted_tp_detections: dict,
-                                    extracted_fp_detections: dict,
+                                    extracted_detections: dict,
                                     fm_dict: dict):
         
         threshold = fm_dict['fm_threshold']
 
-        extracted_tpd_sensor_data = extracted_tp_detections['extracted_sensor_data']
-        extracted_tpd_imu_acceleration = extracted_tp_detections['extracted_imu_acceleration']
-        extracted_tpd_imu_rotation = extracted_tp_detections['extracted_imu_rotation']
+        tp_detections_sensor_data = extracted_detections['tp_detections_sensor_data']
+        tp_detections_imu_acceleration = extracted_detections['tp_detections_imu_acceleration']
+        tp_detection_imu_rotation = extracted_detections['tp_detection_imu_rotation']
 
-        X_tpd, columns = self._extract_features_of_signal(threshold, extracted_tpd_sensor_data,
-                                                 extracted_tpd_imu_acceleration, extracted_tpd_imu_rotation)
+        X_tpd, columns = self._extract_features_of_signal(threshold, tp_detections_sensor_data,
+                                                          tp_detections_imu_acceleration, tp_detection_imu_rotation)
         
-        extracted_fpd_sensor_data = extracted_fp_detections['extracted_sensor_data']
-        extracted_fpd_imu_acceleration = extracted_fp_detections['extracted_imu_acceleration']
-        extracted_fpd_imu_rotation = extracted_fp_detections['extracted_imu_rotation']
+        fp_detections_sensor_data = extracted_detections['fp_detections_sensor_data']
+        fp_detections_imu_acceleration = extracted_detections['fp_detections_imu_acceleration']
+        fp_detections_imu_rotation = extracted_detections['fp_detections_imu_rotation']
 
-        X_fpd, columns = self._extract_features_of_signal(threshold, extracted_fpd_sensor_data,
-                                                 extracted_fpd_imu_acceleration, extracted_fpd_imu_rotation)
+        X_fpd, columns = self._extract_features_of_signal(threshold, fp_detections_sensor_data,
+                                                          fp_detections_imu_acceleration, fp_detections_imu_rotation)
         
         X_extracted = np.vstack([X_tpd, X_fpd])
         y_extracted = np.zeros((X_tpd.shape[0], X_fpd.shape[0]))

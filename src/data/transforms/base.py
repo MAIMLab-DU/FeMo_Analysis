@@ -48,7 +48,7 @@ class BaseTransform(ABC):
     
     @property
     def sensors(self) -> list:
-        return [item for s in self.sensor_selection for item in self.sensor_map[s]]
+        return sorted([item for s in self.sensor_selection for item in self.sensor_map[s]])
 
     @property
     def num_sensors(self) -> int:

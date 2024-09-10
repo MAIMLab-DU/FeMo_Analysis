@@ -2,7 +2,11 @@ import os
 import joblib
 import pytest
 import numpy as np
-from utils import list_folders, compare_dictionaries
+from utils import (
+    list_folders,
+    compare_dictionaries,
+    compare_elements
+)
 from data.transforms import (
     DataLoader,
     DataPreprocessor,
@@ -58,13 +62,13 @@ def test_preprocessed_data(folder):
 @pytest.mark.parametrize("folder", folders)
 def test_user_scheme(folder):
     """
-    Test loading data from fm_dict and 
+    Test labeled fm map and 
     comparing it with pre-stored expected results.
     """
 
     data_fusion = SensorFusion()
     fm_dict = joblib.load(os.path.join(data_folder, folder, "fm_dict.pkl"))
-    actual_user_scheme = data_fusion.transform(fm_dict=fm_dict)
+    actual_user_scheme = data_fusion(fm_dict=fm_dict)
     desired_user_scheme = joblib.load(
         os.path.join(data_folder, folder, "labeled_user_scheme.pkl")
     )
@@ -89,7 +93,11 @@ def test_imu_map(folder):
                                               preprocessed_data=preprocessed_data)
     desired_imu_map = joblib.load(os.path.join(data_folder, folder, "imu_map.pkl"))
 
-    np.testing.assert_array_equal(x=actual_imu_map, y=desired_imu_map)
+    compare_elements(
+        key='imu_map',
+        actual=actual_imu_map,
+        desired=desired_imu_map
+    )
 
 
 @pytest.mark.parametrize("folder", folders)
@@ -109,24 +117,27 @@ def test_fm_map(folder):
 
     compare_dictionaries(actual_dict=actual_fm_dict, desired_dict=desired_fm_dict)
 
-
 # TODO: add sensation_dict.pkl
-# @pytest.mark.parametrize("folder", folders)
-# def test_sensation_map(folder):
-#     """
-#     Test maternal sensation map from preprocessed data and 
-#     comparing it with pre-stored expected results.
-#     """
+@pytest.mark.parametrize("folder", folders)
+def test_sensation_map(folder):
+    """
+    Test maternal sensation map from preprocessed data and 
+    comparing it with pre-stored expected results.
+    """
 
-#     data_segmentor = DataSegmentor()
-#     preprocessed_data = joblib.load(
-#         os.path.join(data_folder, folder, "preprocessed_data.pkl")
-#     )
-#     actual_sens_dict = data_segmentor.transform(map_name='sensation',
-#                                                 preprocessed_data=preprocessed_data)
-#     desired_sens_dict = joblib.load(os.path.join(data_folder, folder, "sensation_dict.pkl"))
+    data_segmentor = DataSegmentor()
+    preprocessed_data = joblib.load(
+        os.path.join(data_folder, folder, "preprocessed_data.pkl")
+    )
+    actual_sensation_map = data_segmentor.transform(map_name='sensation',
+                                                preprocessed_data=preprocessed_data)
+    desired_sensation_map = joblib.load(os.path.join(data_folder, folder, "sensation_map.pkl"))
 
-#     compare_dictionaries(actual_dict=actual_sens_dict, desired_dict=desired_sens_dict)
+    compare_elements(
+        key='sensation_map',
+        actual=actual_sensation_map,
+        desired=desired_sensation_map
+    )
 
 
 @pytest.mark.parametrize("folder", folders)
@@ -136,7 +147,7 @@ def test_detections_for_inference(folder):
     comparing it with pre-stored expected results.
     """
     
-    detection_extractor = DetectionExtractor(inference=True)
+    detection_extractor = DetectionExtractor()
 
     preprocessed_data = joblib.load(
         os.path.join(data_folder, folder, "preprocessed_data.pkl")
@@ -145,6 +156,7 @@ def test_detections_for_inference(folder):
         os.path.join(data_folder, folder, "labeled_user_scheme.pkl")
     )
     actual_extracted_detections = detection_extractor.transform(
+        inference=True,
         preprocessed_data=preprocessed_data, scheme_dict=scheme_dict
     )
     desired_extracted_detections = joblib.load(
@@ -164,7 +176,7 @@ def test_features_for_inference(folder):
     comparing it with pre-stored expected results.
     """
     
-    feature_extractor = FeatureExtractor(inference=True)
+    feature_extractor = FeatureExtractor()
 
     extracted_detections = joblib.load(
         os.path.join(data_folder, folder, "extracted_detections_inf.pkl")
@@ -173,16 +185,17 @@ def test_features_for_inference(folder):
         os.path.join(data_folder, folder, "fm_dict.pkl")
     )
     actual_extracted_features = feature_extractor.transform(
+        inference=True,
         extracted_detections=extracted_detections, fm_dict=fm_dict
     )
     desired_extracted_features = joblib.load(
         os.path.join(data_folder, folder, "extracted_features_inf.pkl")
     )
 
-    np.testing.assert_allclose(
+    compare_elements(
+        key='features',
         actual=actual_extracted_features['features'],
-        desired=desired_extracted_features['features'],
-        rtol=1e-4, atol=1
+        desired=desired_extracted_features['features']
     )
 
 
