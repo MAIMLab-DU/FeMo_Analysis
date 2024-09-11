@@ -1,7 +1,6 @@
 import os
 import joblib
 import pytest
-import pandas as pd
 from utils import (
     list_folders,
     compare_elements,
