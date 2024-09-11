@@ -189,11 +189,8 @@ class DataProcessor:
         return self._feat_rank_cfg     
 
     def __init__(self,
-                 input_data: pd.DataFrame,
                  feat_rank_cfg: dict = None) -> None:
         
-        self._input_data = input_data.drop('labels', axis=1, errors='ignore')
-        self._input_data_y = input_data.get('labels', None)
         self._feat_rank_cfg = feat_rank_cfg
         self._feature_ranker = FeatureRanker(**feat_rank_cfg) if feat_rank_cfg else FeatureRanker()
 
@@ -203,16 +200,12 @@ class DataProcessor:
         dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
         norm_feats = norm_feats / dev
 
-        return norm_feats
+        return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)]
 
-    def process(self):
+    def process(self, input_data: pd.DataFrame):
         self.logger.debug("Processing features...")
-        X_norm = self._normalize_features(self._input_data.to_numpy())
-        if self._input_data_y: 
-            y_pre = self._input_data_y.to_numpy() or None
-        else:
-            y_pre = self._input_data_y
-        X_norm = X_norm[:, ~np.any(np.isnan(X_norm), axis=0)]
+        X_norm = self._normalize_features(input_data.drop('labels', axis=1, errors='ignore').to_numpy())
+        y_pre = input_data.get('labels')
         
         top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
                                                     func=self._feature_ranker.ensemble_ranking)

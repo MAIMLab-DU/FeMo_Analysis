@@ -76,7 +76,7 @@ class FeatureRanker:
         n_top_feats = X.shape[1] // self._feature_ratio
         nca = NeighborhoodComponentsAnalysis(init='auto',
                                              tol=1e-5,
-                                             verbose=1,
+                                             verbose=0,
                                              random_state=0,
                                              **self._param_cfg.get('nca_ranking'))
         nca.fit(X, y)
@@ -120,8 +120,8 @@ class FeatureRanker:
         self.logger.debug("L1 based feature selection is going on... \n")
         
         log_reg = LogisticRegression(penalty='l1',
-                                     solver='liblinear',
-                                     random_state=42)     
+                                     random_state=42,
+                                     **self._param_cfg.get('logReg_ranking'))
         log_reg.fit(X, y)
         l1_based_top_n = SelectFromModel(log_reg, prefit=True).get_support(indices=True)
         self.logger.debug(f"L1 based top features: {l1_based_top_n}\n")
@@ -149,7 +149,7 @@ class FeatureRanker:
             estimator = ExtraTreesClassifier()  # gives slightly low f1 score.
         rfe = RFE(estimator=estimator,
                   n_features_to_select=n_top_feats,
-                  verbose=1,
+                  verbose=0,
                   **self._param_cfg.get('recursive_ranking'))
         rfe.fit(X, y)
         recursive_top_n = rfe.get_support(indices=True)
@@ -189,85 +189,7 @@ class FeatureRanker:
             selected_features = find_common_features(feature_sets, self._min_common)
         
         return np.unique(selected_features)
-    
-    def ensemble_feature_selection(self, fusion_criteria, nca_top_n, xgb_top_n, l1_based_top_n, recursive_top_n ):
-        """
-        @author: Monaf Chowdhury
-        Ensembles the features based on user defined policy and finds out the best 'k' number of feautres
-        Parameters
-        ----------
-        fusion_criteria : int. Usually 3
-            Atleast how many number of feature selection methods must have common features
 
-        Returns
-        -------
-        selected_features : numpy.ndarray. Shape(k)
-            An array of 'k' most important indices 
-
-        """
-        # nca_top_n = self.nca_ranking(n)
-        # xgb_top_n = self.xgboost_ranking(n)
-        # l1_based_top_n = self.logistic_regression_ranking(n)
-        # recursive_top_n = self.recursive_feature_elimination(n)
-        # fusion_criteria = int(input("Atleast how many number of feature selection methods must have common features: "))
-        selected_features = []
-        if fusion_criteria == 4:
-            # Common elements between NCA, XGBoost, L1 Based, Recursive 
-            common_elements = np.intersect1d(nca_top_n, np.intersect1d(xgb_top_n, np.intersect1d(l1_based_top_n, recursive_top_n))) # Finding out the common elements 
-            selected_features.append(common_elements)
-        elif fusion_criteria == 3: 
-            # Common elements between three methods 
-            # Common elements between NCA, L1 Based, Recursive 
-            common_elements = np.intersect1d(nca_top_n, np.intersect1d(l1_based_top_n, recursive_top_n))
-            selected_features.append(common_elements)
-            
-            # common elements between XGBoost, L1 Based, Recursive 
-            common_elements = np.intersect1d(xgb_top_n, np.intersect1d(l1_based_top_n, recursive_top_n))  
-            selected_features.append(common_elements)
-            
-            # common elements between NCA, XGBoost, L1 Based
-            common_elements = np.intersect1d(nca_top_n, np.intersect1d(xgb_top_n, l1_based_top_n)) 
-            selected_features.append(common_elements)
-            
-            # common elements between NCA, XGBoost, Recursive
-            common_elements = np.intersect1d(nca_top_n, np.intersect1d(xgb_top_n, recursive_top_n))
-            selected_features.append(common_elements)
-        
-        elif fusion_criteria == 2: 
-            # Common elements between two methods 
-            # common elements between NCA and XGBoost
-            common_elements = np.intersect1d(nca_top_n, xgb_top_n) 
-            selected_features.append(common_elements)
-
-            # common elements between NCA and L1 Based
-            common_elements = np.intersect1d(nca_top_n, l1_based_top_n) 
-            selected_features.append(common_elements)
-
-            # common elements between NCA and Recursive
-            common_elements = np.intersect1d(nca_top_n, recursive_top_n) 
-            selected_features.append(common_elements)
-
-            # common elements between XGB and Recursive
-            common_elements = np.intersect1d(xgb_top_n, recursive_top_n)
-            selected_features.append(common_elements)
-
-            # common elements between XGB and L1 based
-            common_elements = np.intersect1d(xgb_top_n, l1_based_top_n)  
-            selected_features.append(common_elements)
-
-            # common elements between L1 Based and Recursive based
-            common_elements = np.intersect1d(l1_based_top_n, recursive_top_n)
-            selected_features.append(common_elements)
-            
-        else:
-            # Selected all methods
-            selected_features = [nca_top_n, xgb_top_n, l1_based_top_n, recursive_top_n]
-            
-        selected_feature_with_overlapping_elements = np.concatenate(selected_features)
-        selected_features =  np.unique(selected_feature_with_overlapping_elements)
-        return selected_features
-
-    
     def decorator(method):
         """Decorator that checks the `func` argument and calls the appropriate method."""
         @wraps(method)

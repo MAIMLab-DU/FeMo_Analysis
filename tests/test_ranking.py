@@ -1,8 +1,6 @@
 import os
 import joblib
 import pytest
-import numpy as np
-import pandas as pd
 from utils import (
     list_folders,
     compare_elements
@@ -21,13 +19,26 @@ def test_feature_ranking(folder):
     comparing it with pre-stored expected results.
     """
     
-    df = pd.read_csv(os.path.join(data_folder, folder, 'features_ref.csv'), index_col=False)
-    data_processor = DataProcessor(input_data=df)
-    X_norm = data_processor._normalize_features(df.drop('labels', axis=1, errors='ignore').to_numpy())
-    X_norm = X_norm[:, ~np.any(np.isnan(X_norm), axis=0)]
-    y_pre = df.get('labels').to_numpy(dtype=int)
+    extracted_features = joblib.load(
+        os.path.join(data_folder, folder, "extracted_features_train.pkl")
+    )
     feature_ranker = FeatureRanker()
-    actual_feature_ranks = feature_ranker.fit(X_norm, y_pre, func=feature_ranker.ensemble_ranking)
+    data_processor = DataProcessor()
+    X_norm = extracted_features['features']
+    X_norm = data_processor._normalize_features(X_norm)
+    desired_norm_features = joblib.load(
+        os.path.join(data_folder, folder, 'normalized_features.pkl')
+    )
+    compare_elements(
+        key='norm_features',
+        actual=X_norm,
+        desired=desired_norm_features
+    )
+
+    y_pre = extracted_features['labels']
+
+    actual_feature_ranks = feature_ranker.fit(X_norm, y_pre,
+                                              func=feature_ranker.ensemble_feature_selection)
     desired_feature_ranks = joblib.load(
         os.path.join(data_folder, folder, "top_feat_indices.pkl")
     )

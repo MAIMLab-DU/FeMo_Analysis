@@ -184,6 +184,7 @@ cython_debug/
 *.h5
 *.json
 *.xml
+*.csv
 !tests/datafiles/data_manifest.json
 
 
