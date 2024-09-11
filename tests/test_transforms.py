@@ -217,20 +217,19 @@ def test_features_for_train(folder):
         inference=False,
         extracted_detections=extracted_detections, fm_dict=fm_dict
     )
-    desired_extracted_features = pd.read_csv(
-        os.path.join(data_folder, folder, "features_ref.csv"),
-        index_col=False
+    desired_extracted_features = joblib.load(
+        os.path.join(data_folder, folder, "extracted_features_train.pkl")
     )
 
     compare_elements(
         key='features',
         actual=actual_extracted_features['features'],
-        desired=desired_extracted_features.drop('labels', axis=1, errors='ignore').to_numpy()
+        desired=desired_extracted_features['features']
     )
     compare_elements(
-        key='features',
+        key='labels',
         actual=actual_extracted_features['labels'],
-        desired=desired_extracted_features.get('labels').to_numpy()
+        desired=desired_extracted_features['labels']
     )
 
 

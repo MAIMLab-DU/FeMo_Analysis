@@ -185,8 +185,7 @@ cython_debug/
 *.json
 *.xml
 !tests/datafiles/data_manifest.json
-!tests/datafiles/*/**.pkl
-!tests/datafiles/*/**.dat
+
 
 
 reports/
