@@ -10,8 +10,7 @@ from collections import defaultdict
 from .pipeline import Pipeline
 
 
-# TODO: add functionality
-class FeMoDataset(object):
+class DatasetBuilder(object):
 
     @property
     def logger(self):
@@ -132,5 +131,18 @@ class FeMoDataset(object):
             map_key = os.path.basename(feat_file_key).split('.')[0]
             self.map[map_key] = (start_idx, end_idx)
         
-        self.logger.info("FeMoDataset build completed.")
+        self.logger.info("FeMoDataset process completed.")
+        return self.features_df
 
+
+class DatasetProcessor:
+    @property
+    def _logger(self):
+        return logging.getLogger(__name__)
+
+    def __init__(self, input_data: pd.DataFrame) -> None:
+        self._input_data = input_data
+
+    def process(self):
+        ...
+        
