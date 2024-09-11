@@ -1,10 +1,11 @@
 import os
 import joblib
 import pytest
+import pandas as pd
 from utils import (
     list_folders,
-    compare_dictionaries,
-    compare_elements
+    compare_elements,
+    compare_dictionaries
 )
 from data.transforms import (
     DataLoader,
@@ -196,6 +197,42 @@ def test_features_for_inference(folder):
         actual=actual_extracted_features['features'],
         desired=desired_extracted_features['features']
     )
+
+@pytest.mark.parametrize("folder", folders)
+def test_features_for_train(folder):
+    """
+    Test features extracted for inference from preprocessed data and
+    comparing it with pre-stored expected results.
+    """
+    
+    feature_extractor = FeatureExtractor()
+
+    extracted_detections = joblib.load(
+        os.path.join(data_folder, folder, "extracted_detections_train.pkl")
+    )
+    fm_dict = joblib.load(
+        os.path.join(data_folder, folder, "fm_dict.pkl")
+    )
+    actual_extracted_features = feature_extractor.transform(
+        inference=False,
+        extracted_detections=extracted_detections, fm_dict=fm_dict
+    )
+    desired_extracted_features = pd.read_csv(
+        os.path.join(data_folder, folder, "features_ref.csv"),
+        index_col=False
+    )
+
+    compare_elements(
+        key='features',
+        actual=actual_extracted_features['features'],
+        desired=desired_extracted_features.drop('labels', axis=1, errors='ignore').to_numpy()
+    )
+    compare_elements(
+        key='features',
+        actual=actual_extracted_features['labels'],
+        desired=desired_extracted_features.get('labels').to_numpy()
+    )
+
 
 
 if __name__ == "__main__":

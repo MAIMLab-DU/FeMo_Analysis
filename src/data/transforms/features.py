@@ -151,10 +151,10 @@ class FeatureExtractor(BaseTransform):
 
         tp_detections_sensor_data = extracted_detections['tp_detections_sensor_data']
         tp_detections_imu_acceleration = extracted_detections['tp_detections_imu_acceleration']
-        tp_detection_imu_rotation = extracted_detections['tp_detection_imu_rotation']
+        tp_detections_imu_rotation = extracted_detections['tp_detections_imu_rotation']
 
         X_tpd, columns = self._extract_features_of_signal(threshold, tp_detections_sensor_data,
-                                                          tp_detections_imu_acceleration, tp_detection_imu_rotation)
+                                                          tp_detections_imu_acceleration, tp_detections_imu_rotation)
         
         fp_detections_sensor_data = extracted_detections['fp_detections_sensor_data']
         fp_detections_imu_acceleration = extracted_detections['fp_detections_imu_acceleration']
@@ -164,7 +164,7 @@ class FeatureExtractor(BaseTransform):
                                                           fp_detections_imu_acceleration, fp_detections_imu_rotation)
         
         X_extracted = np.vstack([X_tpd, X_fpd])
-        y_extracted = np.zeros((X_tpd.shape[0], X_fpd.shape[0]))
+        y_extracted = np.zeros((X_tpd.shape[0] + X_fpd.shape[0], 1))
         y_extracted[:X_tpd.shape[0], 0] = 1
         y_extracted = np.ravel(y_extracted)
 

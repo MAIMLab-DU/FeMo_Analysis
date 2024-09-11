@@ -34,3 +34,22 @@ extract_feat:
     - [5, 10]
     - [10, 20]
     - [20, 30]
+    
+feature_rank:
+  min_common: 2
+  feat_ratio: 3.0
+  params:
+    nca_ranking:
+      n_components: 30
+      max_iter: 1000
+    xgb_ranking:
+      learning_rate: 0.01
+      n_estimators: 100
+      max_depth: 3
+    logReg_ranking:
+      solver: 'liblinear'
+    recursive_ranking:
+      step: 1
+      estimator: 'Adaboost'
+
+

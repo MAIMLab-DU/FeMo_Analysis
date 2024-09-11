@@ -2,15 +2,20 @@ import os
 import boto3
 import json
 import logging
-import boto3.exceptions
+import numpy as np
 import pandas as pd
+from botocore.exceptions import (
+    ClientError,
+    NoCredentialsError
+)
 from pathlib import Path
 from typing import Union
 from collections import defaultdict
 from .pipeline import Pipeline
+from .ranking import FeatureRanker
 
 
-class DatasetBuilder(object):
+class FeMoDataset:
 
     @property
     def logger(self):
@@ -58,20 +63,47 @@ class DatasetBuilder(object):
     def __getitem__(self, key):
         """Get the rows of features for the given key (filename)"""
         return self.features_df.iloc[self.map[key][0]:self.map[key][1], :]
+    
+    def _upload_to_s3(self, filename, bucket=None, key=None):
 
-    def _download_file(self, filename, bucket=None, key=None):
+        s3 = boto3.client('s3')
 
-        if bucket is not None and key is not None:
-            Path(f"{self._base_dir}/data").mkdir(parents=True, exist_ok=True)
+        try:
+            s3.upload_file(filename, bucket, key)
+            print(f"File '{filename}' uploaded successfully to '{bucket}/{key}'.")
+
+        except FileNotFoundError:
+            print(f"File '{filename}' not found.")
+        except NoCredentialsError:
+            print("AWS credentials not available.")
+        except ClientError as e:
+            print(f"Error occurred while uploading to S3: {e}")
+
+    def _download_from_s3(self, filename, bucket=None, key=None):
+        
+        if bucket and key:
+            download_dir = Path(self._base_dir) / "data"
+            download_dir.mkdir(parents=True, exist_ok=True)
+            
             if not os.path.exists(filename):
+                s3 = boto3.resource("s3")
                 try:
-                    s3 = boto3.resource("s3")
                     s3.Bucket(bucket).download_file(key, filename)
-                    os.unlink(filename)
-                    self.logger.info(f"Downloaded {filename} from {bucket = }, {key = }")
-                except boto3.exceptions.ResourceNotExistsError:
+                    self.logger.info(f"Downloaded {filename} from bucket={bucket}, key={key}")
+                except ClientError as e:
+                    self.logger.error(f"Failed to download {filename} from S3: {e}")
                     return False
-            return True
+                except Exception as e:
+                    self.logger.error(f"Unexpected error while downloading {filename}: {e}")
+                    return False
+                
+                return True
+            else:
+                self.logger.info(f"File {filename} already exists locally.")
+                return True
+        
+        self.logger.error("Bucket or key not provided.")
+        return False
         
     def _save_features(self, filename, data: dict) -> pd.DataFrame:
         """Saves the extracted features (and labels) to a .csv file"""
@@ -98,9 +130,12 @@ class DatasetBuilder(object):
             bucket = item.get('bucketName', None)
             data_file_key = item.get('datFileKey', None)
             feat_file_key = item.get('csvFileKey', None)
+            map_key = os.path.basename(feat_file_key).split('.')[0]
+            if map_key in self.map.keys():
+                continue
 
             data_filename = os.path.join(self.base_dir, 'data', os.path.basename(data_file_key))
-            data_success = self._download_file(
+            data_success = self._download_from_s3(
                 filename=data_filename,
                 bucket=bucket,
                 key=data_file_key
@@ -110,7 +145,7 @@ class DatasetBuilder(object):
                 continue
 
             feat_filename = os.path.join(self.base_dir, 'data', os.path.basename(feat_file_key))
-            feat_success = self._download_file(
+            feat_success = self._download_from_s3(
                 filename=feat_filename,
                 bucket=bucket,
                 key=feat_file_key
@@ -121,28 +156,68 @@ class DatasetBuilder(object):
                 extracted_features = self.pipeline.process(filename=data_filename)['extracted_features']
                 try:
                     current_features = self._save_features(filename=feat_filename, data=extracted_features)
-                except ValueError:
+                    self._upload_to_s3(
+                        filename=feat_filename,
+                        bucket=bucket,
+                        key=feat_file_key
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error {e}")
                     continue
                 
             self.features_df = pd.concat([self.features_df, current_features], axis=0)   
 
             # Create mapping to get features give a filename from the dataset
             end_idx = len(self.features_df)
-            map_key = os.path.basename(feat_file_key).split('.')[0]
             self.map[map_key] = (start_idx, end_idx)
         
         self.logger.info("FeMoDataset process completed.")
         return self.features_df
 
 
-class DatasetProcessor:
+class DataProcessor:
     @property
-    def _logger(self):
+    def logger(self):
         return logging.getLogger(__name__)
+    
+    @property
+    def input_data(self) -> pd.DataFrame:
+        return self._input_data
+    
+    @property
+    def feat_rank_cfg(self) -> dict:
+        return self._feat_rank_cfg     
 
-    def __init__(self, input_data: pd.DataFrame) -> None:
-        self._input_data = input_data
+    def __init__(self,
+                 input_data: pd.DataFrame,
+                 feat_rank_cfg: dict = None) -> None:
+        
+        self._input_data = input_data.drop('labels', axis=1, errors='ignore')
+        self._input_data_y = input_data.get('labels', None)
+        self._feat_rank_cfg = feat_rank_cfg
+        self._feature_ranker = FeatureRanker(**feat_rank_cfg) if feat_rank_cfg else FeatureRanker()
+
+    def _normalize_features(self, data: np.ndarray):
+        mu = np.mean(data, axis=0)
+        norm_feats = data - mu
+        dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
+        norm_feats = norm_feats / dev
+
+        return norm_feats
 
     def process(self):
-        ...
+        self.logger.debug("Processing features...")
+        X_norm = self._normalize_features(self._input_data.to_numpy())
+        if self._input_data_y: 
+            y_pre = self._input_data_y.to_numpy() or None
+        else:
+            y_pre = self._input_data_y
+        X_norm = X_norm[:, ~np.any(np.isnan(X_norm), axis=0)]
+        
+        top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
+                                                    func=self._feature_ranker.ensemble_ranking)
+        X_norm = X_norm[:, top_feat_indices]
+
+
+
         
