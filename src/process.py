@@ -112,49 +112,8 @@ class DataProcessor:
         z.update(y)
         return z
 
-class DataBuilder: 
-    @property
-    def _logger(self):
-        return logging.getLogger(__name__)
 
-    @property
-    def data_manifest(self):
-        return self._data_manifest
-
-    def __init__(self, base_dir, data_manifest) -> None:
-        self._base_dir = base_dir
-        self._data_manifest = json.loads(data_manifest)
-
-    def build(self):
-        self._logger.info("Loading data from data manifest %s", self._data_manifest)
-        data_paths = self._data_manifest.get("data")
-
-        df_array = []
-        for index, value in enumerate(data_paths):
-            df = self._download_file(index, value["bucketName"], value["objectKey"])
-            df_array.append(df)
-
-        if len(df_array):
-            return pd.concat(df_array)
-
-    def _download_file(self, index, bucket, key):
-        pathlib.Path(f"{self._base_dir}/data").mkdir(parents=True, exist_ok=True)
-
-        self._logger.info("Downloading data from bucket: %s, key: %s", bucket, key)
-        fn = f"{self._base_dir}/data/{index}.csv"
-        s3 = boto3.resource("s3")
-        s3.Bucket(bucket).download_file(key, fn)
-
-        self._logger.debug("Reading raw input data.")
-        df = pd.read_csv(
-            fn,
-            header=None,
-            names=feature_columns_names + [label_column],
-            dtype=DataProcessor.merge_two_dicts(feature_columns_dtype, label_column_dtype),
-        )
-        os.unlink(fn)   
-        return df
-
+# TODO: implement
 def run_main():
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)

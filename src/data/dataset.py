@@ -201,6 +201,13 @@ class DataProcessor:
         norm_feats = norm_feats / dev
 
         return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)]
+    
+    def train_test_split(self, data: np.ndarray,
+                         num_folds: int,
+                         tpd_fpd_ratio: float | None = None):
+        
+        X_tpd = data
+
 
     def process(self, input_data: pd.DataFrame):
         self.logger.debug("Processing features...")
@@ -210,6 +217,9 @@ class DataProcessor:
         top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
                                                     func=self._feature_ranker.ensemble_ranking)
         X_norm = X_norm[:, top_feat_indices]
+
+        return np.concatenate([X_norm, y_pre[:, np.newaxis]], axis=1)
+    
 
 
 

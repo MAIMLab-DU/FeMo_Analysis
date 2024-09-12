@@ -3,7 +3,7 @@ import numpy as np
 import concurrent.futures
 from functools import reduce
 from skimage.measure import label
-from .utils import custom_binary_dilation
+from ._utils import custom_binary_dilation
 from .base import BaseTransform
 
 

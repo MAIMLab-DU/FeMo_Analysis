@@ -1,7 +1,7 @@
 import time
 import numpy as np
 from scipy.signal import butter, sosfiltfilt
-from .utils import apply_pca
+from ._utils import apply_pca
 from .base import BaseTransform
 
 
