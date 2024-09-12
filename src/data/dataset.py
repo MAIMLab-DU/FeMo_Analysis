@@ -10,6 +10,10 @@ from botocore.exceptions import (
 )
 from pathlib import Path
 from typing import Union
+from sklearn.model_selection import (
+    train_test_split,
+    StratifiedKFold
+)
 from collections import defaultdict
 from .pipeline import Pipeline
 from .ranking import FeatureRanker
@@ -202,12 +206,37 @@ class DataProcessor:
 
         return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)]
     
-    def train_test_split(self, data: np.ndarray,
-                         num_folds: int,
-                         tpd_fpd_ratio: float | None = None):
+    def divide_data(self,
+                    data: np.ndarray,
+                    holdout: bool = False,
+                    num_folds: int = 5,
+                    tpd_fpd_ratio: float | None = None):
         
-        X_tpd = data
+        X, y = data[:, :-1], data[:, -1]
+        if holdout:
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+            return {
+                'train': np.concatenate([X_train, y_train[:, np.newaxis]], axis=1),
+                'tests': np.concatenate([X_test, y_test[:, np.newaxis]], axis=1),
+                'num_tpd_train': np.sum(y_train == 1),
+                'num_fpd_train': np.sum(y_train == 0),
+                'num_tpd_test': np.sum(y_test == 1),
+                'num_fpd_test': np.sum(y_test == 0)
+            }
+        else:
+            skf = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=0)
 
+            # Create a list to hold the folds
+            X_K_fold = []
+            Y_K_fold = []
+
+            for train_idx, test_idx in skf.split(X, y):
+                X_K_fold.append(X[test_idx])  # Add the test data for the fold
+                Y_K_fold.append(y[test_idx])  # Add the labels for the fold
+
+            return {
+                ''
+            }
 
     def process(self, input_data: pd.DataFrame):
         self.logger.debug("Processing features...")

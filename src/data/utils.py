@@ -1,6 +1,7 @@
 import numpy as np
 
 
+
 def divide_by_K_folds(X_TPD_norm, X_FPD_norm, data_div_option, K):
     # Division into stratified K-fold
     #   2: K-fold with original ratio of FPD and TPD in each fold,
@@ -71,3 +72,54 @@ def divide_by_K_folds(X_TPD_norm, X_FPD_norm, data_div_option, K):
                                       np.zeros(end_idx_FPD_last - start_idx_FPD_last)))
 
     return X_K_fold, Y_K_fold
+
+
+def divide_by_holdout(X_TPD_norm, X_FPD_norm, training_proportion):
+    """
+    Algorithm: @ Abhishek Kumar Ghosh
+    Author: @ Moniruzzaman Akash
+    Divides the data into training and test datasets using holdout method.
+
+    Parameters:
+        - X_TPD_norm: Normalized TPD data (numpy array)
+        - X_FPD_norm: Normalized FPD data (numpy array)
+        - training_proportion: Proportion of data to be used for training (float)
+
+    Returns:
+        - X_train: Training data (numpy array)
+        - Y_train: Training labels (numpy array)
+        - X_test: Test data (numpy array)
+        - Y_test: Test labels (numpy array)
+        - n_training_data_TPD: Number of training TPD data samples (int)
+        - n_training_data_FPD: Number of training FPD data samples (int)
+        - n_test_data_TPD: Number of test TPD data samples (int)
+        - n_test_data_FPD: Number of test FPD data samples (int)
+    """
+
+    # Randomization of the data sets
+    n_data_TPD = X_TPD_norm.shape[0]
+    np.random.seed(0)  # Uses the default random seed.
+    rand_num_TPD = np.random.permutation(n_data_TPD)
+    X_TPD_norm_rand = X_TPD_norm[rand_num_TPD, :]
+
+    n_data_FPD = X_FPD_norm.shape[0]
+    np.random.seed(0)  # Uses the default random seed.
+    rand_num_FPD = np.random.permutation(n_data_FPD)
+    X_FPD_norm_rand = X_FPD_norm[rand_num_FPD, :]
+
+    # Dividing data into train and test datasets
+    n_training_data_TPD = int(n_data_TPD * training_proportion)
+    n_training_data_FPD = int(n_data_FPD * training_proportion)
+    n_test_data_TPD = n_data_TPD - n_training_data_TPD
+    n_test_data_FPD = n_data_FPD - n_training_data_FPD
+
+    X_train = np.vstack((X_TPD_norm_rand[:n_training_data_TPD, :], X_FPD_norm_rand[:n_training_data_FPD, :]))
+    Y_train = np.zeros((X_train.shape[0], 1))
+    Y_train[:n_training_data_TPD] = 1
+
+    X_test = np.vstack((X_TPD_norm_rand[n_training_data_TPD:, :], X_FPD_norm_rand[n_training_data_FPD:, :]))
+    Y_test = np.zeros((X_test.shape[0], 1))
+    Y_test[:n_test_data_TPD] = 1
+
+    return X_train, Y_train, X_test, Y_test, n_training_data_TPD, n_training_data_FPD, n_test_data_TPD, n_test_data_FPD
+

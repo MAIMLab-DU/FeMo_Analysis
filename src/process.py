@@ -19,98 +19,19 @@ import logging
 import os
 import pathlib
 import json
-
+import yaml
 import boto3
 import numpy as np
 import pandas as pd
-
+from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
-
+from data.dataset import FeMoDataset, DataProcessor
 import joblib
 import tarfile
 
-feature_columns_names = [
-    "sex",
-    "length",
-    "diameter",
-    "height",
-    "whole_weight",
-    "shucked_weight",
-    "viscera_weight",
-    "shell_weight",
-]
-
-label_column = "rings"
-
-feature_columns_dtype = {
-    "sex": str,
-    "length": np.float64,
-    "diameter": np.float64,
-    "height": np.float64,
-    "whole_weight": np.float64,
-    "shucked_weight": np.float64,
-    "viscera_weight": np.float64,
-    "shell_weight": np.float64,
-}
-
-label_column_dtype = {"rings": np.float64}
-
-class DataProcessor:
-    @property
-    def _logger(self):
-        return logging.getLogger(__name__)
-
-    def __init__(self, input_data) -> None:
-        self._input_data = input_data
-        self._logger.debug("Defining transformers.")
-        numeric_features = list(feature_columns_names)
-        numeric_features.remove("sex")
-        numeric_transformer = Pipeline(
-            steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())]
-        )
-
-        categorical_features = ["sex"]
-        categorical_transformer = Pipeline(
-            steps=[
-                ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
-                ("onehot", OneHotEncoder(handle_unknown="ignore")),
-            ]
-        )
-
-        self._preprocess = ColumnTransformer(
-            transformers=[
-                ("num", numeric_transformer, numeric_features),
-                ("cat", categorical_transformer, categorical_features),
-            ]
-        )
-
-        self._logger.debug("Fitting transforms.")
-        self._input_data_y = self._input_data.pop("rings")
-        self._preprocess.fit(self._input_data)
-
-    def save_model(self, model_path):
-        model_joblib_path = os.path.join(model_path, "model.joblib")
-        model_tar_path = os.path.join(model_path, "model.tar.gz")
-        joblib.dump(self._preprocess, model_joblib_path)
-        tar = tarfile.open(model_tar_path, "w:gz")
-        tar.add(model_joblib_path, arcname="model.joblib")
-        tar.close()
-
-    def process(self):
-        self._logger.debug("Applying transforms.")
-        x_pre = self._preprocess.transform(self._input_data)
-        y_pre = self._input_data_y.to_numpy().reshape(len(self._input_data_y), 1)
-
-        return np.concatenate((y_pre, x_pre), axis=1)
-
-    def merge_two_dicts(x, y):
-        """Merges two dicts, returning a new copy."""
-        z = x.copy()
-        z.update(y)
-        return z
 
 
 # TODO: implement
@@ -118,23 +39,25 @@ def run_main():
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     logger.addHandler(logging.StreamHandler())
-    logger.debug("Starting preprocessing.")
+    logger.debug("Starting data processing...")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-manifest", type=str, required=True)
     args = parser.parse_args()
+    with open("configs/pipeline-cfg.yaml", "r") as f:
+        feat_rank_cfg = yaml.safe_load(f)
 
     logger.debug("Downloading raw input data")
     base_dir = "/opt/ml/processing"
-    data_builder = DataBuilder(base_dir, args.data_manifest)
-    df = data_builder.build()
+    dataset = FeMoDataset(base_dir, args.data_manifest)
+    df = dataset.build()
 
     logger.debug("Preprocessing raw input data")
-    data_processor = DataProcessor(df)
-    data_output = data_processor.process()
+    data_processor = DataProcessor(feat_rank_cfg=feat_rank_cfg)
+    data_output = data_processor.process(input_data=df)
 
     len_data_output = len(data_output)
-    logger.info("Splitting %d rows of data into train, validation, test datasets.", len_data_output)
+    logger.info(f"Splitting {len_data_output} rows of data into train, validation, test datasets.")
     np.random.shuffle(data_output)
     train, validation, test = np.split(
         data_output, [int(0.7 * len_data_output), int(0.85 * len_data_output)]

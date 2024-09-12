@@ -1,3 +1,10 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:3d723040a48a5c610a4c1ff6abb78342155d9179f8b779e6083c12d2c4d54418
-size 131
+{
+    "version": "0.0.1",
+    "items": [
+        {
+            "bucketName": "",
+            "datFileKey": "",
+            "csvFileKey": ""
+        }
+    ]
+}
