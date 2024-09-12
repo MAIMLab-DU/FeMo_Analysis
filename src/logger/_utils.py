@@ -1,12 +1,18 @@
+import os
 import logging
 from logging.handlers import RotatingFileHandler
+from dotenv import load_dotenv
+
+load_dotenv()
+
+BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 15))
 
 _log_format = "%(asctime)s - [%(levelname)s] - [%(threadName)s - %(name)s - (%(filename)s).%(funcName)s(%(lineno)d)] - %(message)s"
 
 def get_file_handler(_logFile):
     # file_handler = logging.FileHandler("app.log", mode='w')
     file_handler = RotatingFileHandler(_logFile, mode='w', maxBytes=20*1024*1024,
-                                       backupCount=15, encoding=None, delay=False)
+                                       backupCount=BACKUP_COUNT, encoding=None, delay=False)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter(_log_format))
     return file_handler

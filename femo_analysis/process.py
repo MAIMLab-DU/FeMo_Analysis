@@ -1,9 +1,7 @@
-"""Processes the dataset for training"""
-
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..')))
+                                             '..', 'src')))
 import yaml
 import joblib
 import argparse
@@ -22,14 +20,15 @@ def main():
     parser.add_argument("--data-dir", type=str, default="/opt/ml/processing")
     args = parser.parse_args()
 
-    with open("configs/dataproc-cfg.yaml", "r") as f:
+    config_path = os.path.join(os.path.dirname(__file__), 'configs', 'dataproc-cfg.yaml')
+    with open(config_path, "r") as f:
         dataproc_cfg = yaml.safe_load(f)
 
     logger.info("Downloading raw input data")
-    data_dir = args.data_dir
+    data_dir = os.path.join(os.path.dirname(__file__), args.data_dir)
 
     dataset = FeMoDataset(data_dir,
-                          args.data_manifest,
+                          os.path.join(os.path.dirname(__file__), args.data_manifest),
                           dataproc_cfg.get('data_pipeline'))
     df = dataset.build()
 

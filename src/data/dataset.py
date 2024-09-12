@@ -87,7 +87,7 @@ class FeMoDataset:
     def _download_from_s3(self, filename, bucket=None, key=None):
         
         if bucket and key:
-            download_dir = Path(self._base_dir) / "data"
+            download_dir = Path(self._base_dir)
             download_dir.mkdir(parents=True, exist_ok=True)
             
             if not os.path.exists(filename):
