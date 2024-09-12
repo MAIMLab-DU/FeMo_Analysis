@@ -163,6 +163,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+
+
 # Ignore common compressed files
 *.zip
 *.tar
@@ -174,6 +176,25 @@ cython_debug/
 *.iso
 *.lz
 *.zst
+
+# Ignore log files
+*.log
+*.log.*
+*.error
+*.err
+*.out
+*.trace
+
+# Ignore specific log directories
+log/
+logs/
+*.log/
+
+# Ignore other common temporary or debug logs
+*.bak
+*.swp
+*.tmp
+*.old
 
 # Data files
 *.dat
@@ -187,6 +208,5 @@ cython_debug/
 *.csv
 !tests/datafiles/data_manifest.json
 
-
-
+practice.py
 reports/

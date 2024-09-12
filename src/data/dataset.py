@@ -1,9 +1,10 @@
 import os
 import boto3
 import json
-import logging
 import numpy as np
 import pandas as pd
+from logger import logger
+from typing import Literal
 from botocore.exceptions import (
     ClientError,
     NoCredentialsError
@@ -23,7 +24,7 @@ class FeMoDataset:
 
     @property
     def logger(self):
-        return logging.getLogger(__name__)
+        return logger
 
     @property
     def base_dir(self) -> Path:
@@ -138,7 +139,7 @@ class FeMoDataset:
             if map_key in self.map.keys():
                 continue
 
-            data_filename = os.path.join(self.base_dir, 'data', os.path.basename(data_file_key))
+            data_filename = os.path.join(self.base_dir, os.path.basename(data_file_key))
             data_success = self._download_from_s3(
                 filename=data_filename,
                 bucket=bucket,
@@ -148,7 +149,7 @@ class FeMoDataset:
                 self.logger.warning(f"Failed to download {data_filename} from {bucket = }, {data_file_key =}")
                 continue
 
-            feat_filename = os.path.join(self.base_dir, 'data', os.path.basename(feat_file_key))
+            feat_filename = os.path.join(self.base_dir, os.path.basename(feat_file_key))
             feat_success = self._download_from_s3(
                 filename=feat_filename,
                 bucket=bucket,
@@ -182,7 +183,7 @@ class FeMoDataset:
 class DataProcessor:
     @property
     def logger(self):
-        return logging.getLogger(__name__)
+        return logger
     
     @property
     def input_data(self) -> pd.DataFrame:
@@ -202,46 +203,59 @@ class DataProcessor:
         mu = np.mean(data, axis=0)
         norm_feats = data - mu
         dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
-        norm_feats = norm_feats / dev
+        # Avoid division by zero by adding a small epsilon
+        epsilon = 1e-8
+        norm_feats = norm_feats / (dev + epsilon)
 
         return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)]
     
-    def divide_data(self,
+    def split_data(self,
                     data: np.ndarray,
-                    holdout: bool = False,
-                    num_folds: int = 5,
-                    tpd_fpd_ratio: float | None = None):
+                    strategy: Literal['holdout', 'kfold'] = 'holdout',
+                    num_folds: int = 5):
         
         X, y = data[:, :-1], data[:, -1]
-        if holdout:
+        if strategy == 'holdout':
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-            return {
-                'train': np.concatenate([X_train, y_train[:, np.newaxis]], axis=1),
-                'tests': np.concatenate([X_test, y_test[:, np.newaxis]], axis=1),
-                'num_tpd_train': np.sum(y_train == 1),
-                'num_fpd_train': np.sum(y_train == 0),
-                'num_tpd_test': np.sum(y_test == 1),
-                'num_fpd_test': np.sum(y_test == 0)
-            }
-        else:
+            train = np.concatenate([X_train, y_train[:, np.newaxis]], axis=1)
+            test = np.concatenate([X_test, y_test[:, np.newaxis]], axis=1)
+            num_tpd_train, num_fpd_train = np.sum(y_train == 1), np.sum(y_train == 0)
+            num_tpd_test, num_fpd_test = np.sum(y_test == 1), np.sum(y_test == 0)
+
+        elif strategy == 'kfold':
             skf = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=0)
 
-            # Create a list to hold the folds
-            X_K_fold = []
-            Y_K_fold = []
+            # Create list to hold the folds
+            train = []
+            test = []
 
-            for train_idx, test_idx in skf.split(X, y):
-                X_K_fold.append(X[test_idx])  # Add the test data for the fold
-                Y_K_fold.append(y[test_idx])  # Add the labels for the fold
+            num_tpd_train = []
+            num_fpd_train = []
+            num_tpd_test = []
+            num_fpd_test = []
 
-            return {
-                ''
-            }
+            for i, (train_idx, test_idx) in enumerate(skf.split(X, y)):
+                train.append(np.concatenate([X[train_idx], y[train_idx][:, np.newaxis]], axis=1))
+                test.append(np.concatenate([X[test_idx], y[test_idx][:, np.newaxis]], axis=1))
+
+                num_tpd_train.append(np.sum(y[train_idx] == 1))
+                num_fpd_train.append(np.sum(y[train_idx] == 0))
+                num_tpd_test.append(np.sum(y[test_idx] == 1))
+                num_fpd_test.append(np.sum(y[test_idx] == 0))
+
+        return {
+            'train': train,
+            'test': test,
+            'num_tpd_train': num_tpd_train,
+            'num_fpd_train': num_fpd_train,
+            'num_tpd_test': num_tpd_test,
+            'num_fpd_test': num_fpd_test,
+        }
 
     def process(self, input_data: pd.DataFrame):
         self.logger.debug("Processing features...")
         X_norm = self._normalize_features(input_data.drop('labels', axis=1, errors='ignore').to_numpy())
-        y_pre = input_data.get('labels')
+        y_pre = input_data.get('labels').to_numpy()
         
         top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
                                                     func=self._feature_ranker.ensemble_ranking)

@@ -32,9 +32,9 @@ def test_holdout_split(folder):
     X_norm = X_norm[:, top_feat_indices]
 
     y_pre = extracted_features['labels']
-    actual_split_dict = data_processor.divide_data(
+    actual_split_dict = data_processor.split_data(
         np.concatenate([X_norm, y_pre[:, np.newaxis]], axis=1),
-        holdout=True
+        strategy=True
     )
 
     desired_split_dict = joblib.load(

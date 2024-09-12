@@ -5,10 +5,10 @@ such as PCA, NCA, RFE, SelectKBest, and XGBoost.
 For some guidelines, check out [this page](https://scikit-learn.org/stable/modules/feature_selection.html)
 """
 
-import logging
-import numpy as np
-from functools import wraps
 import itertools
+import numpy as np
+from logger import logger
+from functools import wraps
 from sklearn.neighbors import NeighborhoodComponentsAnalysis
 from sklearn.feature_selection import SelectFromModel, RFE
 from sklearn.linear_model import LogisticRegression
@@ -20,11 +20,11 @@ class FeatureRanker:
 
     @property
     def logger(self):
-        return logging.getLogger(__name__)
+        return logger
 
     def __init__(self,
                  min_common: int = 2,
-                 feature_ratio: int = 3,
+                 feat_ratio: int = 3,
                  param_cfg: dict = {
                      'nca_ranking': {
                          'n_components': 30,
@@ -58,7 +58,7 @@ class FeatureRanker:
 
         assert min_common in range(1, 5), "min_common must be in range(1, 5)"
         self._min_common = min_common
-        self._feature_ratio = feature_ratio
+        self._feature_ratio = feat_ratio
         self._param_cfg = param_cfg
 
     def _nca_ranking(self, X, y):
@@ -81,7 +81,7 @@ class FeatureRanker:
                                              **self._param_cfg.get('nca_ranking'))
         nca.fit(X, y)
         nca_top_indices = np.argsort(np.abs(nca.components_))[0][-n_top_feats:][::-1]
-        self.logger.debug(f"NCA top features: {nca_top_indices}\n")
+        self.logger.debug(f"NCA top {len(nca_top_indices)} features: {nca_top_indices}\n")
         return nca_top_indices
     
     def _xgboost_ranking(self, X, y):
@@ -102,9 +102,9 @@ class FeatureRanker:
                             **self._param_cfg.get('xgb_ranking'))
         xgb.fit(X, y)
         feature_importances = xgb.feature_importances_
-        xgb_top_n = np.argsort(feature_importances)[-n_top_feats:][::-1]
-        self.logger.debug(f"XGBoost top features: {xgb_top_n}\n")
-        return xgb_top_n
+        xgb_top_indices = np.argsort(feature_importances)[-n_top_feats:][::-1]
+        self.logger.debug(f"XGBoost top {len(xgb_top_indices)} features: {xgb_top_indices}\n")
+        return xgb_top_indices
 
     def _logReg_ranking(self, X, y):
         """"Ranks features based on their importance using a Logistic Regressor.
@@ -123,10 +123,10 @@ class FeatureRanker:
                                      random_state=42,
                                      **self._param_cfg.get('logReg_ranking'))
         log_reg.fit(X, y)
-        l1_based_top_n = SelectFromModel(log_reg, prefit=True).get_support(indices=True)
-        self.logger.debug(f"L1 based top features: {l1_based_top_n}\n")
+        l1_top_indices = SelectFromModel(log_reg, prefit=True).get_support(indices=True)
+        self.logger.debug(f"L1 based top {len(l1_top_indices)} features: {l1_top_indices}\n")
         
-        return l1_based_top_n
+        return l1_top_indices
     
     def _recursive_ranking(self, X, y):
         """"Ranks features based on their importance using Recursive Feature Elimination.
@@ -147,16 +147,18 @@ class FeatureRanker:
             estimator = AdaBoostClassifier()
         elif estimator_type == 'ExtraTrees':
             estimator = ExtraTreesClassifier()  # gives slightly low f1 score.
+        else:
+            raise ValueError(f"Invalid {estimator = }")
         rfe = RFE(estimator=estimator,
                   n_features_to_select=n_top_feats,
                   verbose=0,
                   **self._param_cfg.get('recursive_ranking'))
         rfe.fit(X, y)
-        recursive_top_n = rfe.get_support(indices=True)
+        recursive_top_indices = rfe.get_support(indices=True)
         
-        self.logger.debug(f"Recursive feature elimination top features: {recursive_top_n}\n")
+        self.logger.debug(f"RFE top {len(recursive_top_indices)} features: {recursive_top_indices}\n")
         
-        return recursive_top_n
+        return recursive_top_indices
     
     def ensemble_ranking(self, X, y):
         """"Ranks features based on their importance using Recursive Feature Elimination.
@@ -188,7 +190,10 @@ class FeatureRanker:
         else:
             selected_features = find_common_features(feature_sets, self._min_common)
         
-        return np.unique(selected_features)
+        selected_features = np.unique(selected_features)
+        self.logger.debug(f"Selected top {len(selected_features)} features: {selected_features}\n")
+        
+        return selected_features
 
     def decorator(method):
         """Decorator that checks the `func` argument and calls the appropriate method."""

@@ -1,5 +1,5 @@
 import os
-import logging
+from logger import logger
 import struct
 import pandas as pd
 from abc import ABC, abstractmethod
@@ -32,7 +32,7 @@ class BaseTransform(ABC):
 
     @property
     def logger(self):
-        return logging.getLogger(__name__)
+        return logger
     
     @property
     def sensor_selection(self) -> dict:
