@@ -11,10 +11,11 @@ from data.dataset import (
     DataProcessor
 )
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-manifest", type=str, required=True)
-    parser.add_argument("--data-dir", type=str, default="/opt/ml/processing")
+    parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
+    parser.add_argument("--data-dir", type=str, default="/opt/ml/processing", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--inference", action='store_true', help="Flag enable data processing for inference")
     args = parser.parse_args()
 
@@ -23,8 +24,6 @@ def parse_args():
 
 def main():
     logger.info("Starting data processing...")
-
-    
 
     config_path = os.path.join(os.path.dirname(__file__), 'configs', 'dataproc-cfg.yaml')
     with open(config_path, "r") as f:
