@@ -15,14 +15,13 @@ from .transforms import (
 class Pipeline(object):
 
     def __init__(self,
-                 cfg_path: Union[str, Path],
+                 cfg: dict,
                  inference: bool = False) -> None:
 
         self.inference = inference
-        self.cfg_path = cfg_path
-        self.pipeline_cfg = self._get_pipeline_cfg(cfg_path)
+        self.cfg = cfg
         self.stages = self._get_stages(
-            pipeline_cfg=self.pipeline_cfg
+            pipeline_cfg=self.cfg
         )
 
     @staticmethod
@@ -75,7 +74,8 @@ class Pipeline(object):
         extracted_detections = self.stages[4](
             inference=self.inference,
             preprocessed_data=preprocessed_data,
-            scheme_dict=scheme_dict
+            scheme_dict=scheme_dict,
+            sensation_map=sensation_map
         )
         # Step-5: Extract features of each detection
         extracted_features = self.stages[5](
