@@ -49,11 +49,15 @@ class FeMoDataset:
     def __init__(self,
                  base_dir: Union[Path, str],
                  data_manifest_path: Union[Path, str],
-                 pipeline: Pipeline
+                 inference: bool,
+                 pipeline_cfg: dict
                 ) -> None:
         
         self._base_dir = Path(base_dir)
-        self._pipeline = pipeline
+        self._pipeline = Pipeline(
+            inference=inference,
+            cfg=pipeline_cfg
+        )
         self._data_manifest_path = Path(data_manifest_path)
         self._data_manifest = None
         self.features_df = pd.DataFrame([])
