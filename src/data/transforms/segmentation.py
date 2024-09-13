@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import concurrent.futures
+from typing import Literal
 from functools import reduce
 from skimage.measure import label
 from ._utils import custom_binary_dilation
@@ -36,16 +37,13 @@ class DataSegmentor(BaseTransform):
         self.extension_forward = round(maternal_dilation_forward * self.sensor_freq)
         self.extension_backward = round(maternal_dilation_backward * self.sensor_freq)
     
-    def transform(self, map_name: str, *args, **kwargs):
+    def transform(self, map_name: Literal['imu', 'fm_sensor', 'sensation'], *args, **kwargs):
         if map_name == 'imu':
             return self.create_imu_map(*args, **kwargs)
         elif map_name == 'fm_sensor':
             return self.create_fm_map(*args, **kwargs)
-        elif map_name == 'sensation':
+        else:  # map_name == 'sensation'
             return self.create_sensation_map(*args, **kwargs)
-        else:
-            raise ValueError(f"Invalid map_name: {map_name}. "
-                             f"Allowed values - ('imu', 'fm_sensor', 'sensation')")
     
     def _create_imu_accleration_map(self, imu_accleration):
     
