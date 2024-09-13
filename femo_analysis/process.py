@@ -12,25 +12,34 @@ from data.dataset import (
 )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
+    parser.add_argument("--data-dir", type=str, default="/opt/ml/processing", help="Path to directory containing .dat and .csv files")
+    parser.add_argument("--inference", action='store_true', help="Flag enable data processing for inference")
+    args = parser.parse_args()
+
+    return args
+
+
 def main():
     logger.info("Starting data processing...")
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-manifest", type=str, required=True)
-    parser.add_argument("--data-dir", type=str, default="/opt/ml/processing")
-    args = parser.parse_args()
 
     config_path = os.path.join(os.path.dirname(__file__), 'configs', 'dataproc-cfg.yaml')
     with open(config_path, "r") as f:
         dataproc_cfg = yaml.safe_load(f)
 
     logger.info("Downloading raw input data")
-    data_dir = os.path.join(os.path.dirname(__file__), args.data_dir)
+    data_dir = args.data_dir
 
     dataset = FeMoDataset(data_dir,
-                          os.path.join(os.path.dirname(__file__), args.data_manifest),
+                          args.data_manifest,
+                          args.inference,
                           dataproc_cfg.get('data_pipeline'))
     df = dataset.build()
+    if args.inference:
+        logger.info("Dataset built for inference.")
+        return
 
     logger.info("Preprocessing raw input data")
     data_processor = DataProcessor(feat_rank_cfg=dataproc_cfg.get('feature_ranking'))

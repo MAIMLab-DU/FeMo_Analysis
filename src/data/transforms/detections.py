@@ -100,6 +100,7 @@ class DetectionExtractor(BaseTransform):
         def wrapper(self, *args, **kwargs):
             inference = kwargs.pop('inference', False)
             if inference:
+                kwargs.pop('sensation_map', None)
                 return self._extract_detections_for_inference(*args, **kwargs)
             else:
                 return self._extract_detections_for_train(*args, **kwargs)
