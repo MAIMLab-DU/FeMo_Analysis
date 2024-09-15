@@ -20,4 +20,6 @@
 - [x] `training_pipeline` function test passed
 - [x] `FeatureRanker` class `ensemble_ranking` function test passed
 - [x] Create `FeMoDataset` class
-- [ ] `FeMoDataset` --> `train_test_split` method
+- [x] `FeMoDataset` --> `split_data` method
+- [ ] `split_data` with custom `fpd_tpd_ratio`
+- [ ] `split_data` by `participants` option

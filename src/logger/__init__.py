@@ -8,4 +8,4 @@ if not os.path.exists(LOG_PATH):
 
 _logFile = os.path.join(LOG_PATH, 'app.log')
 
-logger = get_logger(__name__, _logFile)
+LOGGER = get_logger(__name__, _logFile)

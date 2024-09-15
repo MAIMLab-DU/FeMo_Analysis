@@ -3,7 +3,7 @@ import boto3
 import json
 import numpy as np
 import pandas as pd
-from logger import logger
+from logger import LOGGER
 from typing import Literal
 from botocore.exceptions import (
     ClientError,
@@ -24,7 +24,7 @@ class FeMoDataset:
 
     @property
     def logger(self):
-        return logger
+        return LOGGER
 
     @property
     def base_dir(self) -> Path:
@@ -187,7 +187,7 @@ class FeMoDataset:
 class DataProcessor:
     @property
     def logger(self):
-        return logger
+        return LOGGER
     
     @property
     def input_data(self) -> pd.DataFrame:
@@ -219,24 +219,21 @@ class DataProcessor:
                     num_folds: int = 5):
         
         X, y = data[:, :-1], data[:, -1]
+        train, test = [], []
+        num_tpd_train, num_tpd_test = [], []
+        num_fpd_train, num_fpd_test = [], []
+
         if strategy == 'holdout':
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-            train = np.concatenate([X_train, y_train[:, np.newaxis]], axis=1)
-            test = np.concatenate([X_test, y_test[:, np.newaxis]], axis=1)
-            num_tpd_train, num_fpd_train = np.sum(y_train == 1), np.sum(y_train == 0)
-            num_tpd_test, num_fpd_test = np.sum(y_test == 1), np.sum(y_test == 0)
+            train.append(np.concatenate([X_train, y_train[:, np.newaxis]], axis=1))
+            test.append(np.concatenate([X_test, y_test[:, np.newaxis]], axis=1))
+            num_tpd_train.append(np.sum(y_train == 1))
+            num_fpd_train.append(np.sum(y_train == 0))
+            num_tpd_test.append(np.sum(y_test == 1))
+            num_fpd_test.append(np.sum(y_test == 0))
 
         elif strategy == 'kfold':
             skf = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=0)
-
-            # Create list to hold the folds
-            train = []
-            test = []
-
-            num_tpd_train = []
-            num_fpd_train = []
-            num_tpd_test = []
-            num_fpd_test = []
 
             for i, (train_idx, test_idx) in enumerate(skf.split(X, y)):
                 train.append(np.concatenate([X[train_idx], y[train_idx][:, np.newaxis]], axis=1))

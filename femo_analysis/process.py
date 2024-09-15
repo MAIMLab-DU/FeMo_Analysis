@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
 import yaml
 import joblib
 import argparse
-from logger import logger
+from logger import LOGGER
 from data.dataset import (
     FeMoDataset,
     DataProcessor
@@ -23,13 +23,14 @@ def parse_args():
 
 
 def main():
-    logger.info("Starting data processing...")
+    LOGGER.info("Starting data processing...")
+    args = parse_args()
 
     config_path = os.path.join(os.path.dirname(__file__), 'configs', 'dataproc-cfg.yaml')
     with open(config_path, "r") as f:
         dataproc_cfg = yaml.safe_load(f)
 
-    logger.info("Downloading raw input data")
+    LOGGER.info("Downloading raw input data")
     data_dir = args.data_dir
 
     dataset = FeMoDataset(data_dir,
@@ -38,15 +39,15 @@ def main():
                           dataproc_cfg.get('data_pipeline'))
     df = dataset.build()
     if args.inference:
-        logger.info("Dataset built for inference.")
+        LOGGER.info("Dataset built for inference.")
         return
 
-    logger.info("Preprocessing raw input data")
+    LOGGER.info("Preprocessing raw input data")
     data_processor = DataProcessor(feat_rank_cfg=dataproc_cfg.get('feature_ranking'))
     data_output = data_processor.process(input_data=df)
 
     len_data_output = len(data_output)
-    logger.info(f"Splitting {len_data_output} rows of data into train, test datasets.")
+    LOGGER.info(f"Splitting {len_data_output} rows of data into train, test datasets.")
     split_dict = data_processor.split_data(
         data=data_output,
         **dataproc_cfg.get('data_processor', {})
@@ -56,7 +57,7 @@ def main():
 
     joblib.dump(train, os.path.join(data_dir, 'train.pkl'), compress=True)
     joblib.dump(test, os.path.join(data_dir, 'test.pkl'), compress=True)
-    logger.info(f"Saved datasets to {os.path.abspath(data_dir)}")
+    LOGGER.info(f"Saved datasets to {os.path.abspath(data_dir)}")
 
 
 if __name__ == "__main__":
