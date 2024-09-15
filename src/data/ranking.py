@@ -7,7 +7,7 @@ For some guidelines, check out [this page](https://scikit-learn.org/stable/modul
 
 import itertools
 import numpy as np
-from logger import logger
+from logger import LOGGER
 from functools import wraps
 from sklearn.neighbors import NeighborhoodComponentsAnalysis
 from sklearn.feature_selection import SelectFromModel, RFE
@@ -20,7 +20,7 @@ class FeatureRanker:
 
     @property
     def logger(self):
-        return logger
+        return LOGGER
 
     def __init__(self,
                  min_common: int = 2,

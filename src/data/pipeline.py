@@ -1,7 +1,7 @@
 import yaml
-from pathlib import Path
+import time
+from logger import LOGGER
 from collections import defaultdict
-from typing import Union
 from .transforms import (
     DataLoader,
     DataPreprocessor,
@@ -13,6 +13,10 @@ from .transforms import (
 
 
 class Pipeline(object):
+
+    @property
+    def logger(self):
+        return LOGGER
 
     def __init__(self,
                  cfg: dict,
@@ -42,23 +46,29 @@ class Pipeline(object):
         return stages
 
     def process(self, filename):
+        start = time.time()
         
         # Step-0: Load data
+        self.logger.debug(f"Loading data from {filename}")
         loaded_data = self.stages[0](filename=filename)
 
         # Step-1: Preprocess data (filter and trimming)
+        self.logger.debug("Preprocessing data...")
         preprocessed_data = self.stages[1](loaded_data=loaded_data)
 
         # Step-2: Get imu_map, fm_dict (fm sensors), and sensation_dict (button)
+        self.logger.debug("Creating IMU accelerometer map...")
         imu_map = self.stages[2](
             map_name='imu',
             preprocessed_data=preprocessed_data
         )
+        self.logger.debug("Creating FeMo sensors map...")
         fm_dict = self.stages[2](
             map_name='fm_sensor',
             preprocessed_data=preprocessed_data,
             imu_map=imu_map
         )
+        self.logger.debug("Creating maternal sensation map...")
         sensation_map = None
         if not self.inference:
             sensation_map = self.stages[2](
@@ -68,9 +78,11 @@ class Pipeline(object):
             )
 
         # Step-3: Sensor fusion
+        self.logger.debug(f"Combining {self.stages[3].num_sensors} sensors map...")
         scheme_dict = self.stages[3](fm_dict=fm_dict)
 
         # Step-4: Extract detections (event and non-event) from segmented data
+        self.logger.debug("Extracting detections...")
         extracted_detections = self.stages[4](
             inference=self.inference,
             preprocessed_data=preprocessed_data,
@@ -78,11 +90,14 @@ class Pipeline(object):
             sensation_map=sensation_map
         )
         # Step-5: Extract features of each detection
+        self.logger.debug("Extracting features...")
         extracted_features = self.stages[5](
             inference=self.inference,
             fm_dict=fm_dict,
             extracted_detections=extracted_detections
         )
+
+        self.logger.info(f"Pipeline process completed in {time.time() - start: 0.3f} seconds.")
 
         return {
             'imu_map': imu_map,
