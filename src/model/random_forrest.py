@@ -1,96 +1,108 @@
 import copy
 import time
+import optuna
 import numpy as np
-from .base import FeMoBaseClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import RepeatedStratifiedKFold, GridSearchCV
+from sklearn.model_selection import StratifiedKFold
+from .base import FeMoBaseClassifier
+
+optuna.logging.set_verbosity(optuna.logging.ERROR)
 
 
 class FeMoRFClassifier(FeMoBaseClassifier):
 
     def __init__(self,
                  config = {
-                     'search_params': {
-                         'cv': {
-                             'n_splits': 5,
-                             'n_repeats': 1
-                         },
-                         'scoring': 'accuracy',
-                         'verbose': 0,
-                         'n_jobs': -1,
-                         'param_grid': {
-                             'max_features': [
-                                 'sqrt', 'log2', None,
-                                 1, 2, 3, 4, 5, 6, 8, 10,
-                                 12, 14, 16, 17, 19,
-                                 22, 25, 27, 29
-                             ]
-                         }
+                     'search_space': {
+                         'n_estimators': [50, 100, 150],
+                         'max_depth': [5, 10],
+                         'max_leaf_nodes': [3, 6, 9],
+                         'max_features': [
+                             'sqrt', 'log2', None,
+                             1, 2, 3, 4, 5, 6, 8, 10,
+                             12, 14, 16, 17, 19,
+                             22, 25, 27, 29
+                        ]
                      },
-                     'fit_params': {
+                     'hyperparams': {
                          'n_estimators': 100,
-                         'min_samples_leaf': 50,
-                         'n_jobs': -1,
-                         'verbose': 0
+                         'max_depth': None,
+                         'max_leaf_nodes': None,
+                         'max_features': 'sqrt'
                      }
                  }):
         super().__init__(config)
 
     def search(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):        
         start = time.time()
-
+                
         num_folds = len(train_data)
-
-        search_params = copy.deepcopy(self.search_space)
-        cv_params = search_params.pop('cv', {})
-        cv = RepeatedStratifiedKFold(random_state=42, **cv_params)
-
-        fit_params = copy.deepcopy(self.hyperparams)
-        fit_params = self._update_class_weight(train_data[0][:, -1], fit_params)
-        estimator = RandomForestClassifier(random_state=0, **fit_params)
-
-        self.cross_validator = GridSearchCV(cv=cv,
-                                            estimator=estimator,
-                                            **search_params)
-
-        best_accuracy = -np.inf
-        best_model = None
-        self.logger.info(f"Performing Grid Search with - "
-                         f"{num_folds}x{cv_params['n_splits']}-fold Cross-validation")
         
-        for i in range(num_folds):
-            X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
+        def objective(trial: optuna.Trial):
 
-            self.cross_validator.fit(X_train, y_train)
+            params = {
+                name: trial.suggest_categorical(name, value)
+                for name, value in self.search_space.items()
+            }
+            
+            outer_scores = []
+            for i in range(num_folds):
+                X_train_outer, X_test_outer = train_data[i][:, :-1], test_data[i][:, :-1]
+                y_train_outer, y_test_outer = train_data[i][:, -1], test_data[i][:, -1]
 
-            y_pred = self.cross_validator.predict(test_data[i][:, :-1])
-            current_accuracy = accuracy_score(
-                y_pred=y_pred,
-                y_true=test_data[i][:, -1]
-            )
+                inner_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+                best_params = None
+                best_score = -1
 
-            if current_accuracy > best_accuracy:
-                best_accuracy = current_accuracy
-                best_model = self.cross_validator.best_estimator_.estimators_[0]
+                for train_index_inner, val_index_inner in inner_cv.split(X_train_outer, y_train_outer):
+                    X_train_inner, X_val_inner = X_train_outer[train_index_inner], X_train_outer[val_index_inner]
+                    y_train_inner, y_val_inner = y_train_outer[train_index_inner], y_train_outer[val_index_inner]
 
-        self.logger.info(f"Grid search took {time.time() - start: 0.2f} seconds")
-        self.logger.info(f"Best model with test accuracy: {best_accuracy: 0.3f}\t"
-                         f"min_samples_leaf: {best_model.min_samples_leaf}, "
-                         f"max_features: {best_model.max_features}")
+                    inner_params = self._update_class_weight(y_train_inner, params)
+                    estimator = RandomForestClassifier(random_state=0, **inner_params) 
+
+                    estimator.fit(X_train_inner, y_train_inner)
+                    y_pred_val = estimator.predict(X_val_inner)
+                    score = accuracy_score(y_val_inner, y_pred_val) 
+
+                    if score > best_score:
+                        best_params = params
+                        best_score = score
+
+                # Train the final model on the entire outer training set using the best hyperparameters
+                best_params = self._update_class_weight(y_train_outer, best_params)
+                estimator = RandomForestClassifier(random_state=0, **best_params)
+                estimator.fit(X_train_outer, y_train_outer)
+                y_pred_outer = estimator.predict(X_test_outer)
+                outer_score = accuracy_score(y_test_outer, y_pred_outer)
+                outer_scores.append(outer_score)
+
+            return np.max(outer_scores)
         
-        self.hyperparams.update(min_samples_leaf=best_model.min_samples_leaf,
-                               max_features=best_model.max_features)
+        study = optuna.create_study(direction='maximize')
+        self.logger.info(f"Performing Grid Search with {num_folds}x5 Cross-validation")
+        study.optimize(objective, n_trials=10, show_progress_bar=True)
+
+        best_params = study.best_params
+        best_accuracy = study.best_value
+        
+        self.logger.info(f"Optuna search took {time.time() - start: 0.2f} seconds")
+        self.logger.info(f"Best model hyperparameters: {best_params}")
+        self.logger.info(f"Best model accuracy: {best_accuracy}")
+
+        for key, value in best_params.items():
+            self.hyperparams.update({key: value})
 
     def fit(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):
         start = time.time()
 
         num_iterations = len(train_data)
 
-        fit_params = copy.deepcopy(self.hyperparams)
-        fit_params = self._update_class_weight(train_data[0][:, -1], fit_params)
+        hyperparams = copy.deepcopy(self.hyperparams)
+        hyperparams = self._update_class_weight(train_data[0][:, -1], hyperparams)
 
-        self.classifier = RandomForestClassifier(random_state=0, **fit_params)
+        self.classifier = RandomForestClassifier(random_state=0, **hyperparams)
 
         best_accuracy = -np.inf
         best_model = None
@@ -126,9 +138,3 @@ class FeMoRFClassifier(FeMoBaseClassifier):
         self.result.accuracy_scores = accuracy_scores
         self.result.best_model = best_model
         self.result.best_model_hyperparams = best_model.get_params()
-
-                
-
-
-
-

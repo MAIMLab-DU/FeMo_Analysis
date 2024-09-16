@@ -45,7 +45,7 @@ class FeMoSVClassifier(FeMoBaseClassifier):
             kernel = trial.suggest_categorical('kernel', ['rbf', 'linear', 'poly', 'sigmoid'])
 
             inner_grid = copy.deepcopy(self.search_space)
-            fit_params = copy.deepcopy(self.hyperparams)
+            hyperparams = copy.deepcopy(self.hyperparams)
 
             inner_grid.update({'C': np.logspace(-4, 4, C), 
                                'gamma': np.logspace(-4, 4, gamma),
@@ -62,8 +62,8 @@ class FeMoSVClassifier(FeMoBaseClassifier):
             best_gamma_ = 1e-4
             for i in range(num_folds):
 
-                fit_params = self._update_class_weight(train_data[i][:, -1], fit_params)
-                estimator = SVC(random_state=0, **fit_params)
+                hyperparams = self._update_class_weight(train_data[i][:, -1], hyperparams)
+                estimator = SVC(random_state=0, **hyperparams)
                 cross_validator = GridSearchCV(
                     cv=cv,
                     estimator=estimator,
