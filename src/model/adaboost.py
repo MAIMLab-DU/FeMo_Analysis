@@ -43,7 +43,7 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
 
         num_folds = len(train_data)
 
-        fit_params = copy.deepcopy(self.fit_params)
+        fit_params = copy.deepcopy(self.hyperparams)
         fit_params.pop('estimator', None)
         base_estimator = GradientBoostingClassifier(
             random_state=42,
@@ -56,7 +56,7 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
             **fit_params
         )        
 
-        search_params = copy.deepcopy(self.search_params)
+        search_params = copy.deepcopy(self.search_space)
         cv_params = search_params.pop('cv', {})
         cv = RepeatedStratifiedKFold(random_state=42, **cv_params)
 
@@ -92,7 +92,7 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
         self.logger.info(f"Best model with test accuracy: {best_accuracy: 0.3f}\t"
                          f"n_estimators:{n_estimators}, learning_rate:{learning_rate: 0.3f}")
         
-        self.fit_params.update(estimator=best_base_estimator,
+        self.hyperparams.update(estimator=best_base_estimator,
                                n_estimators=n_estimators,
                                learning_rate=learning_rate)
 
@@ -101,7 +101,7 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
 
         num_iterations = len(train_data)
 
-        fit_params = copy.deepcopy(self.fit_params)
+        fit_params = copy.deepcopy(self.hyperparams)
         fit_params.pop('base_estimator', None)
         self.classifier = AdaBoostClassifier(random_state=0, **fit_params)
 

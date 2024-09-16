@@ -2,8 +2,7 @@ import time
 import copy
 import optuna
 import numpy as np
-from typing import Literal
-from optuna.samplers import GridSampler, RandomSampler
+from optuna.samplers import GridSampler
 from sklearn.metrics import accuracy_score
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from .base import FeMoBaseClassifier
@@ -12,33 +11,24 @@ from .base import FeMoBaseClassifier
 class FeMoLogRegClassifier(FeMoBaseClassifier):
 
     def __init__(self,
-                 search_method: Literal['grid', 'random'] = 'grid',
                  config = {
-                     'search_params': {
+                     'search_space': {
                          'Cs': [10, 20],
-                         'cv': 5,
                          'solver': ['lbfgs', 'liblinear'],
-                         'max_iter': 1000,
-                         'verbose': False,
-                         'n_jobs': 1,
+                         'max_iter': 1000
                      },
-                     'fit_params': {
+                     'hyperparams': {
+                         'C': 1e-3, 
                          'solver': 'lbfgs',
-                         'max_iter': 1000,
-                         'verbose': False,
-                         'n_jobs': -1
+                         'max_iter': 1000
                      }
                  }):
         super().__init__(config)
-
-        self.search_method = search_method
 
     def search(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):
         start = time.time()
 
         num_folds = len(train_data)
-        search_params = copy.deepcopy(self.search_params)
-        search_params = self._update_class_weight(train_data[0][:, -1], search_params)
 
         def callback(study: optuna.Study, trial: optuna.Trial):
             if study.best_trial.number == trial.number:
@@ -48,16 +38,20 @@ class FeMoLogRegClassifier(FeMoBaseClassifier):
             Cs = trial.suggest_int('Cs', low=10, high=50, step=10)
             solver = trial.suggest_categorical('solver', ['liblinear', 'lbfgs'])
 
-            search_params.update({'Cs': Cs,'solver': solver})
+            inner_grid = copy.deepcopy(self.search_space)
+            inner_grid.update({'Cs': Cs,'solver': solver})
 
-            cross_validator = LogisticRegressionCV(**search_params)
             self.logger.info(f"Performing Grid Search with - "
-                            f"{num_folds}x{self.search_params['cv']}-fold Cross-validation")
+                            f"{num_folds}x5-fold Cross-validation")
             
             accuracies = []
             best_accuracy = -np.inf
             best_C_ = 1e-4
             for i in range(num_folds):
+
+                inner_grid = self._update_class_weight(train_data[i][:, -1], inner_grid)
+                cross_validator = LogisticRegressionCV(cv=5, n_jobs=-1, **inner_grid)
+
                 X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
                 X_test, y_test = test_data[i][:, :-1], test_data[i][:, -1]
 
@@ -72,20 +66,13 @@ class FeMoLogRegClassifier(FeMoBaseClassifier):
             trial.set_user_attr(key='C', value=best_C_)
             return np.mean(accuracies)
         
-        # Define the sampler based on search_method
-        if self.search_method == 'grid':
-            # Define search space for GridSampler
-            search_space = {
-                'Cs': self.search_params.get('Cs', [20]),
-                'solver': self.search_params.get('solver', ['lbfgs', 'liblinear'])
-            }
-            sampler = GridSampler(search_space, seed=42)
-            n_trials = sampler._n_min_trials
-        elif self.search_method == 'random':
-            sampler = RandomSampler(seed=42)
-            n_trials = 10
-        else:
-            raise ValueError("Invalid search_method. Use 'grid' or 'random'.")
+        # Define search space for GridSampler
+        outer_grid = {
+            'Cs': self.search_space.get('Cs', [20]),
+            'solver': self.search_space.get('solver', ['lbfgs', 'liblinear'])
+        }
+        sampler = GridSampler(outer_grid, seed=42)
+        n_trials = sampler._n_min_trials
 
         # Create an Optuna study with the chosen sampler
         study = optuna.create_study(direction='maximize', sampler=sampler)
@@ -104,7 +91,7 @@ class FeMoLogRegClassifier(FeMoBaseClassifier):
         self.logger.info(f"Best model hyperparameters: {best_params}")
         self.logger.info(f"Best average model accuracy: {best_accuracy}")
 
-        self.fit_params.update(
+        self.hyperparams.update(
             C=best_params['C'],
             solver=best_params['solver']
         )
@@ -114,10 +101,10 @@ class FeMoLogRegClassifier(FeMoBaseClassifier):
         start = time.time()
 
         num_iterations = len(train_data)
-        fit_params = copy.deepcopy(self.fit_params)
-        fit_params = self._update_class_weight(train_data[0][:, -1], fit_params)
+        hyperparams = copy.deepcopy(self.hyperparams)
+        hyperparams = self._update_class_weight(train_data[0][:, -1], hyperparams)
 
-        self.classifier = LogisticRegression(**fit_params)
+        self.classifier = LogisticRegression(verbose=False, **hyperparams)
         
         best_accuracy = -np.inf
         best_model = None

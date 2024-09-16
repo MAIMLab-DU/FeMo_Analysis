@@ -42,11 +42,11 @@ class FeMoRFClassifier(FeMoBaseClassifier):
 
         num_folds = len(train_data)
 
-        search_params = copy.deepcopy(self.search_params)
+        search_params = copy.deepcopy(self.search_space)
         cv_params = search_params.pop('cv', {})
         cv = RepeatedStratifiedKFold(random_state=42, **cv_params)
 
-        fit_params = copy.deepcopy(self.fit_params)
+        fit_params = copy.deepcopy(self.hyperparams)
         fit_params = self._update_class_weight(train_data[0][:, -1], fit_params)
         estimator = RandomForestClassifier(random_state=0, **fit_params)
 
@@ -79,7 +79,7 @@ class FeMoRFClassifier(FeMoBaseClassifier):
                          f"min_samples_leaf: {best_model.min_samples_leaf}, "
                          f"max_features: {best_model.max_features}")
         
-        self.fit_params.update(min_samples_leaf=best_model.min_samples_leaf,
+        self.hyperparams.update(min_samples_leaf=best_model.min_samples_leaf,
                                max_features=best_model.max_features)
 
     def fit(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):
@@ -87,7 +87,7 @@ class FeMoRFClassifier(FeMoBaseClassifier):
 
         num_iterations = len(train_data)
 
-        fit_params = copy.deepcopy(self.fit_params)
+        fit_params = copy.deepcopy(self.hyperparams)
         fit_params = self._update_class_weight(train_data[0][:, -1], fit_params)
 
         self.classifier = RandomForestClassifier(random_state=0, **fit_params)

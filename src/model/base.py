@@ -25,8 +25,8 @@ class FeMoBaseClassifier(ABC):
                  config: dict):
 
         self._config = config
-        self.search_params: dict = config.get('search_params', {})
-        self.fit_params: dict = config.get('fit_params', {})
+        self.search_space: dict = config.get('search_space', {})
+        self.hyperparams: dict = config.get('hyperparams', {})
         self.classifier = None
 
         self.result = Result(None, None, None)
