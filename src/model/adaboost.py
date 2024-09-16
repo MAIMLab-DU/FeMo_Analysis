@@ -1,10 +1,11 @@
 import time
-import numpy as np
 import copy
+import optuna
+import numpy as np
 from .base import FeMoBaseClassifier
 from sklearn.metrics import accuracy_score
-from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
-from sklearn.model_selection import RepeatedStratifiedKFold, GridSearchCV
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.model_selection import KFold, GridSearchCV
 
 
 class FeMoAdaBoostClassifier(FeMoBaseClassifier):
@@ -12,28 +13,14 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
     def __init__(self,
                  config = {
                      'search_params': {
-                         'cv': {
-                             'n_splits': 5,
-                             'n_repeats': 1
-                         },
-                         'scoring': 'accuracy',
-                         'verbose': 0,
-                         'n_jobs': -1,
-                         'param_grid': {
-                             'n_estimators': [50, 100, 150,
-                                              200, 250, 300],
-                             'learning_rate': [0.01, 0.1, 0.5,
-                                               1.0, 1.5, 2.0]
-                         }
+                         'n_estimators': [50, 100, 150,
+                                          200, 250, 300],
+                         'learning_rate': [0.01, 0.1, 0.5,
+                                           1.0, 1.5, 2.0]
                      },
                      'fit_params': {
-                         'base_estimator':{
-                              'n_estimators': 50,
-                              'subsample': 0.75,
-                              'max_depth': 1
-                         },
                          'n_estimators': 50,
-                         'algorithm': 'SAMME.R'
+                         'learning_rate': 0.1
                      }
                  }):
         super().__init__(config)
@@ -41,69 +28,60 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
     def search(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):        
         start = time.time()
 
+        assert len(train_data) == len(test_data), "Train, test data must have same folds"
         num_folds = len(train_data)
-
-        fit_params = copy.deepcopy(self.hyperparams)
-        fit_params.pop('estimator', None)
-        base_estimator = GradientBoostingClassifier(
-            random_state=42,
-            warm_start=True,
-            **fit_params.pop('base_estimator', {})
-        )
-        estimator = AdaBoostClassifier(
-            random_state=0,
-            estimator=base_estimator,
-            **fit_params
-        )        
-
-        search_params = copy.deepcopy(self.search_space)
-        cv_params = search_params.pop('cv', {})
-        cv = RepeatedStratifiedKFold(random_state=42, **cv_params)
-
-        self.cross_validator = GridSearchCV(cv=cv,
-                                            estimator=estimator,
-                                            **search_params)
-
-        best_accuracy = -np.inf
-        best_model = None
-        self.logger.info(f"Performing Grid Search with - "
-                         f"{num_folds}x{cv_params['n_splits']}-fold Cross-validation")
         
-        for i in range(num_folds):
-            X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
+        def objective(trial: optuna.Trial):
 
-            self.cross_validator.fit(X_train, y_train)
+            params = {
+                name: [trial.suggest_categorical(name, value)]
+                for name, value in self.search_space.items()
+            }
 
-            y_pred = self.cross_validator.predict(test_data[i][:, :-1])
-            current_accuracy = accuracy_score(
-                y_pred=y_pred,
-                y_true=test_data[i][:, -1]
-            )
+            accuracy_scores = []
+            for i in range(num_folds):
+                X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
+                X_test, y_test = test_data[i][:, :-1], test_data[i][:, -1]
 
-            if current_accuracy > best_accuracy:
-                best_accuracy = current_accuracy
-                best_model = self.cross_validator.best_estimator_
+                cv_inner = KFold(n_splits=5, shuffle=True, random_state=42)
+                estimator = AdaBoostClassifier(
+                    random_state=42,
+                    **params
+                )
 
-        best_base_estimator = best_model.estimator_
-        n_estimators = best_model.n_estimators
-        learning_rate = best_model.learning_rate
-
-        self.logger.info(f"Grid search took {time.time() - start: 0.2f} seconds")
-        self.logger.info(f"Best model with test accuracy: {best_accuracy: 0.3f}\t"
-                         f"n_estimators:{n_estimators}, learning_rate:{learning_rate: 0.3f}")
+                cross_validator = GridSearchCV(
+                    estimator=estimator,
+                    cv=cv_inner,
+                    param_grid=params,
+                    n_jobs=-1
+                )
+                cross_validator.fit(X_train, y_train)
+                y_pred = cross_validator.predict(X_test)
+                accuracy_scores.append(accuracy_score(y_true=y_test, y_pred=y_pred))
+            
+            return np.mean(accuracy_scores)            
         
-        self.hyperparams.update(estimator=best_base_estimator,
-                               n_estimators=n_estimators,
-                               learning_rate=learning_rate)
+        study = optuna.create_study(direction='maximize')
+        self.logger.info(f"Performing Grid Search with {num_folds}x5 Cross-validation")
+        study.optimize(objective, n_trials=10, show_progress_bar=True)
+
+        best_params = study.best_params
+        best_accuracy = study.best_value
+        
+        self.logger.info(f"Optuna search took {time.time() - start: 0.2f} seconds")
+        self.logger.info(f"Best model hyperparameters: {best_params}")
+        self.logger.info(f"Best model accuracy: {best_accuracy}")
+
+        for key, value in best_params.items():
+            self.hyperparams.update({key: value})
 
     def fit(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):
         start = time.time()
 
         num_iterations = len(train_data)
 
-        fit_params = copy.deepcopy(self.hyperparams)
-        fit_params.pop('base_estimator', None)
-        self.classifier = AdaBoostClassifier(random_state=0, **fit_params)
+        hyperparams = copy.deepcopy(self.hyperparams)
+        self.classifier = AdaBoostClassifier(random_state=0, **hyperparams)
 
         best_accuracy = -np.inf
         best_model = None
@@ -139,9 +117,3 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
         self.result.accuracy_scores = accuracy_scores
         self.result.best_model = best_model
         self.result.best_model_hyperparams = best_model.get_params()
-
-                
-
-
-
-
