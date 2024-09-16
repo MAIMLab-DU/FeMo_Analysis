@@ -27,7 +27,6 @@ class FeMoBaseClassifier(ABC):
         self._config = config
         self.search_params: dict = config.get('search_params', {})
         self.fit_params: dict = config.get('fit_params', {})
-        self.cross_validator = None
         self.classifier = None
 
         self.result = Result(None, None, None)
@@ -49,7 +48,7 @@ class FeMoBaseClassifier(ABC):
     @abstractmethod
     def search(self, *args, **kwargs):
         """Class method using Cross Validation to search for best estimator 
-        and/or hyperparameters
+        and hyperparameters
 
         Raises:
             NotImplementedError
