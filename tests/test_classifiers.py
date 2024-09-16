@@ -49,6 +49,7 @@ def test_logReg_classifier(folder, strategy):
     classifier.search(train_data, test_data)
     classifier.fit(train_data, test_data)
     result = classifier.result
+    print(result)
         
         # TODO: assert with actual results
     assert isinstance(result.accuracy_scores, dict)

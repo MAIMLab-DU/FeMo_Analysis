@@ -32,7 +32,7 @@ class FeMoBaseClassifier(ABC):
         self.result = Result(None, None, None)
 
     @staticmethod
-    def _update_class_weight(y: np.ndarray, params: dict):
+    def _update_class_weight(y: np.ndarray, params: dict = None):
         
         num_tpd = np.sum(y == 1)
         num_fpd = np.sum(y == 0)
@@ -41,9 +41,8 @@ class FeMoBaseClassifier(ABC):
             0: 1,
             1: num_fpd / num_tpd
         }
-        params.update(class_weight=class_weight)
-
-        return params
+        
+        return class_weight if params is None else params.update(class_weight=class_weight)
 
     @abstractmethod
     def search(self, *args, **kwargs):
