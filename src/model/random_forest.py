@@ -4,7 +4,7 @@ import optuna
 import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import KFold, GridSearchCV
 from .base import FeMoBaseClassifier
 
 optuna.logging.set_verbosity(optuna.logging.ERROR)
@@ -36,49 +36,39 @@ class FeMoRFClassifier(FeMoBaseClassifier):
 
     def search(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):        
         start = time.time()
-                
+
+        assert len(train_data) == len(test_data), "Train, test data must have same folds"
         num_folds = len(train_data)
         
         def objective(trial: optuna.Trial):
 
             params = {
-                name: trial.suggest_categorical(name, value)
+                name: [trial.suggest_categorical(name, value)]
                 for name, value in self.search_space.items()
             }
-            
-            outer_scores = []
+
+            accuracy_scores = []
             for i in range(num_folds):
-                X_train_outer, X_test_outer = train_data[i][:, :-1], test_data[i][:, :-1]
-                y_train_outer, y_test_outer = train_data[i][:, -1], test_data[i][:, -1]
+                X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
+                X_test, y_test = test_data[i][:, :-1], test_data[i][:, -1]
 
-                inner_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-                best_params = None
-                best_score = -1
+                cv_inner = KFold(n_splits=5, shuffle=True, random_state=42)
+                estimator = RandomForestClassifier(
+                    random_state=42,
+                    **params
+                )
 
-                for train_index_inner, val_index_inner in inner_cv.split(X_train_outer, y_train_outer):
-                    X_train_inner, X_val_inner = X_train_outer[train_index_inner], X_train_outer[val_index_inner]
-                    y_train_inner, y_val_inner = y_train_outer[train_index_inner], y_train_outer[val_index_inner]
-
-                    inner_params = self._update_class_weight(y_train_inner, params)
-                    estimator = RandomForestClassifier(random_state=0, **inner_params) 
-
-                    estimator.fit(X_train_inner, y_train_inner)
-                    y_pred_val = estimator.predict(X_val_inner)
-                    score = accuracy_score(y_val_inner, y_pred_val) 
-
-                    if score > best_score:
-                        best_params = params
-                        best_score = score
-
-                # Train the final model on the entire outer training set using the best hyperparameters
-                best_params = self._update_class_weight(y_train_outer, best_params)
-                estimator = RandomForestClassifier(random_state=0, **best_params)
-                estimator.fit(X_train_outer, y_train_outer)
-                y_pred_outer = estimator.predict(X_test_outer)
-                outer_score = accuracy_score(y_test_outer, y_pred_outer)
-                outer_scores.append(outer_score)
-
-            return np.max(outer_scores)
+                cross_validator = GridSearchCV(
+                    estimator=estimator,
+                    cv=cv_inner,
+                    param_grid=params,
+                    n_jobs=-1
+                )
+                cross_validator.fit(X_train, y_train)
+                y_pred = cross_validator.predict(X_test)
+                accuracy_scores.append(accuracy_score(y_true=y_test, y_pred=y_pred))
+            
+            return np.mean(accuracy_scores)            
         
         study = optuna.create_study(direction='maximize')
         self.logger.info(f"Performing Grid Search with {num_folds}x5 Cross-validation")
