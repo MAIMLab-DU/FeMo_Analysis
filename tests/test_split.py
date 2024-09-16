@@ -10,10 +10,12 @@ from data.dataset import DataProcessor
 
 data_folder = "tests/datafiles"
 folders = list_folders(data_folder)
+strategies = ['holdout', 'kfold']
 
 
 @pytest.mark.parametrize("folder", folders)
-def test_holdout_split(folder):
+@pytest.mark.parametrize("strategy", strategies)
+def test_holdout_split(folder, strategy):
     """
     Test loading data from raw .dat files and 
     comparing it with pre-stored expected results.
@@ -34,11 +36,11 @@ def test_holdout_split(folder):
     y_pre = extracted_features['labels']
     actual_split_dict = data_processor.split_data(
         np.concatenate([X_norm, y_pre[:, np.newaxis]], axis=1),
-        strategy=True
+        strategy=strategy
     )
 
     desired_split_dict = joblib.load(
-        os.path.join(data_folder, folder, "holdout.pkl")
+        os.path.join(data_folder, folder, f"{strategy}.pkl")
     )
 
     compare_dictionaries(
