@@ -6,6 +6,8 @@
 
 ## Implement tuning with Optuna
 
+**Update fit() method, same classifier is now being trained every fold. Should be different classifier?**
+
 - [x] `LogisticRegressionClassifier` -> **search** -> **fit** test passed
   - [x] Search with *Optuna* test passed
 - [x] `SVMClassifier` -> **search** -> **fit** test passed
