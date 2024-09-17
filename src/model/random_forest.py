@@ -4,7 +4,7 @@ import optuna
 import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import KFold, GridSearchCV
+from sklearn.model_selection import KFold, cross_val_score
 from .base import FeMoBaseClassifier
 
 optuna.logging.set_verbosity(optuna.logging.ERROR)
@@ -43,33 +43,32 @@ class FeMoRFClassifier(FeMoBaseClassifier):
         def objective(trial: optuna.Trial):
 
             params = {
-                name: [trial.suggest_categorical(name, value)]
+                name: trial.suggest_categorical(name, value)
                 for name, value in self.search_space.items()
             }
 
             accuracy_scores = []
             for i in range(num_folds):
                 X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
-                X_test, y_test = test_data[i][:, :-1], test_data[i][:, -1]
 
                 cv_inner = KFold(n_splits=5, shuffle=True, random_state=42)
                 estimator = RandomForestClassifier(
                     random_state=42,
                     **params
                 )
-
-                cross_validator = GridSearchCV(
+                cv_score = cross_val_score(
                     estimator=estimator,
                     cv=cv_inner,
-                    param_grid=params,
+                    X=X_train,
+                    y=y_train,
+                    scoring='accuracy',
                     n_jobs=-1
                 )
-                cross_validator.fit(X_train, y_train)
-                y_pred = cross_validator.predict(X_test)
-                accuracy_scores.append(accuracy_score(y_true=y_test, y_pred=y_pred))
+                accuracy_scores.append(cv_score)
             
             return np.mean(accuracy_scores)            
         
+        # By default, optuna uses TPE sampling
         study = optuna.create_study(direction='maximize')
         self.logger.info(f"Performing Grid Search with {num_folds}x5 Cross-validation")
         study.optimize(objective, n_trials=10, show_progress_bar=True)
