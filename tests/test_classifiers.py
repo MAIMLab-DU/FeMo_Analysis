@@ -10,7 +10,8 @@ from model import (
     FeMoLogRegClassifier,
     FeMoSVClassifier,
     FeMoRFClassifier,
-    FeMoAdaBoostClassifier
+    FeMoAdaBoostClassifier,
+    FeMoNNClassifier
 )
 
 data_folder = "tests/datafiles"
@@ -145,6 +146,45 @@ def test_adaboost_classifier(folder, strategy):
     
     data_processor = DataProcessor()
     classifier = FeMoAdaBoostClassifier()
+    extracted_features = joblib.load(
+        os.path.join(data_folder, folder, "extracted_features_train.pkl")
+    )
+    X_norm = joblib.load(
+        os.path.join(data_folder, folder, 'normalized_features.pkl')
+    )
+    top_feat_indices = joblib.load(
+        os.path.join(data_folder, folder, 'top_feat_indices.pkl')
+    )
+    X_norm = X_norm[:, top_feat_indices]
+
+    y_pre = extracted_features['labels']
+    actual_split_dict = data_processor.split_data(
+        np.concatenate([X_norm, y_pre[:, np.newaxis]], axis=1),
+        strategy=strategy
+    )
+    train_data, test_data = actual_split_dict['train'], actual_split_dict['test']
+
+    classifier.search(train_data, test_data)
+    classifier.fit(train_data, test_data)
+    result = classifier.result
+    print(result)
+    
+    # TODO: assert with actual results
+    assert isinstance(result.accuracy_scores, dict)
+    assert isinstance(result.best_model_hyperparams, dict)
+    assert result.best_model is not None
+
+
+@pytest.mark.parametrize("folder", folders)
+@pytest.mark.parametrize("strategy", strategies)
+def test_femonet_classifier(folder, strategy):
+    """
+    Test loading data from raw .dat files and 
+    comparing it with pre-stored expected results.
+    """
+    
+    data_processor = DataProcessor()
+    classifier = FeMoNNClassifier()
     extracted_features = joblib.load(
         os.path.join(data_folder, folder, "extracted_features_train.pkl")
     )
