@@ -25,7 +25,11 @@ class FeMoSVClassifier(FeMoBaseClassifier):
                  }):
         super().__init__(config)
 
-    def search(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):        
+    def search(self,
+               train_data: list[np.ndarray],
+               test_data: list[np.ndarray],
+               n_trials: int = 10):
+                
         start = time.time()
 
         assert len(train_data) == len(test_data), "Train, test data must have same folds"
@@ -38,16 +42,16 @@ class FeMoSVClassifier(FeMoBaseClassifier):
                 'gamma': trial.suggest_categorical('gamma', self.search_space['gamma']),
                 'kernel': trial.suggest_categorical('kernel', self.search_space['kernel'])
             }
+            cv_inner = KFold(n_splits=5, shuffle=True, random_state=42)
+            estimator = SVC(
+                random_state=42,
+                **params
+            )
 
             accuracy_scores = []
             for i in range(num_folds):
                 X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
 
-                cv_inner = KFold(n_splits=5, shuffle=True, random_state=42)
-                estimator = SVC(
-                    random_state=42,
-                    **params
-                )
                 cv_score = cross_val_score(
                     estimator=estimator,
                     cv=cv_inner,
@@ -63,7 +67,7 @@ class FeMoSVClassifier(FeMoBaseClassifier):
         # By default, optuna uses TPE sampling
         study = optuna.create_study(direction='maximize')
         self.logger.info(f"Performing Grid Search with {num_folds}x5 Cross-validation")
-        study.optimize(objective, n_trials=10, show_progress_bar=True)
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
 
         best_params = study.best_params
         best_accuracy = study.best_value
@@ -75,7 +79,10 @@ class FeMoSVClassifier(FeMoBaseClassifier):
         for key, value in best_params.items():
             self.hyperparams.update({key: value})
 
-    def fit(self, train_data: list[np.ndarray], test_data: list[np.ndarray]):
+    def fit(self,
+            train_data: list[np.ndarray],
+            test_data: list[np.ndarray]):
+        
         start = time.time()
 
         num_iterations = len(train_data)
@@ -114,6 +121,11 @@ class FeMoSVClassifier(FeMoBaseClassifier):
             if current_test_accuracy > best_accuracy:
                 best_accuracy = current_test_accuracy
                 best_model = self.classifier
+
+            self.logger.info(f"Iteration {i+1}:")
+            self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
+            self.logger.info(f"Test Accuracy: {current_test_accuracy:.3f}")
+            self.logger.info(f"Best Accuracy: {best_accuracy:.3f}")
         
         self.logger.info(f"Fitting model with train data took: {time.time() - start: 0.2f} seconds")
         self.result.accuracy_scores = accuracy_scores
