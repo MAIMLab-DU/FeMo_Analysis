@@ -1,14 +1,16 @@
+import joblib
 import numpy as np
 from logger import LOGGER
+from typing import Literal
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 
 @dataclass
 class Result:
-    best_model: object
     best_model_hyperparams: dict
     accuracy_scores: dict
+    predictions: list[np.ndarray]
 
 
 class FeMoBaseClassifier(ABC):
@@ -46,6 +48,20 @@ class FeMoBaseClassifier(ABC):
             return params
         else:
             return class_weight
+        
+    def save_model(self,
+                   model_name: str,
+                   model_framework: Literal['sklearn', 'keras']):
+        if self.classifier is not None:
+            try:
+                if model_framework == 'sklearn':
+                    joblib.dump(self.classifier, f"{model_name}.pkl")
+                elif model_framework == 'keras':
+                    self.classifier.save(f"{model_name}.h5")
+            except Exception as e:
+                self.logger.error(f"Error saving model: {e}")
+        else:
+            self.logger.error("No model trained yet. Cannot save.")
 
     @abstractmethod
     def search(self, *args, **kwargs):
