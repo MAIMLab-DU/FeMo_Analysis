@@ -191,7 +191,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
         ) 
         
         best_accuracy = -1
-        best_model = None
+        predictions = []
         accuracy_scores = {
             'train_accuracy': [],
             'test_accuracy': []
@@ -224,6 +224,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
             # Test metrics
             y_hat_test = expit(self.classifier.predict(X_test))
             y_test_pred = (y_hat_test >= 0.5).astype(int)
+            predictions.append(y_test_pred)
             
             current_test_accuracy = accuracy_score(
                 y_pred=y_test_pred,
@@ -239,7 +240,6 @@ class FeMoNNClassifier(FeMoBaseClassifier):
 
             if current_test_accuracy > best_accuracy:
                 best_accuracy = current_test_accuracy
-                best_model = self.classifier
 
             self.logger.info(f"Iteration {i+1}:")
             self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
@@ -250,5 +250,5 @@ class FeMoNNClassifier(FeMoBaseClassifier):
         self.logger.info(f"Fitting model with train data took: {time.time() - start: 0.3f} seconds")
 
         self.result.accuracy_scores = accuracy_scores
-        self.result.best_model = best_model
+        self.result.predictions = predictions
         self.result.best_model_hyperparams = hyperparams
