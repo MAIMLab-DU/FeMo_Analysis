@@ -31,6 +31,7 @@ class FeMoNeuralNet:
         self.learning_rate = learning_rate
 
     def compile_model(self, input_shape: tuple[int]):
+
         model = Sequential()
         
         # Add first layer with fixed units
@@ -125,9 +126,6 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                 'learning_rate': trial.suggest_float('learning_rate', **self.search_space['learning_rate'])
             }
             cv_inner = KFold(n_splits=5, shuffle=True, random_state=42)
-            estimator = FeMoNeuralNet(**params).compile_model(
-                input_shape=(train_data[0].shape[1] - 1, )
-            )
 
             accuracy_scores = []
             for i in range(num_folds):
@@ -138,6 +136,9 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                     X_train_fold, y_train_fold = X_train[train_idx], y_train[train_idx]
                     X_val_fold, y_val_fold = X_train[val_idx], y_train[val_idx]
 
+                    estimator = FeMoNeuralNet(**params).compile_model(
+                        input_shape=(train_data[0].shape[1] - 1, )
+                    )
                     estimator.fit(
                         X_train_fold,
                         y_train_fold,
@@ -180,10 +181,6 @@ class FeMoNNClassifier(FeMoBaseClassifier):
 
         num_iterations = len(train_data)
         hyperparams = copy.deepcopy(self.hyperparams)
-
-        self.classifier = FeMoNeuralNet(**hyperparams).compile_model(
-            input_shape=(train_data[0].shape[1] - 1, )
-        )
         early_stopping = EarlyStopping(
             monitor="val_loss",
             patience=patience,
@@ -191,6 +188,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
         ) 
         
         best_accuracy = -1
+        best_model = None
         predictions = []
         accuracy_scores = {
             'train_accuracy': [],
@@ -201,7 +199,10 @@ class FeMoNNClassifier(FeMoBaseClassifier):
             X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
             X_test, y_test = test_data[i][:, :-1], test_data[i][:, -1]
 
-            self.classifier.fit(
+            estimator = FeMoNeuralNet(**hyperparams).compile_model(
+                input_shape=(train_data[0].shape[1] - 1, )
+            )
+            estimator.fit(
                 x=X_train,
                 y=y_train,
                 validation_split=0.2,
@@ -214,7 +215,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
             )
 
             # Train metrics
-            y_hat_train = expit(self.classifier.predict(X_train))
+            y_hat_train = expit(estimator.predict(X_train))
             y_train_pred = (y_hat_train >= 0.5).astype(int)
             current_train_accuracy = accuracy_score(
                 y_pred=y_train_pred,
@@ -222,7 +223,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
             )
 
             # Test metrics
-            y_hat_test = expit(self.classifier.predict(X_test))
+            y_hat_test = expit(estimator.predict(X_test))
             y_test_pred = (y_hat_test >= 0.5).astype(int)
             predictions.append(y_test_pred)
             
@@ -231,7 +232,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                 y_true=y_test[:, np.newaxis]
             )
             roc_auc = roc_auc_score(
-                y_score=y_test_pred,
+                y_score=y_hat_test,
                 y_true=y_test[:, np.newaxis]
             )
 
@@ -240,15 +241,18 @@ class FeMoNNClassifier(FeMoBaseClassifier):
 
             if current_test_accuracy > best_accuracy:
                 best_accuracy = current_test_accuracy
+                best_model = estimator
 
             self.logger.info(f"Iteration {i+1}:")
             self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
-            self.logger.info(f"ROC-AUC score: {roc_auc:.3f}")
             self.logger.info(f"Test Accuracy: {current_test_accuracy:.3f}")
-            self.logger.info(f"Best Accuracy: {best_accuracy:.3f}")
+            self.logger.info(f"ROC-AUC Score: {roc_auc:.3f}")
+            self.logger.info(f"Best Test Accuracy: {best_accuracy:.3f}")
         
-        self.logger.info(f"Fitting model with train data took: {time.time() - start: 0.3f} seconds")
-
+        self.logger.info(f"Fitting model with train data took: {time.time() - start: 0.2f} seconds")
+        self.logger.info(f"Average training accuracy: {np.mean(accuracy_scores['train_accuracy'])}")
+        self.logger.info(f"Average testing accuracy: {np.mean(accuracy_scores['test_accuracy'])}")
+        
+        self.classifier = best_model
         self.result.accuracy_scores = accuracy_scores
         self.result.predictions = predictions
-        self.result.best_model_hyperparams = hyperparams
