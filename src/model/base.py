@@ -9,7 +9,8 @@ from abc import ABC, abstractmethod
 @dataclass
 class Result:
     accuracy_scores: dict
-    predictions: list[np.ndarray]
+    preds: list[np.ndarray]
+    pred_scores: list[np.ndarray]
 
 
 class FeMoBaseClassifier(ABC):
@@ -30,7 +31,7 @@ class FeMoBaseClassifier(ABC):
         self.hyperparams: dict = config.get('hyperparams', {})
         self.classifier = None
 
-        self.result = Result(None, None)
+        self.result = Result(None, None, None)
 
     @staticmethod
     def _update_class_weight(y: np.ndarray, params: dict|None = None):

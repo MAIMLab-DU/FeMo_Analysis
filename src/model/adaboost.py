@@ -88,6 +88,7 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
         best_accuracy = -np.inf
         best_model = None
         predictions = []
+        prediction_scores = []
         accuracy_scores = {
             'train_accuracy': [],
             'test_accuracy': []
@@ -102,7 +103,9 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
 
             y_train_pred = estimator.predict(X_train)
             y_test_pred = estimator.predict(X_test)
+            y_test_pred_score = estimator.predict_proba(X_test)
             predictions.append(y_test_pred)
+            prediction_scores.append(y_test_pred_score)
 
             current_train_accuracy = accuracy_score(
                 y_pred=y_train_pred,
@@ -130,4 +133,5 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
         
         self.classifier = best_model
         self.result.accuracy_scores = accuracy_scores
-        self.result.predictions = predictions
+        self.result.preds = predictions
+        self.result.pred_scores = prediction_scores

@@ -54,8 +54,6 @@ def test_logReg_classifier(folder, strategy):
         
         # TODO: assert with actual results
     assert isinstance(result.accuracy_scores, dict)
-    assert isinstance(result.best_model_hyperparams, dict)
-    assert result.best_model is not None
 
 
 @pytest.mark.parametrize("folder", folders)
@@ -93,8 +91,6 @@ def test_svm_classifier(folder, strategy):
     
     # TODO: assert with actual results
     assert isinstance(result.accuracy_scores, dict)
-    assert isinstance(result.best_model_hyperparams, dict)
-    assert result.best_model is not None
 
 
 @pytest.mark.parametrize("folder", folders)
@@ -132,8 +128,6 @@ def test_rf_classifier(folder, strategy):
     
     # TODO: assert with actual results
     assert isinstance(result.accuracy_scores, dict)
-    assert isinstance(result.best_model_hyperparams, dict)
-    assert result.best_model is not None
 
 
 @pytest.mark.parametrize("folder", folders)
@@ -171,8 +165,6 @@ def test_adaboost_classifier(folder, strategy):
     
     # TODO: assert with actual results
     assert isinstance(result.accuracy_scores, dict)
-    assert isinstance(result.best_model_hyperparams, dict)
-    assert result.best_model is not None
 
 
 @pytest.mark.parametrize("folder", folders)
@@ -210,8 +202,6 @@ def test_femonet_classifier(folder, strategy):
     
     # TODO: assert with actual results
     assert isinstance(result.accuracy_scores, dict)
-    assert isinstance(result.best_model_hyperparams, dict)
-    assert result.best_model is not None
 
 
 if __name__ == "__main__":
