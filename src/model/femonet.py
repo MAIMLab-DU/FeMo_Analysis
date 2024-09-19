@@ -190,6 +190,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
         best_accuracy = -1
         best_model = None
         predictions = []
+        prediction_scores = []
         accuracy_scores = {
             'train_accuracy': [],
             'test_accuracy': []
@@ -225,7 +226,8 @@ class FeMoNNClassifier(FeMoBaseClassifier):
             # Test metrics
             y_hat_test = expit(estimator.predict(X_test))
             y_test_pred = (y_hat_test >= 0.5).astype(int)
-            predictions.append(y_test_pred)
+            predictions.append(np.squeeze(y_test_pred))
+            prediction_scores.append(np.squeeze(y_hat_test))
             
             current_test_accuracy = accuracy_score(
                 y_pred=y_test_pred,
@@ -255,4 +257,5 @@ class FeMoNNClassifier(FeMoBaseClassifier):
         
         self.classifier = best_model
         self.result.accuracy_scores = accuracy_scores
-        self.result.predictions = predictions
+        self.result.preds = predictions
+        self.result.pred_scores = prediction_scores
