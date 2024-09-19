@@ -43,15 +43,15 @@ class FeMoSVClassifier(FeMoBaseClassifier):
                 'kernel': trial.suggest_categorical('kernel', self.search_space['kernel'])
             }
             cv_inner = KFold(n_splits=5, shuffle=True, random_state=42)
-            estimator = SVC(
-                random_state=42,
-                **params
-            )
 
             accuracy_scores = []
             for i in range(num_folds):
                 X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
 
+                estimator = SVC(
+                    random_state=42,
+                    **params
+                )
                 cv_score = cross_val_score(
                     estimator=estimator,
                     cv=cv_inner,
@@ -88,9 +88,7 @@ class FeMoSVClassifier(FeMoBaseClassifier):
         num_iterations = len(train_data)
 
         hyperparams = copy.deepcopy(self.hyperparams)
-        hyperparams = self._update_class_weight(train_data[0][:, -1], hyperparams)
 
-        self.classifier = SVC(random_state=0, probability=True, **hyperparams)
 
         best_accuracy = -np.inf
         predictions = []
@@ -103,10 +101,12 @@ class FeMoSVClassifier(FeMoBaseClassifier):
             X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
             X_test, y_test = test_data[i][:, :-1], test_data[i][:, -1]
 
-            self.classifier.fit(X_train, y_train)
+            hyperparams = self._update_class_weight(train_data[i][:, -1], hyperparams)
+            estimator = SVC(random_state=0, probability=True, **hyperparams)
+            estimator.fit(X_train, y_train)
 
-            y_train_pred = self.classifier.predict(X_train)
-            y_test_pred = self.classifier.predict(X_test)
+            y_train_pred = estimator.predict(X_train)
+            y_test_pred = estimator.predict(X_test)
             predictions.append(y_test_pred)
 
             current_train_accuracy = accuracy_score(
@@ -122,14 +122,17 @@ class FeMoSVClassifier(FeMoBaseClassifier):
 
             if current_test_accuracy > best_accuracy:
                 best_accuracy = current_test_accuracy
-                best_model = self.classifier
+                best_model = estimator
 
             self.logger.info(f"Iteration {i+1}:")
             self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
             self.logger.info(f"Test Accuracy: {current_test_accuracy:.3f}")
-            self.logger.info(f"Best Accuracy: {best_accuracy:.3f}")
+            self.logger.info(f"Best Test Accuracy: {best_accuracy:.3f}")
         
         self.logger.info(f"Fitting model with train data took: {time.time() - start: 0.2f} seconds")
+        self.logger.info(f"Average training accuracy: {np.mean(accuracy_scores['train_accuracy'])}")
+        self.logger.info(f"Average testing accuracy: {np.mean(accuracy_scores['test_accuracy'])}")
+        
+        self.classifier = best_model
         self.result.accuracy_scores = accuracy_scores
         self.result.predictions = predictions
-        self.result.best_model_hyperparams = best_model.get_params()
