@@ -1,0 +1,36 @@
+base: &base
+  sensor_freq: 1024
+  sensation_freq: 1024
+  sensor_selection:
+    - 'accelerometer'
+    - 'piezoelectric_large'
+    - 'piezoelectric_small'
+
+load:
+  <<: *base   # Merge base dictionary
+preprocess:
+  <<: *base   # Merge base dictionary
+segment:
+  <<: *base   # Merge base dictionary
+  imu_acceleration_threshold: 0.2
+  imu_rotation_threshold: 4
+  maternal_dilation_forward: 2.0
+  maternal_dilation_backward: 5.0
+  imu_dilation: 4
+  fm_dilation: 3
+  fm_min_sn: 40
+  fm_signal_cutoff: 0.0001
+fuse:
+  <<: *base   # Merge base dictionary
+  desired_scheme: 1
+extract_det:
+  <<: *base   # Merge base dictionary
+extract_feat:
+  <<: *base   # Merge base dictionary
+  freq_mode_threshold: 1
+  freq_bands:
+    - [1, 2]
+    - [2, 5]
+    - [5, 10]
+    - [10, 20]
+    - [20, 30]
