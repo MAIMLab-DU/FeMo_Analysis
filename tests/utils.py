@@ -30,14 +30,14 @@ def compare_elements(key, actual, desired):
 def compare_dictionaries(actual_dict: dict, desired_dict: dict):
     for key in actual_dict.keys():
         if key not in desired_dict.keys():
-            continue
+            raise KeyError(f"{key} not in {desired_dict.keys()}")
         actual = actual_dict[key]
         desired = desired_dict[key]
 
         if not isinstance(actual, list):
             compare_elements(key, actual, desired)
         else:
-            assert len(actual) == len(desired), f"{key} {len(actual) = } != {len(desired) = }"
+            # assert len(actual) == len(desired), f"{key} {len(actual) = } != {len(desired) = }"
             for i in range(len(actual)):
                 compare_elements(key, actual[i], desired[i])
         

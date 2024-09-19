@@ -20,7 +20,6 @@ class SensorFusion(BaseTransform):
         labeled_fm_map = label(fm_dict['fm_map'])
         num_labels = len(np.unique(labeled_fm_map)) - 1  # -1 to exclude background
         labeled_fm_map = labeled_fm_map.reshape((labeled_fm_map.size, ))
-        print(f"Before: {num_labels = }")
 
         fm_segmented = fm_dict['fm_segmented']
         if not self.use_all_sensors:
@@ -60,7 +59,6 @@ class SensorFusion(BaseTransform):
             
         num_labels = len(np.unique(labeled_user_scheme)) - 1  # -1 to exclude background
         labeled_user_scheme = labeled_user_scheme.reshape((labeled_user_scheme.size, ))
-        print(f"After: {num_labels = }")
         
         return {
             'labeled_user_scheme': labeled_user_scheme,

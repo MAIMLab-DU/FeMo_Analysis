@@ -3,7 +3,6 @@ import numpy as np
 import concurrent.futures
 from typing import Literal
 from functools import reduce
-from skimage.measure import label
 from ._utils import custom_binary_dilation
 from .base import BaseTransform
 
@@ -28,7 +27,7 @@ class DataSegmentor(BaseTransform):
         self.imu_dilation = imu_dilation
         self.fm_dilation = fm_dilation
         self.maternal_dilation_forward = maternal_dilation_forward
-        self.maternal_dilation_backward: maternal_dilation_forward
+        self.maternal_dilation_backward = maternal_dilation_forward
         self.fm_min_sn = [fm_min_sn for _ in range(self.num_sensors)]
         self.segmentation_signal_cutoff = [fm_signal_cutoff for _ in range(self.num_sensors)]
         # Dilation length in sample number 
@@ -202,7 +201,6 @@ class DataSegmentor(BaseTransform):
             segmented_sensor_data[i] = map_final.astype(int)
             
         combined_fm_map = reduce(lambda x, y: x | y, (data for data in segmented_sensor_data))
-        print(f"{len(np.unique(label(combined_fm_map)))-1 = }") 
 
         return {
             'fm_map': combined_fm_map,  # sensor_data_sgmntd_cmbd_all_sensors
