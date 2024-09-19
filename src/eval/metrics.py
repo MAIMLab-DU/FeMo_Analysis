@@ -1,6 +1,5 @@
 # TODO: implement functionality
 import numpy as np
-from collections import defaultdict
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix
@@ -34,31 +33,32 @@ class FeMoMetrics(object):
         self._sensor_freq = sensor_freq
         self._sensation_freq = sensation_freq
 
-        self.accuracy_scores = defaultdict()
-
     def calc_accuracy_scores(self, preds: list[np.ndarray], labels: list[np.ndarray]):
-        accuracy_scores = []
-        for label, pred in zip(labels, preds):
-            acc = defaultdict()
-            acc['test'] = accuracy_score(label, pred)
-            acc['test_tpd'] = accuracy_score(label[label == 1], pred[pred == 1])
-            acc['test_fpd'] = accuracy_score(label[label == 0], pred[pred == 0])
-            accuracy_scores.append(acc)
 
-        self.accuracy_scores['test_avg'] = np.mean(accuracy_scores['test'])
-        self.accuracy_scores['test_tpd_avg'] = np.mean(accuracy_scores['test_tpd'])
-        self.accuracy_scores['test_fpd_avg'] = np.mean(accuracy_scores['test_fpd'])
-        self.accuracy_scores['test_sd'] = np.std(accuracy_scores['test'])
-        self.accuracy_scores['test_tpd_sd'] = np.std(accuracy_scores['test_tpd'])
-        self.accuracy_scores['test_fpd_sd'] = np.std(accuracy_scores['test_fpd'])
+        acc, acc_tpd, acc_fpd = [], [], []
+        num_folds = len(preds)
+        for i in range(num_folds):
+            label, pred = labels[i], preds[i]
+            acc.append(accuracy_score(label, pred))
+            acc_tpd.append(accuracy_score(label[label == 1], pred[pred == 1]))
+            acc_fpd.append(accuracy_score(label[label == 0], pred[pred == 0]))
 
+        return {
+            'test_avg': np.mean(acc),
+            'test_sd': np.std(acc),
+            'test_tpd_avg': np.mean(acc_tpd),
+            'test_tpd_sd': np.std(acc_tpd),
+            'test_fpd_avg': np.mean(acc_fpd),
+            'test_fpd_sd': np.std(acc_fpd),
+        }
+    
     def get_ml_detection_map(self,
                              preds: list[np.ndarray],
                              scheme_dict: dict,
                              sensation_map: np.ndarray):
         
-        preds_tpd = np.ndarray([p[p == 1] for p in preds])
-        preds_fpd = np.ndarray([p[p == 0] for p in preds])
+        preds_tpd = np.array([p[p == 1] for p in preds])
+        preds_fpd = np.array([p[p == 0] for p in preds])
         
         num_labels: int = scheme_dict['num_labels']
         labeled_user_scheme: np.ndarray = scheme_dict['labeled_user_scheme']
