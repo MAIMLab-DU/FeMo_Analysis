@@ -129,7 +129,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
 
             accuracy_scores = []
             for i in range(num_folds):
-                X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
+                X_train, y_train = train_data[i][:, :-3], train_data[i][:, -1]
 
                 cv_scores = []
                 for train_idx, val_idx in cv_inner.split(X_train, y_train):
@@ -137,7 +137,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                     X_val_fold, y_val_fold = X_train[val_idx], y_train[val_idx]
 
                     estimator = FeMoNeuralNet(**params).compile_model(
-                        input_shape=(train_data[0].shape[1] - 1, )
+                        input_shape=(X_train_fold.shape[1], )
                     )
                     estimator.fit(
                         X_train_fold,
@@ -191,17 +191,19 @@ class FeMoNNClassifier(FeMoBaseClassifier):
         best_model = None
         predictions = []
         prediction_scores = []
+        det_indices = []
+        filename_hash = []
         accuracy_scores = {
             'train_accuracy': [],
             'test_accuracy': []
         }
 
         for i in range(num_iterations):
-            X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
-            X_test, y_test = test_data[i][:, :-1], test_data[i][:, -1]
+            X_train, y_train = train_data[i][:, :-3], train_data[i][:, -1]
+            X_test, y_test = test_data[i][:, :-3], test_data[i][:, -1]
 
             estimator = FeMoNeuralNet(**hyperparams).compile_model(
-                input_shape=(train_data[0].shape[1] - 1, )
+                input_shape=(X_train.shape[1], )
             )
             estimator.fit(
                 x=X_train,
@@ -245,6 +247,9 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                 best_accuracy = current_test_accuracy
                 best_model = estimator
 
+            det_indices.append(test_data[i][:, -2])
+            filename_hash.append(test_data[i][:, -3])
+
             self.logger.info(f"Iteration {i+1}:")
             self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
             self.logger.info(f"Test Accuracy: {current_test_accuracy:.3f}")
@@ -259,3 +264,5 @@ class FeMoNNClassifier(FeMoBaseClassifier):
         self.result.accuracy_scores = accuracy_scores
         self.result.preds = predictions
         self.result.pred_scores = prediction_scores
+        self.result.det_indices = det_indices
+        self.result.filename_hash = filename_hash
