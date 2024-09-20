@@ -14,8 +14,9 @@ from data.dataset import (
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
+    parser.add_argument("data-manifest", type=str, required=True, help="Path to data manifest json file")
     parser.add_argument("--data-dir", type=str, default="/opt/ml/processing", help="Path to directory containing .dat and .csv files")
+    parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--inference", action='store_true', help="Flag enable data processing for inference")
     args = parser.parse_args()
 
@@ -55,9 +56,11 @@ def main():
     train = split_dict['train']
     test = split_dict['test']
 
-    joblib.dump(train, os.path.join(data_dir, 'train.pkl'), compress=True)
-    joblib.dump(test, os.path.join(data_dir, 'test.pkl'), compress=True)
-    LOGGER.info(f"Saved datasets to {os.path.abspath(data_dir)}")
+    os.makedirs(args.work_dir, exist_ok=True)
+
+    joblib.dump(train, os.path.join(args.work_dir, 'train.pkl'), compress=True)
+    joblib.dump(test, os.path.join(args.work_dir, 'test.pkl'), compress=True)
+    LOGGER.info(f"Saved datasets to {os.path.abspath(args.work_dir)}")
 
 
 if __name__ == "__main__":
