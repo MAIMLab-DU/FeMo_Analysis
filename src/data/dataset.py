@@ -16,6 +16,7 @@ from sklearn.model_selection import (
     StratifiedKFold
 )
 from collections import defaultdict
+from _utils import gen_hash
 from .pipeline import Pipeline
 from .ranking import FeatureRanker
 
@@ -114,7 +115,6 @@ class FeMoDataset:
         self.logger.error("Bucket or key not provided.")
         return False
         
-    # TODO: Add 'filename_hash' column for identifying which file the sample belongs to.
     def _save_features(self, filename, data: dict) -> pd.DataFrame:
         """Saves the extracted features (and labels) to a .csv file"""
         
@@ -128,9 +128,9 @@ class FeMoDataset:
         
         features_df = pd.DataFrame(features, columns=columns)        
         if labels is not None:
-            features_df['labels'] = labels
+            features_df.insert(-1, 'labels', labels)
         if labels is not None:
-            features_df['det_indices'] = det_indices
+            features_df.insert(-2, 'det_indices', det_indices)
         features_df.to_csv(filename, header=columns is not None, index=False)
         
         return features_df
@@ -143,7 +143,7 @@ class FeMoDataset:
             bucket = item.get('bucketName', None)
             data_file_key = item.get('datFileKey', None)
             feat_file_key = item.get('csvFileKey', None)
-            map_key = os.path.basename(feat_file_key).split('.')[0]
+            map_key = gen_hash(feat_file_key)
             if map_key in self.map.keys():
                 continue
 
@@ -177,7 +177,8 @@ class FeMoDataset:
                 except Exception as e:
                     self.logger.error(f"Error {e}")
                     continue
-                
+
+            current_features.insert(-3, 'filename_hash', map_key)
             self.features_df = pd.concat([self.features_df, current_features], axis=0)   
 
             # Create mapping to get features give a filename from the dataset
@@ -221,7 +222,7 @@ class DataProcessor:
                     data: np.ndarray,
                     strategy: Literal['holdout', 'kfold'] = 'holdout',
                     num_folds: int = 5):
-        
+
         X, y = data[:, :-1], data[:, -1]
         train, test = [], []
         num_tpd_train, num_tpd_test = [], []
@@ -259,14 +260,19 @@ class DataProcessor:
 
     def process(self, input_data: pd.DataFrame):
         self.logger.debug("Processing features...")
-        X_norm = self._normalize_features(input_data.drop('labels', axis=1, errors='ignore').to_numpy())
+        X_norm = self._normalize_features(input_data.drop(['labels', 'det_indices', 'filename_hash'],
+                                                          axis=1, errors='ignore').to_numpy())
         y_pre = input_data.get('labels').to_numpy()
+        det_indices = input_data.get('det_indices').to_numpy()
+        filename_hash = input_data.get('filename_hash').to_numpy()
         
         top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
                                                     func=self._feature_ranker.ensemble_ranking)
         X_norm = X_norm[:, top_feat_indices]
 
-        return np.concatenate([X_norm, y_pre[:, np.newaxis]], axis=1)
+        # -3, -2, -1 are 'filename_hash', 'det_indices' and 'labels', respectively
+        return np.concatenate([X_norm, filename_hash[:, np.newaxis],
+                               det_indices[:, np.newaxis], y_pre[:, np.newaxis]], axis=1)
     
 
 

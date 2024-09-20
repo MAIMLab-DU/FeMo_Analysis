@@ -1,5 +1,6 @@
 # TODO: implement functionality
 import numpy as np
+import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix
@@ -53,13 +54,13 @@ class FeMoMetrics(object):
         }
     
     def get_ml_detection_map(self,
-                             preds: list[np.ndarray],
+                             filname_hash: str,
+                             results_df: pd.DataFrame,
                              scheme_dict: dict,
                              sensation_map: np.ndarray):
         
-        preds_tpd = np.array([p[p == 1] for p in preds])
-        preds_fpd = np.array([p[p == 0] for p in preds])
-        
+        filtered_results = results_df[results_df['filename_hash'] == filname_hash]
+
         num_labels: int = scheme_dict['num_labels']
         labeled_user_scheme: np.ndarray = scheme_dict['labeled_user_scheme']
 
@@ -73,15 +74,17 @@ class FeMoMetrics(object):
                 indv_window = np.zeros(len(sensation_map))
                 indv_window[label_start:label_end] = 1
                 overlap = np.sum(indv_window * sensation_map)  # Checks the overlap with the maternal sensation
+                predicted_value = filtered_results.loc[filtered_results['det_indices'] == k,
+                                                        'predictions'].values[0]
 
                 if overlap:
                     # This is a TPD
-                    if  preds_tpd[tpd_match_idx] == 1:  # Checks the detection from the classifier
+                    if predicted_value == 1:  # Checks the detection from the classifier
                         segmented_sensor_data_ml[label_start:label_end] = 1
                     tpd_match_idx += 1
                 else:
                     # This is an FPD
-                    if preds_fpd[fpd_match_idx] == 1:  # Checks the detection from the classifier
+                    if predicted_value == 1:  # Checks the detection from the classifier
                         segmented_sensor_data_ml[label_start:label_end] = 1
                     fpd_match_idx += 1
 
