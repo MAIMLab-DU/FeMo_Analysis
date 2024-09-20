@@ -149,6 +149,7 @@ class FeatureExtractor(BaseTransform):
         
         threshold = fm_dict['fm_threshold']
 
+        tp_detections_indices = extracted_detections['tp_detections_indices']
         tp_detections_sensor_data = extracted_detections['tp_detections_sensor_data']
         tp_detections_imu_acceleration = extracted_detections['tp_detections_imu_acceleration']
         tp_detections_imu_rotation = extracted_detections['tp_detections_imu_rotation']
@@ -156,6 +157,7 @@ class FeatureExtractor(BaseTransform):
         X_tpd, columns = self._extract_features_of_signal(threshold, tp_detections_sensor_data,
                                                           tp_detections_imu_acceleration, tp_detections_imu_rotation)
         
+        fp_detections_indices = extracted_detections['fp_detections_indices']
         fp_detections_sensor_data = extracted_detections['fp_detections_sensor_data']
         fp_detections_imu_acceleration = extracted_detections['fp_detections_imu_acceleration']
         fp_detections_imu_rotation = extracted_detections['fp_detections_imu_rotation']
@@ -165,12 +167,14 @@ class FeatureExtractor(BaseTransform):
         
         X_extracted = np.vstack([X_tpd, X_fpd])
         y_extracted = np.zeros((X_tpd.shape[0] + X_fpd.shape[0], 1))
-        y_extracted[:X_tpd.shape[0], 0] = 1
+        y_extracted[:X_tpd.shape[0], 0] = 1  # From here on, label 1 means TPD and label 0 means FPD
         y_extracted = np.ravel(y_extracted)
+        det_indices = np.hstack([tp_detections_indices, fp_detections_indices])
 
         return {
             'features': X_extracted,
             'labels': y_extracted,
+            'det_indices': det_indices,
             'columns': columns
         }
  

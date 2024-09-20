@@ -114,12 +114,14 @@ class FeMoDataset:
         self.logger.error("Bucket or key not provided.")
         return False
         
+    # TODO: Add 'filename_hash' column for identifying which file the sample belongs to.
     def _save_features(self, filename, data: dict) -> pd.DataFrame:
         """Saves the extracted features (and labels) to a .csv file"""
         
         features = data.get('features')
         columns = data.get('columns')
         labels = data.get('labels')
+        det_indices = data.get('det_indices')
 
         if features is None:
             raise ValueError("Missing features")
@@ -127,6 +129,8 @@ class FeMoDataset:
         features_df = pd.DataFrame(features, columns=columns)        
         if labels is not None:
             features_df['labels'] = labels
+        if labels is not None:
+            features_df['det_indices'] = det_indices
         features_df.to_csv(filename, header=columns is not None, index=False)
         
         return features_df
