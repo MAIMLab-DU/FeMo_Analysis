@@ -46,7 +46,7 @@ class FeMoSVClassifier(FeMoBaseClassifier):
 
             accuracy_scores = []
             for i in range(num_folds):
-                X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
+                X_train, y_train = train_data[i][:, :-3], train_data[i][:, -1]
 
                 estimator = SVC(
                     random_state=42,
@@ -93,14 +93,16 @@ class FeMoSVClassifier(FeMoBaseClassifier):
         best_accuracy = -np.inf
         predictions = []
         prediction_scores = []
+        det_indices = []
+        filename_hash = []
         accuracy_scores = {
             'train_accuracy': [],
             'test_accuracy': []
         }
 
         for i in range(num_iterations):
-            X_train, y_train = train_data[i][:, :-1], train_data[i][:, -1]
-            X_test, y_test = test_data[i][:, :-1], test_data[i][:, -1]
+            X_train, y_train = train_data[i][:, :-3], train_data[i][:, -1]
+            X_test, y_test = test_data[i][:, :-3], test_data[i][:, -1]
 
             hyperparams = self._update_class_weight(train_data[i][:, -1], hyperparams)
             estimator = SVC(random_state=0, probability=True, **hyperparams)
@@ -127,6 +129,9 @@ class FeMoSVClassifier(FeMoBaseClassifier):
                 best_accuracy = current_test_accuracy
                 best_model = estimator
 
+            det_indices.append(test_data[i][:, -2])
+            filename_hash.append(test_data[i][:, -3])
+
             self.logger.info(f"Iteration {i+1}:")
             self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
             self.logger.info(f"Test Accuracy: {current_test_accuracy:.3f}")
@@ -140,3 +145,6 @@ class FeMoSVClassifier(FeMoBaseClassifier):
         self.result.accuracy_scores = accuracy_scores
         self.result.preds = predictions
         self.result.pred_scores = prediction_scores
+        self.result.det_indices = det_indices
+        self.result.filename_hash = filename_hash
+

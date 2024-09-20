@@ -1,16 +1,45 @@
 import joblib
 import numpy as np
+import pandas as pd
 from logger import LOGGER
 from typing import Literal
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from abc import ABC, abstractmethod
 
 
 @dataclass
 class Result:
-    accuracy_scores: dict
-    preds: list[np.ndarray]
-    pred_scores: list[np.ndarray]
+    accuracy_scores: dict = None
+    preds: list[np.ndarray] = None
+    pred_scores: list[np.ndarray] = None
+    det_indices: list[np.ndarray] = None
+    filename_hash: list[np.ndarray] = None
+
+    def _assert_no_none_fields(self):
+        # Check each field to ensure it is not None
+        for field in fields(self):
+            value = getattr(self, field.name)
+            assert value is not None, f"Field '{field.name}' is None"
+    
+    def compile_results(self,
+                        features_df: pd.DataFrame|None = None,
+                        filename: str|None = None):
+        self._assert_no_none_fields()
+
+        results_df = {
+            'filename_hash': self.filename_hash,
+            'det_indices': self.det_indices,
+            'predictions': self.preds,
+            'prediction_scores': self.pred_scores
+        }
+        results_df = pd.DataFrame(results_df)
+
+        if features_df is not None:
+            results_df = features_df.merge(results_df, on=['filename_hash', 'det_indices'])        
+        if filename is not None:
+            results_df.to_csv(filename, index=False)
+        
+        return results_df
 
 
 class FeMoBaseClassifier(ABC):
@@ -31,7 +60,7 @@ class FeMoBaseClassifier(ABC):
         self.hyperparams: dict = config.get('hyperparams', {})
         self.classifier = None
 
-        self.result = Result(None, None, None)
+        self.result = Result()
 
     @staticmethod
     def _update_class_weight(y: np.ndarray, params: dict|None = None):
