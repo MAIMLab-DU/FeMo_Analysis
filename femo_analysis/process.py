@@ -40,6 +40,7 @@ def main():
                           dataproc_cfg.get('data_pipeline'))
     df = dataset.build()
     if args.inference:
+        df.to_csv(os.path.join(args.work_dir, 'inference.csv'), header=True, index=False)
         LOGGER.info("Dataset built for inference.")
         return
 

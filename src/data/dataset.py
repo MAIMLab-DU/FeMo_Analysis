@@ -70,9 +70,10 @@ class FeMoDataset:
     def __repr__(self):
         return f"{self.__class__.__name__}(features_df={repr(self.features_df)})"
     
-    def __getitem__(self, key):
+    def __getitem__(self, filename: str):
         """Get the rows of features for the given key (filename)"""
-        return self.features_df.iloc[self.map[key][0]:self.map[key][1], :]
+        filename_hash = gen_hash(filename)
+        return self.features_df[self.features_df['filename_hash'] == filename_hash]
     
     def _upload_to_s3(self, filename, bucket=None, key=None):
 
@@ -115,7 +116,7 @@ class FeMoDataset:
         self.logger.error("Bucket or key not provided.")
         return False
         
-    def _save_features(self, filename, data: dict) -> pd.DataFrame:
+    def _save_features(self, filename, data: dict, key: str | None = None) -> pd.DataFrame:
         """Saves the extracted features (and labels) to a .csv file"""
         
         features = data.get('features')
@@ -126,11 +127,25 @@ class FeMoDataset:
         if features is None:
             raise ValueError("Missing features")
         
-        features_df = pd.DataFrame(features, columns=columns)        
+        features_df = pd.DataFrame(features, columns=columns)
+
+        # Add optional columns based on existence
+        if key is not None:
+            features_df['filename_hash'] = key
+        if det_indices is not None:
+            features_df['det_indices'] = det_indices
         if labels is not None:
-            features_df.insert(-1, 'labels', labels)
-        if labels is not None:
-            features_df.insert(-2, 'det_indices', det_indices)
+            features_df['labels'] = labels
+
+        # Ensure the columns order is: filename_hash, det_indices, labels
+        optional_columns = ['filename_hash', 'det_indices', 'labels']
+        final_columns = [col for col in features_df.columns if col not in optional_columns]
+        
+        # Only include columns that exist in the DataFrame
+        final_columns += [col for col in optional_columns if col in features_df.columns]
+
+        # Reorder DataFrame columns
+        features_df = features_df[final_columns]
         features_df.to_csv(filename, header=columns is not None, index=False)
         
         return features_df
