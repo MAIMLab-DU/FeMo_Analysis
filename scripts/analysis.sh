@@ -1,5 +1,7 @@
 #!/bin/bash
 
+start_time="$(date +%s)"
+
 # Check if the first argument is provided and store it in DATA_MANIFEST
 if [ -z "$1" ]; then
     echo "Usage: $0 <data_manifest>"
@@ -8,7 +10,7 @@ else
     DATA_MANIFEST="$1"
 fi
 
-# Use the $WORK_DIR environment variable, or default to './work_dir'
+SCRIPT_DIR="femo_analysis"
 WORK_DIR=${WORK_DIR:-"./work_dir"}
 
 # Create the $WORK_DIR directory if it doesn't exist
@@ -30,3 +32,21 @@ echo "Created run directory: $RUN_DIR"
 echo "Data manifest: $DATA_MANIFEST"
 
 # TODO: process.py -> train.py -> evaluate.py pipeline
+VIRTUAL_ENV=.venv
+# Set up virtual env
+virtualenv -p python3.10 $VIRTUAL_ENV
+. $VIRTUAL_ENV/bin/activate
+#Install requirements
+pip install -r ./requirements.txt
+# Run process.py
+# python "$RUN_DIR/process.py" "$DATA_MANIFEST"
+# Run train.py
+python "./$SCRIPT_DIR/train.py" "$DATA_MANIFEST" --work-dir "$RUN_DIR"
+# Run evaluate.py
+# python "$RUN_DIR/evaluate.py"
+
+# Record the end time
+end_time="$(date +%s)"
+# Calculate the running time
+running_time="$((end_time - start_time)) seconds"
+echo "Total time taken: $running_time"
