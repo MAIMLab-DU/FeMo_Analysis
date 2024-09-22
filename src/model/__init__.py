@@ -12,3 +12,11 @@ __all__ = [
     'FeMoAdaBoostClassifier',
     'FeMoNNClassifier',
 ]
+
+CLASSIFIER_MAP = {
+    'logReg': FeMoLogRegClassifier,
+    'svc': FeMoSVClassifier,
+    'random-forest': FeMoRFClassifier,
+    'adaboost': FeMoAdaBoostClassifier,
+    'neural-net': FeMoNNClassifier
+}
