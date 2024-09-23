@@ -151,7 +151,7 @@ class FeatureRanker:
             raise ValueError(f"Invalid {estimator = }")
         rfe = RFE(estimator=estimator,
                   n_features_to_select=n_top_feats,
-                  verbose=0,
+                  verbose=1,
                   **self._param_cfg.get('recursive_ranking'))
         rfe.fit(X, y)
         recursive_top_indices = rfe.get_support(indices=True)

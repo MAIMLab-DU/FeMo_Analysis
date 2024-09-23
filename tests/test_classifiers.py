@@ -47,7 +47,7 @@ def test_logReg_classifier(folder, strategy):
     )
     train_data, test_data = actual_split_dict['train'], actual_split_dict['test']
 
-    classifier.search(train_data, test_data)
+    classifier.tune(train_data, test_data)
     classifier.fit(train_data, test_data)
     result = classifier.result
     print(result)
@@ -84,7 +84,7 @@ def test_svm_classifier(folder, strategy):
     )
     train_data, test_data = actual_split_dict['train'], actual_split_dict['test']
 
-    classifier.search(train_data, test_data)
+    classifier.tune(train_data, test_data)
     classifier.fit(train_data, test_data)
     result = classifier.result
     print(result)
@@ -121,7 +121,7 @@ def test_rf_classifier(folder, strategy):
     )
     train_data, test_data = actual_split_dict['train'], actual_split_dict['test']
 
-    classifier.search(train_data, test_data)
+    classifier.tune(train_data, test_data)
     classifier.fit(train_data, test_data)
     result = classifier.result
     print(result)
@@ -158,7 +158,7 @@ def test_adaboost_classifier(folder, strategy):
     )
     train_data, test_data = actual_split_dict['train'], actual_split_dict['test']
 
-    classifier.search(train_data, test_data)
+    classifier.tune(train_data, test_data)
     classifier.fit(train_data, test_data)
     result = classifier.result
     print(result)
@@ -195,7 +195,7 @@ def test_femonet_classifier(folder, strategy):
     )
     train_data, test_data = actual_split_dict['train'], actual_split_dict['test']
 
-    classifier.search(train_data, test_data)
+    classifier.tune(train_data, test_data)
     classifier.fit(train_data, test_data)
     result = classifier.result
     print(result)

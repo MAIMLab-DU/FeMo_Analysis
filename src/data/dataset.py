@@ -3,6 +3,7 @@ import boto3
 import json
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from logger import LOGGER
 from typing import Literal
 from botocore.exceptions import (
@@ -16,7 +17,7 @@ from sklearn.model_selection import (
     StratifiedKFold
 )
 from collections import defaultdict
-from _utils import gen_hash
+from ._utils import gen_hash
 from .pipeline import Pipeline
 from .ranking import FeatureRanker
 
@@ -92,6 +93,8 @@ class FeMoDataset:
 
     def _download_from_s3(self, filename, bucket=None, key=None):
         
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        
         if bucket and key:
             download_dir = Path(self._base_dir)
             download_dir.mkdir(parents=True, exist_ok=True)
@@ -152,7 +155,7 @@ class FeMoDataset:
     
     def build(self):
 
-        for item in self.data_manifest['items']:
+        for item in tqdm(self.data_manifest['items'], desc="Processing items", unit="item"):
             start_idx = len(self.features_df)
 
             bucket = item.get('bucketName', None)
@@ -162,7 +165,7 @@ class FeMoDataset:
             if map_key in self.map.keys():
                 continue
 
-            data_filename = os.path.join(self.base_dir, os.path.basename(data_file_key))
+            data_filename = os.path.join(self.base_dir, data_file_key)
             data_success = self._download_from_s3(
                 filename=data_filename,
                 bucket=bucket,
@@ -172,7 +175,7 @@ class FeMoDataset:
                 self.logger.warning(f"Failed to download {data_filename} from {bucket = }, {data_file_key =}")
                 continue
 
-            feat_filename = os.path.join(self.base_dir, os.path.basename(feat_file_key))
+            feat_filename = os.path.join(self.base_dir, feat_file_key)
             feat_success = self._download_from_s3(
                 filename=feat_filename,
                 bucket=bucket,
@@ -182,18 +185,19 @@ class FeMoDataset:
                 current_features = pd.read_csv(feat_filename, index_col=False)
             else:
                 extracted_features = self.pipeline.process(filename=data_filename)['extracted_features']
+                current_features = self._save_features(filename=feat_filename,
+                                                       data=extracted_features,
+                                                       key=map_key)
                 try:
-                    current_features = self._save_features(filename=feat_filename, data=extracted_features)
                     self._upload_to_s3(
                         filename=feat_filename,
                         bucket=bucket,
                         key=feat_file_key
                     )
                 except Exception as e:
-                    self.logger.error(f"Error {e}")
-                    continue
+                    self.logger.warning(e)
+                    pass
 
-            current_features.insert(-3, 'filename_hash', map_key)
             self.features_df = pd.concat([self.features_df, current_features], axis=0)   
 
             # Create mapping to get features give a filename from the dataset
@@ -238,7 +242,7 @@ class DataProcessor:
                     strategy: Literal['holdout', 'kfold'] = 'holdout',
                     num_folds: int = 5):
 
-        X, y = data[:, :-1], data[:, -1]
+        X, y = data[:, :-1], np.squeeze(data[:, -1])
         train, test = [], []
         num_tpd_train, num_tpd_test = [], []
         num_fpd_train, num_fpd_test = [], []
@@ -277,9 +281,9 @@ class DataProcessor:
         self.logger.debug("Processing features...")
         X_norm = self._normalize_features(input_data.drop(['labels', 'det_indices', 'filename_hash'],
                                                           axis=1, errors='ignore').to_numpy())
-        y_pre = input_data.get('labels').to_numpy()
-        det_indices = input_data.get('det_indices').to_numpy()
-        filename_hash = input_data.get('filename_hash').to_numpy()
+        y_pre = input_data.get('labels').to_numpy(dtype=float)
+        det_indices = input_data.get('det_indices').to_numpy(dtype=int)
+        filename_hash = input_data.get('filename_hash').to_numpy(dtype=int)
         
         top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
                                                     func=self._feature_ranker.ensemble_ranking)
