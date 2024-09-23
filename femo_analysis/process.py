@@ -14,8 +14,8 @@ from data.dataset import (
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("data-manifest", type=str, help="Path to data manifest json file")
-    parser.add_argument("--data-dir", type=str, default="/opt/ml/processing", help="Path to directory containing .dat and .csv files")
+    parser.add_argument("dataManifest", type=str, help="Path to data manifest json file")
+    parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--inference", action='store_true', help="Flag enable data processing for inference")
     args = parser.parse_args()
@@ -32,10 +32,9 @@ def main():
         dataproc_cfg = yaml.safe_load(f)
 
     LOGGER.info("Downloading raw input data")
-    data_dir = args.data_dir
 
-    dataset = FeMoDataset(data_dir,
-                          args.data_manifest,
+    dataset = FeMoDataset(args.data_dir,
+                          args.dataManifest,
                           args.inference,
                           dataproc_cfg.get('data_pipeline'))
     df = dataset.build()
@@ -43,13 +42,14 @@ def main():
         df.to_csv(os.path.join(args.work_dir, 'inference.csv'), header=True, index=False)
         LOGGER.info("Dataset built for inference.")
         return
+    df.to_csv(os.path.join(args.work_dir, 'features.csv'), header=True, index=False)
+    LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
 
     LOGGER.info("Preprocessing raw input data")
     data_processor = DataProcessor(feat_rank_cfg=dataproc_cfg.get('feature_ranking'))
     data_output = data_processor.process(input_data=df)
 
-    len_data_output = len(data_output)
-    LOGGER.info(f"Splitting {len_data_output} rows of data into train, test datasets.")
+    LOGGER.info(f"Splitting {len(data_output)} rows of data into train, test datasets.")
     split_dict = data_processor.split_data(
         data=data_output,
         **dataproc_cfg.get('data_processor', {})

@@ -63,12 +63,12 @@ class FeMoMetrics(object):
         }
     
     def _get_ml_detection_map(self,
-                             filname_hash: str,
+                             filename_hash: int,
                              results_df: pd.DataFrame,
                              scheme_dict: dict,
                              sensation_map: np.ndarray):
         
-        filtered_results = results_df[results_df['filename_hash'] == filname_hash]
+        filtered_results = results_df[results_df['filename_hash'] == filename_hash]
 
         num_labels: int = scheme_dict['num_labels']
         labeled_user_scheme: np.ndarray = scheme_dict['labeled_user_scheme']
@@ -104,7 +104,7 @@ class FeMoMetrics(object):
         }
     
     def calc_tpfp(self,
-                  preprocessed_dict: dict,
+                  preprocessed_data: dict,
                   imu_map: np.ndarray,
                   sensation_map: np.ndarray,
                   ml_dict: dict|None = None,
@@ -115,10 +115,10 @@ class FeMoMetrics(object):
         # Minimum overlap in second
         min_overlap_time = self.fm_dilation / 2
 
-        sensation_data = preprocessed_dict['sensation_data']
+        sensation_data = preprocessed_data['sensation_data']
         if ml_dict is None:
             ml_dict = self._get_ml_detection_map(sensation_map=sensation_map, **kwargs)
-        ml_detection_map = np.copy([ml_dict['ml_detection_map']])
+        ml_detection_map = np.copy([ml_dict['ml_detection_map'] for _ in range(self.num_sensors)])
 
         # Variable declaration
         true_pos = {key: 0 for key in self.sensors}  # True positive ML detection
@@ -201,10 +201,10 @@ class FeMoMetrics(object):
                 index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
 
         return {
-            'true_positives': true_pos,
-            'false_positives': false_pos,
-            'true_negatives': true_neg,
-            'false_negatives': false_neg
+            'true_positive': true_pos,
+            'false_positive': false_pos,
+            'true_negative': true_neg,
+            'false_negative': false_neg
         }
     
     def calc_metrics(self,
@@ -216,14 +216,15 @@ class FeMoMetrics(object):
             'specificity': {key: 0 for key in self.sensors},
             'precision/ppv': {key: 0 for key in self.sensors},
             'f1-score': {key: 0 for key in self.sensors},
-            'fp_rate': {key: 0 for key in self.sensors}
+            'fp_rate': {key: 0 for key in self.sensors},
+            'PABAK': {key: 0 for key in self.sensors}
         }
 
         for sensor in self.sensors:
-            tp = tpfp_dict['true_positives'][sensor]
-            fp = tpfp_dict['false_positives'][sensor]
-            tn = tpfp_dict['true_negatives'][sensor]
-            fn = tpfp_dict['false_negatives'][sensor]
+            tp = tpfp_dict['true_positive'][sensor]
+            fp = tpfp_dict['false_positive'][sensor]
+            tn = tpfp_dict['true_negative'][sensor]
+            fn = tpfp_dict['false_negative'][sensor]
 
             accuracy = (tp + tn) / (tp + fp + tn + fn)
             metric_dict['accuracy'][sensor] = accuracy
@@ -244,8 +245,10 @@ class FeMoMetrics(object):
             f1_score = (1+beta**2)*(precision*sensitivity) / (beta**2*precision+sensitivity)
             metric_dict['f1-score'][sensor] = f1_score
 
-        return metric_dict
+            pabak = 2*accuracy - 1
+            metric_dict['PABAK'][sensor] = pabak
 
+        return metric_dict
 
 
     
