@@ -34,7 +34,7 @@ class FeMoRFClassifier(FeMoBaseClassifier):
                  }):
         super().__init__(config)
 
-    def search(self,
+    def tune(self,
                train_data: list[np.ndarray],
                test_data: list[np.ndarray],
                n_trials: int = 10):

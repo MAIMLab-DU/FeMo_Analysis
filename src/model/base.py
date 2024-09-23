@@ -21,16 +21,26 @@ class Result:
             value = getattr(self, field.name)
             assert value is not None, f"Field '{field.name}' is None"
     
+    def save(self, filename: str):
+        results_df = {
+            'filename_hash': [item for sublist in self.filename_hash for item in sublist],
+            'det_indices': [item for sublist in self.det_indices for item in sublist],
+            'predictions': [item for sublist in self.preds for item in sublist],
+            'prediction_scores': [item for sublist in self.pred_scores for item in sublist]
+        }
+        results_df = pd.DataFrame(results_df)
+        results_df.to_csv(filename, index=False)
+    
     def compile_results(self,
                         features_df: pd.DataFrame|None = None,
                         filename: str|None = None):
         self._assert_no_none_fields()
 
         results_df = {
-            'filename_hash': self.filename_hash,
-            'det_indices': self.det_indices,
-            'predictions': self.preds,
-            'prediction_scores': self.pred_scores
+            'filename_hash': [item for sublist in self.filename_hash for item in sublist],
+            'det_indices': [item for sublist in self.det_indices for item in sublist],
+            'predictions': [item for sublist in self.preds for item in sublist],
+            'prediction_scores': [item for sublist in self.pred_scores for item in sublist]
         }
         results_df = pd.DataFrame(results_df)
 
@@ -61,6 +71,9 @@ class FeMoBaseClassifier(ABC):
         self.classifier = None
 
         self.result = Result()
+    
+    def __repr__(self) -> str:
+        return f"{type(self)} hyperparameters: {self.hyperparams}\nsearch_space: {self.search_space}"
 
     @staticmethod
     def _update_class_weight(y: np.ndarray, params: dict|None = None):
@@ -93,7 +106,7 @@ class FeMoBaseClassifier(ABC):
             self.logger.error("No model trained yet. Cannot save.")
 
     @abstractmethod
-    def search(self, *args, **kwargs):
+    def tune(self, *args, **kwargs):
         """Class method using Cross Validation to search for best estimator 
         and hyperparameters
 
