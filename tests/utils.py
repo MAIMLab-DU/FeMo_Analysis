@@ -12,6 +12,9 @@ def list_folders(directory):
 
 
 def compare_elements(key, actual, desired):
+    if isinstance(actual, int) or isinstance(actual, float):
+        assert actual == desired, f"{key} mismatched: {actual} != {desired}"
+
     if isinstance(actual, np.ndarray):            
         if actual.dtype == float:
             np.testing.assert_allclose(
@@ -34,10 +37,13 @@ def compare_dictionaries(actual_dict: dict, desired_dict: dict):
         actual = actual_dict[key]
         desired = desired_dict[key]
 
+        if isinstance(actual, dict):
+            compare_dictionaries(actual, desired)
+
         if not isinstance(actual, list):
             compare_elements(key, actual, desired)
         else:
-            # assert len(actual) == len(desired), f"{key} {len(actual) = } != {len(desired) = }"
+            assert len(actual) == len(desired), f"{key} {len(actual) = } != {len(desired) = }"
             for i in range(len(actual)):
                 compare_elements(key, actual[i], desired[i])
         

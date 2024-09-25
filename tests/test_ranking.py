@@ -37,16 +37,16 @@ def test_feature_ranking(folder):
 
     y_pre = extracted_features['labels']
 
-    actual_feature_ranks = feature_ranker.fit(X_norm, y_pre,
-                                              func=feature_ranker.ensemble_feature_selection)
-    desired_feature_ranks = joblib.load(
+    actual_feat_rank = feature_ranker.fit(X_norm, y_pre,
+                                          func=feature_ranker.ensemble_ranking)
+    desired_feat_rank = joblib.load(
         os.path.join(data_folder, folder, "top_feat_indices.pkl")
     )
 
     compare_elements(
-        key='feature_ranks',
-        actual=actual_feature_ranks,
-        desired=desired_feature_ranks
+        key='top_feat_indices',
+        actual=actual_feat_rank,
+        desired=desired_feat_rank
     )
 
 

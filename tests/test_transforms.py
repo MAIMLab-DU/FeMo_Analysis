@@ -6,6 +6,8 @@ from utils import (
     compare_elements,
     compare_dictionaries
 )
+import numpy as np
+from skimage.measure import label
 from data.transforms import (
     DataLoader,
     DataPreprocessor,
@@ -59,25 +61,6 @@ def test_preprocessed_data(folder):
 
 
 @pytest.mark.parametrize("folder", folders)
-def test_user_scheme(folder):
-    """
-    Test labeled fm map and 
-    comparing it with pre-stored expected results.
-    """
-
-    data_fusion = SensorFusion()
-    fm_dict = joblib.load(os.path.join(data_folder, folder, "fm_dict.pkl"))
-    actual_user_scheme = data_fusion(fm_dict=fm_dict)
-    desired_user_scheme = joblib.load(
-        os.path.join(data_folder, folder, "labeled_user_scheme.pkl")
-    )
-
-    compare_dictionaries(
-        actual_dict=actual_user_scheme, desired_dict=desired_user_scheme
-    )
-
-
-@pytest.mark.parametrize("folder", folders)
 def test_imu_map(folder):
     """
     Test imu_map from preprocessed data and 
@@ -99,6 +82,31 @@ def test_imu_map(folder):
     )
 
 
+# TODO: add sensation_dict.pkl
+@pytest.mark.parametrize("folder", folders)
+def test_sensation_map(folder):
+    """
+    Test maternal sensation map from preprocessed data and 
+    comparing it with pre-stored expected results.
+    """
+
+    data_segmentor = DataSegmentor()
+    preprocessed_data = joblib.load(
+        os.path.join(data_folder, folder, "preprocessed_data.pkl")
+    )
+    actual_sensation_map = data_segmentor.transform(map_name='sensation',
+                                                preprocessed_data=preprocessed_data)
+    desired_sensation_map = joblib.load(os.path.join(data_folder, folder, "sensation_map.pkl"))
+    
+    num_maternal_sensed = len(np.unique(label(preprocessed_data['sensation_data']))) - 1
+
+    compare_elements(
+        key='sensation_map',
+        actual=actual_sensation_map,
+        desired=desired_sensation_map
+    )
+
+
 @pytest.mark.parametrize("folder", folders)
 def test_fm_map(folder):
     """
@@ -116,26 +124,56 @@ def test_fm_map(folder):
 
     compare_dictionaries(actual_dict=actual_fm_dict, desired_dict=desired_fm_dict)
 
-# TODO: add sensation_dict.pkl
+
 @pytest.mark.parametrize("folder", folders)
-def test_sensation_map(folder):
+def test_user_scheme(folder):
     """
-    Test maternal sensation map from preprocessed data and 
+    Test labeled fm map and 
     comparing it with pre-stored expected results.
     """
 
-    data_segmentor = DataSegmentor()
+    data_fusion = SensorFusion()
+    fm_dict = joblib.load(os.path.join(data_folder, folder, "fm_dict.pkl"))
+    actual_user_scheme = data_fusion(fm_dict=fm_dict)
+    desired_user_scheme = joblib.load(
+        os.path.join(data_folder, folder, "scheme_dict.pkl")
+    )
+
+    compare_dictionaries(
+        actual_dict=actual_user_scheme, desired_dict=desired_user_scheme
+    )
+
+
+@pytest.mark.parametrize("folder", folders)
+def test_detections_for_train(folder):
+    """
+    Test detections extracted for train from preprocessed data and
+    comparing it with pre-stored expected results.
+    """
+    
+    detection_extractor = DetectionExtractor()
+
     preprocessed_data = joblib.load(
         os.path.join(data_folder, folder, "preprocessed_data.pkl")
     )
-    actual_sensation_map = data_segmentor.transform(map_name='sensation',
-                                                preprocessed_data=preprocessed_data)
-    desired_sensation_map = joblib.load(os.path.join(data_folder, folder, "sensation_map.pkl"))
+    scheme_dict = joblib.load(
+        os.path.join(data_folder, folder, "scheme_dict.pkl")
+    )
+    sensation_map = joblib.load(
+        os.path.join(data_folder, folder, "sensation_map.pkl")
+    )
+    actual_extracted_detections = detection_extractor.transform(
+        inference=False,
+        preprocessed_data=preprocessed_data, scheme_dict=scheme_dict,
+        sensation_map=sensation_map
+    )
+    desired_extracted_detections = joblib.load(
+        os.path.join(data_folder, folder, "extracted_detections_train.pkl")
+    )
 
-    compare_elements(
-        key='sensation_map',
-        actual=actual_sensation_map,
-        desired=desired_sensation_map
+    compare_dictionaries(
+        actual_dict=actual_extracted_detections,
+        desired_dict=desired_extracted_detections,
     )
 
 
@@ -230,7 +268,6 @@ def test_features_for_train(folder):
         actual=actual_extracted_features['labels'],
         desired=desired_extracted_features['labels']
     )
-
 
 
 if __name__ == "__main__":

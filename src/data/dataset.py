@@ -153,7 +153,7 @@ class FeMoDataset:
         
         return features_df
     
-    def build(self):
+    def build(self, force_extract: bool = False):
 
         for item in tqdm(self.data_manifest['items'], desc="Processing items", unit="item"):
             start_idx = len(self.features_df)
@@ -181,7 +181,7 @@ class FeMoDataset:
                 bucket=bucket,
                 key=feat_file_key
             )
-            if feat_success:
+            if feat_success and not force_extract:
                 current_features = pd.read_csv(feat_filename, index_col=False)
             else:
                 extracted_features = self.pipeline.process(filename=data_filename)['extracted_features']
@@ -232,8 +232,7 @@ class DataProcessor:
         norm_feats = data - mu
         dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
         # Avoid division by zero by adding a small epsilon
-        epsilon = 1e-8
-        norm_feats = norm_feats / (dev + epsilon)
+        norm_feats = norm_feats / dev
 
         return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)]
     
@@ -281,7 +280,7 @@ class DataProcessor:
         self.logger.debug("Processing features...")
         X_norm = self._normalize_features(input_data.drop(['labels', 'det_indices', 'filename_hash'],
                                                           axis=1, errors='ignore').to_numpy())
-        y_pre = input_data.get('labels').to_numpy(dtype=float)
+        y_pre = input_data.get('labels').to_numpy(dtype=int)
         det_indices = input_data.get('det_indices').to_numpy(dtype=int)
         filename_hash = input_data.get('filename_hash').to_numpy(dtype=int)
         

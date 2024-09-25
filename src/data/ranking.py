@@ -144,9 +144,9 @@ class FeatureRanker:
         estimator_type = self._param_cfg.get('recursive_ranking').pop('estimator')
         
         if estimator_type == 'AdaBoost':
-            estimator = AdaBoostClassifier()
+            estimator = AdaBoostClassifier(random_state=0)
         elif estimator_type == 'ExtraTrees':
-            estimator = ExtraTreesClassifier()  # gives slightly low f1 score.
+            estimator = ExtraTreesClassifier(random_state=0)  # gives slightly low f1 score.
         else:
             raise ValueError(f"Invalid {estimator = }")
         rfe = RFE(estimator=estimator,
