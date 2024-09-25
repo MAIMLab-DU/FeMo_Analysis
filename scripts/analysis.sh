@@ -30,7 +30,7 @@ LAST_RUN=$(ls -d "$WORK_DIR"/run* 2>/dev/null | grep -o 'run[0-9]\+' | sort -V |
 NEXT_RUN=$((LAST_RUN + 1))
 
 # Create the next run directory
-RUN_DIR="$WORK_DIR/run10"
+RUN_DIR="$WORK_DIR/run$NEXT_RUN"
 mkdir -p "$RUN_DIR"
 
 # Output the created run directory and the DATA_MANIFEST

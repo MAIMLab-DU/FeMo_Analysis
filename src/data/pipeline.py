@@ -19,17 +19,19 @@ class Pipeline(object):
         return LOGGER
 
     def __init__(self,
-                 cfg: dict,
+                 cfg: dict|str,
                  inference: bool = False) -> None:
 
         self.inference = inference
-        self.cfg = cfg
+        self.cfg = cfg if isinstance(cfg, dict) else self._get_pipeline_cfg(cfg)
         self.stages = self._get_stages(
             pipeline_cfg=self.cfg
         )
 
     @staticmethod
     def _get_pipeline_cfg(path=None):
+        if path is None:
+            raise ValueError("Pipeline configuration file path is required.")
         with open(path, 'r') as file:
             return yaml.safe_load(file)
 

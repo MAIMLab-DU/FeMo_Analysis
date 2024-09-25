@@ -23,10 +23,10 @@ class Result:
     
     def save(self, filename: str):
         results_df = {
-            'filename_hash': [item for sublist in self.filename_hash for item in sublist],
-            'det_indices': [item for sublist in self.det_indices for item in sublist],
-            'predictions': [item for sublist in self.preds for item in sublist],
-            'prediction_scores': [item for sublist in self.pred_scores for item in sublist]
+            'filename_hash': [item for fold in self.filename_hash for item in fold],
+            'det_indices': [item for fold in self.det_indices for item in fold],
+            'predictions': [item for fold in self.preds for item in fold],
+            'prediction_scores': [item for fold in self.pred_scores for item in fold]
         }
         results_df = pd.DataFrame(results_df)
         results_df.to_csv(filename, index=False)
