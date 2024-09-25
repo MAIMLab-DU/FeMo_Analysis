@@ -100,7 +100,8 @@ class FeMoMetrics(object):
         return {
             'ml_detection_map': segmented_sensor_data_ml,
             'tpd_indices': tpd_indices,
-            'fpd_indices': fpd_indices
+            'fpd_indices': fpd_indices,
+            'num_labels': num_labels
         }
     
     def calc_tpfp(self,
@@ -118,54 +119,50 @@ class FeMoMetrics(object):
         sensation_data = preprocessed_data['sensation_data']
         if ml_dict is None:
             ml_dict = self._get_ml_detection_map(sensation_map=sensation_map, **kwargs)
-        ml_detection_map = np.copy([ml_dict['ml_detection_map'] for _ in range(self.num_sensors)])
+        ml_detection_map = np.copy(ml_dict['ml_detection_map'])
 
         # Variable declaration
-        true_pos = {key: 0 for key in self.sensors}  # True positive ML detection
-        false_neg = {key: 0 for key in self.sensors}  # False negative detection
-        true_neg = {key: 0 for key in self.sensors}  # True negative detection
-        false_pos = {key: 0 for key in self.sensors}  # False positive detection
+        true_pos = 0  # True positive ML detection
+        false_neg = 0  # False negative detection
+        true_neg = 0  # True negative detection
+        false_pos = 0  # False positive detection
 
         # Labeling sensation data and determining the number of maternal sensation detection
         labeled_sensation_data = label(sensation_data)
         num_maternal_sensed = len(np.unique(labeled_sensation_data)) - 1
 
-        # Loop for matching individual sensors
-        for i in range(self.num_sensors):
-            sensor = self.sensors[i]
+        # ------------------ Determination of TPD and FND ----------------%    
+        if num_maternal_sensed:  # When there is a detection by the mother
+            for k in range(1, num_maternal_sensed + 1):
+                L_min = np.where(labeled_sensation_data == k)[0][0]  # Sample no. corresponding to the start of the label
+                L_max = np.where(labeled_sensation_data == k)[0][-1] # Sample no. corresponding to the end of the label
 
-            # ------------------ Determination of TPD and FND ----------------%    
-            if num_maternal_sensed:  # When there is a detection by the mother
-                for k in range(1, num_maternal_sensed + 1):
-                    L_min = np.where(labeled_sensation_data == k)[0][0]  # Sample no. corresponding to the start of the label
-                    L_max = np.where(labeled_sensation_data == k)[0][-1]  # Sample no. corresponding to the end of the label
+                # sample no. for the starting point of this sensation in the map
+                L1 = L_min * round(self._sensor_freq / self._sensation_freq) - self.extension_backward
+                L1 = max(L1, 0)  # Just a check so that L1 remains higher than 1st data sample
 
-                    # sample no. for the starting point of this sensation in the map
-                    L1 = L_min * round(self._sensor_freq / self._sensation_freq) - self.extension_backward
-                    L1 = max(L1, 0)  # Just a check so that L1 remains higher than 1st data sample
+                # sample no. for the ending point of this sensation in the map
+                L2 = L_max * round(self._sensor_freq / self._sensation_freq) + self.extension_forward
+                L2 = min(L2, len(ml_detection_map))  # Just a check so that L2 remains lower than the last data sample
 
-                    # sample no. for the ending point of this sensation in the map
-                    L2 = L_max * round(self._sensor_freq / self._sensation_freq) + self.extension_forward
-                    L2 = min(L2, len(ml_detection_map[i]))  # Just a check so that L2 remains lower than the last data sample
+                indv_sensation_map = np.zeros(len(ml_detection_map))  # Need to be initialized before every detection matching
+                indv_sensation_map[L1:L2+1] = 1  # mapping individual sensation data
 
-                    indv_sensation_map = np.zeros(len(ml_detection_map[i]))  # Need to be initialized before every detection matching
-                    indv_sensation_map[L1:L2] = 1  # mapping individual sensation data
+                # this is non-zero if there is a coincidence with maternal body movement
+                overlap = np.sum(indv_sensation_map * imu_map)
 
-                    # this is non-zero if there is a coincidence with maternal body movement
-                    overlap = np.sum(indv_sensation_map * imu_map)
-
-                    if not overlap:  # true when there is no coincidence
-                        # TPD and FND calculation for individual sensors
-                        # Non-zero value gives the matching
-                        Y = np.sum(ml_detection_map[i] * indv_sensation_map)
-                        if Y:  # true if there is a coincidence
-                            true_pos[sensor] += 1  # TPD incremented
-                        else:
-                            false_neg[sensor] += 1  # FND incremented
+                if not overlap:  # true when there is no coincidence, meaning FM
+                    # TPD and FND calculation
+                    # Non-zero value gives the matching
+                    Y = np.sum(ml_detection_map * indv_sensation_map)
+                    if Y:  # true if there is a coincidence
+                        true_pos += 1  # TPD incremented
+                    else:
+                        false_neg += 1  # FND incremented
 
             # ------------------- Determination of TND and FPD  ------------------%    
             # Removal of the TPD and FND parts from the individual sensor data
-            labeled_ml_detection = label(ml_detection_map[i])
+            labeled_ml_detection = label(ml_detection_map)
             # Non-zero elements give the matching. In sensation_map multiple windows can overlap, which was not the case in the sensation_data
             curnt_matched_vector = labeled_ml_detection * sensation_map
             # Gives the label of the matched sensor data segments
@@ -176,13 +173,13 @@ class FeMoMetrics(object):
             if len(curnt_matched_label) > 1:
                 curnt_matched_label = curnt_matched_label[1:]  # Removes the first element, which is 0
                 for m in range(len(curnt_matched_label)):
-                    ml_detection_map[i][labeled_ml_detection == curnt_matched_label[m] ] = arb_value
+                    ml_detection_map[labeled_ml_detection == curnt_matched_label[m]] = arb_value
                     # Assigns an arbitrary value to the TPD segments of the segmented signal
 
             # Assigns an arbitrary value to the area under the M_sntn_Map
-            ml_detection_map[i][sensation_map == 1] = arb_value
+            ml_detection_map[sensation_map == 1] = arb_value
             # Removes all the elements with value = arb_value from the segmented data
-            removed_ml_detection = ml_detection_map[i][ml_detection_map[i] != arb_value]
+            removed_ml_detection = ml_detection_map[ml_detection_map != arb_value]
 
             # Calculation of TND and FPD for individual sensors
             L_removed = len(removed_ml_detection)
@@ -193,9 +190,9 @@ class FeMoMetrics(object):
                 index_non_zero = np.where(indv_window)[0]
 
                 if len(index_non_zero) >= (min_overlap_time*self._sensor_freq):
-                    false_pos[sensor] += 1
+                    false_pos += 1
                 else:
-                    true_neg[sensor] += 1
+                    true_neg += 1
 
                 index_window_start = index_window_end + 1
                 index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
@@ -204,49 +201,52 @@ class FeMoMetrics(object):
             'true_positive': true_pos,
             'false_positive': false_pos,
             'true_negative': true_neg,
-            'false_negative': false_neg
+            'false_negative': false_neg,
+            'num_maternal_sensed': num_maternal_sensed,
+            'num_sensor_sensed': ml_dict['num_labels'],
+            'tpd_indices': ml_dict['tpd_indices'],
+            'fpd_indices': ml_dict['fpd_indices']
         }
     
     def calc_metrics(self,
                      tpfp_dict: dict):
         
         metric_dict = {
-            'accuracy': {key: 0 for key in self.sensors},
-            'sensitivity': {key: 0 for key in self.sensors},
-            'specificity': {key: 0 for key in self.sensors},
-            'precision/ppv': {key: 0 for key in self.sensors},
-            'f1-score': {key: 0 for key in self.sensors},
-            'fp_rate': {key: 0 for key in self.sensors},
-            'PABAK': {key: 0 for key in self.sensors}
+            'accuracy': 0,
+            'sensitivity': 0,
+            'specificity': 0,
+            'precision/ppv': 0,
+            'f1-score': 0,
+            'fp_rate': 0,
+            'PABAK': 0
         }
 
-        for sensor in self.sensors:
-            tp = tpfp_dict['true_positive'][sensor]
-            fp = tpfp_dict['false_positive'][sensor]
-            tn = tpfp_dict['true_negative'][sensor]
-            fn = tpfp_dict['false_negative'][sensor]
+        tp = tpfp_dict['true_positive']
+        fp = tpfp_dict['false_positive']
+        tn = tpfp_dict['true_negative']
+        fn = tpfp_dict['false_negative']
 
-            accuracy = (tp + tn) / (tp + fp + tn + fn)
-            metric_dict['accuracy'][sensor] = accuracy
+        accuracy = (tp + tn) / (tp + fp + tn + fn)
+        metric_dict['accuracy'] = accuracy
 
-            sensitivity = tp / (tp + fn)
-            metric_dict['sensitivity'][sensor] = sensitivity
-            
-            precision = tp / (tp + fp)
-            metric_dict['precision/ppv'][sensor] = precision
+        sensitivity = tp / (tp + fn)
+        metric_dict['sensitivity'] = sensitivity
+        
+        precision = tp / (tp + fp)
+        metric_dict['precision/ppv'] = precision
 
-            specificity = tn / (tn + fp)
-            metric_dict['specificity'][sensor] = specificity
-            
-            fp_rate = fp / (fp + tn)
-            metric_dict['fp_rate'][sensor] = fp_rate
+        specificity = tn / (tn + fp)
+        metric_dict['specificity'] = specificity
+        
+        fp_rate = fp / (fp + tn)
+        metric_dict['fp_rate'] = fp_rate
 
-            beta = 1
-            f1_score = (1+beta**2)*(precision*sensitivity) / (beta**2*precision+sensitivity)
-            metric_dict['f1-score'][sensor] = f1_score
+        beta = 1
+        f1_score = (1+beta**2)*(precision*sensitivity) / (beta**2*precision+sensitivity)
+        metric_dict['f1-score'] = f1_score
 
-            pabak = 2*accuracy - 1
-            metric_dict['PABAK'][sensor] = pabak
+        pabak = 2*accuracy - 1
+        metric_dict['PABAK'] = pabak
 
         return metric_dict
 

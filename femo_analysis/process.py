@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--inference", action='store_true', help="Flag enable data processing for inference")
+    parser.add_argument("--extract", action='store_true', default=False, help="Extract features ")
     args = parser.parse_args()
 
     return args
@@ -37,7 +38,7 @@ def main():
                           args.dataManifest,
                           args.inference,
                           dataproc_cfg.get('data_pipeline'))
-    df = dataset.build()
+    df = dataset.build(force_extract=args.extract)
     if args.inference:
         df.to_csv(os.path.join(args.work_dir, 'inference.csv'), header=True, index=False)
         LOGGER.info("Dataset built for inference.")

@@ -28,7 +28,7 @@ config:
     units_per_layer: 10
 
 tune_params:
-  epochs: 20
+  epochs: 30
   patience: 5
   n_trials: 10
 
