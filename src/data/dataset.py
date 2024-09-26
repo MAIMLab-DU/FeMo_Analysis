@@ -141,14 +141,6 @@ class FeMoDataset:
             features_df['labels'] = labels
 
         # Ensure the columns order is: filename_hash, det_indices, labels
-        optional_columns = ['filename_hash', 'det_indices', 'labels']
-        final_columns = [col for col in features_df.columns if col not in optional_columns]
-        
-        # Only include columns that exist in the DataFrame
-        final_columns += [col for col in optional_columns if col in features_df.columns]
-
-        # Reorder DataFrame columns
-        features_df = features_df[final_columns]
         features_df.to_csv(filename, header=columns is not None, index=False)
         
         return features_df
@@ -198,7 +190,8 @@ class FeMoDataset:
                     self.logger.warning(e)
                     pass
 
-            self.features_df = pd.concat([self.features_df, current_features], axis=0)   
+            self.features_df = pd.concat([self.features_df, current_features], axis=0, ignore_index=True)
+            self.logger.info(f"{self.features_df.columns = }")
 
             # Create mapping to get features give a filename from the dataset
             end_idx = len(self.features_df)
@@ -255,6 +248,7 @@ class DataProcessor:
             num_tpd_test.append(np.sum(y_test == 1))
             num_fpd_test.append(np.sum(y_test == 0))
 
+        # TODO: no mod from original implementation
         elif strategy == 'kfold':
             skf = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=0)
 
