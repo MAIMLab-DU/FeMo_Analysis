@@ -4,7 +4,7 @@ config:
   search_space:
     num_hidden_layers:
       low: 1
-      high: 2
+      high: 5
       step: 1
     units_first_layer:
       low: 10
@@ -33,5 +33,5 @@ tune_params:
   n_trials: 10
 
 train_params:
-  epochs: 300
-  patience: 30
+  epochs: 500
+  patience: 25
