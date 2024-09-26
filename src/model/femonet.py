@@ -150,7 +150,10 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                     y_hat_val = expit(estimator.predict(X_val_fold))
                     y_val_pred = (y_hat_val >= 0.5).astype(int)
                     cv_scores.append(
-                        accuracy_score(y_val_pred, y_val_fold)
+                        accuracy_score(
+                            y_pred=y_val_pred,
+                            y_true=y_val_fold
+                        )
                     )
                 accuracy_scores.append(np.mean(cv_scores))
             
