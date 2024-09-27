@@ -191,7 +191,6 @@ class FeMoDataset:
                     pass
 
             self.features_df = pd.concat([self.features_df, current_features], axis=0, ignore_index=True)
-            self.logger.info(f"{self.features_df.columns = }")
 
             # Create mapping to get features give a filename from the dataset
             end_idx = len(self.features_df)
@@ -205,11 +204,7 @@ class DataProcessor:
     @property
     def logger(self):
         return LOGGER
-    
-    @property
-    def input_data(self) -> pd.DataFrame:
-        return self._input_data
-    
+        
     @property
     def feat_rank_cfg(self) -> dict:
         return self._feat_rank_cfg     
