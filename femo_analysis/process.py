@@ -55,13 +55,10 @@ def main():
         data=data_output,
         **dataproc_cfg.get('data_processor', {})
     )
-    train = split_dict['train']
-    test = split_dict['test']
 
     os.makedirs(args.work_dir, exist_ok=True)
 
-    joblib.dump(train, os.path.join(args.work_dir, 'train.pkl'), compress=True)
-    joblib.dump(test, os.path.join(args.work_dir, 'test.pkl'), compress=True)
+    joblib.dump(split_dict, os.path.join(args.work_dir, 'split_dataset.pkl'), compress=True)
     LOGGER.info(f"Saved datasets to {os.path.abspath(args.work_dir)}")
 
 

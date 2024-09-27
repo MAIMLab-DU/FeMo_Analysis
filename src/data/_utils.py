@@ -11,73 +11,69 @@ def gen_hash(input_string: str) -> str:
     return full_hash
 
 
-def divide_by_K_folds(X_TPD_norm, X_FPD_norm, data_div_option, K):
-    # Division into stratified K-fold
-    #   2: K-fold with original ratio of FPD and TPD in each fold,
-    #   3: K-fold with custom ratio of FPD and TPD in each fold.
-    #   However, each of these processes will create stratified division, i.e.
-    #   each fold will have the same ratio of FPD and TPD.
+def stratified_kfold(
+        X_TPD_norm: np.ndarray,
+        X_FPD_norm: np.ndarray,
+        custom_ratio: int|None = None,
+        num_folds: int = 5
+):
 
-    # Randomization of the data sets
-    n_data_TPD = X_TPD_norm.shape[0]
-    np.random.seed(0)  # sets random seed to default value. This is necessary for reproducibility.
-    rand_num_TPD = np.random.permutation(n_data_TPD)
+    # Randomize the datasets
+    np.random.seed(0)
+    rand_num_TPD = np.random.permutation(X_TPD_norm.shape[0])
     X_TPD_norm_rand = X_TPD_norm[rand_num_TPD, :]
 
-    n_data_FPD = X_FPD_norm.shape[0]
-    np.random.seed(0)  # sets random seed to default value. This is necessary for reproducibility.
-    rand_num_FPD = np.random.permutation(n_data_FPD)
+    rand_num_FPD = np.random.permutation(X_FPD_norm.shape[0])
     X_FPD_norm_rand = X_FPD_norm[rand_num_FPD, :]
+    
+    # Determine the number of data points per fold
+    n_data_TPD_each_fold = X_TPD_norm.shape[0] // num_folds
+    n_data_TPD_last_fold = X_TPD_norm.shape[0] - n_data_TPD_each_fold * (num_folds - 1)
 
-    custom_FPD_TPD_ratio = 1  # FPD/TPD ratio in case of option 3
-
-    # Determining the data in each folds
-    n_data_TPD_each_fold = n_data_TPD // K
-    n_data_TPD_last_fold = n_data_TPD - n_data_TPD_each_fold * (K - 1)  # Last fold will hold the rest of the data
-
-    if data_div_option == 2:
-        # -- Based on K-fold partition with original ratio of TPDs and FPDs ---
-        FPD_TPD_ratio = n_data_FPD / n_data_TPD
-
-        n_data_FPD_each_fold = n_data_FPD // K
-        n_data_FPD_last_fold = n_data_FPD - n_data_FPD_each_fold * (K - 1)  # Last fold will hold the rest of the data
-
-    elif data_div_option == 3:
-        FPD_TPD_ratio = custom_FPD_TPD_ratio
-
-        n_data_FPD_each_fold = np.floor(FPD_TPD_ratio * n_data_TPD_each_fold)  # Each fold will have this number of FPDs
-        n_data_FPD_last_fold = np.floor(FPD_TPD_ratio * n_data_TPD_last_fold)  # Last fold will hold the rest of the data
-
+    if custom_ratio is None:
+        FPD_TPD_ratio = X_FPD_norm.shape[0] / X_TPD_norm.shape[0]
+        n_data_FPD_each_fold = X_FPD_norm.shape[0] // num_folds
+        n_data_FPD_last_fold = X_FPD_norm.shape[0] - n_data_FPD_each_fold * (num_folds - 1)
     else:
-        print('\nWrong data division option chosen.\n')
-        return
+        FPD_TPD_ratio = custom_ratio
+        n_data_FPD_each_fold = int(np.floor(FPD_TPD_ratio * n_data_TPD_each_fold))
+        n_data_FPD_last_fold = int(np.floor(FPD_TPD_ratio * n_data_TPD_last_fold))
 
-    # Creating K-fold data
-    X_K_fold = [None] * K  # List variable to hold the each data fold
-    Y_K_fold = [None] * K
+    # Initialize the K-fold containers
+    X_K_fold = [None] * num_folds
+    Y_K_fold = [None] * num_folds
 
-    for i in range(1, K):
-        start_idx_TPD = (i - 1) * n_data_TPD_each_fold
-        end_idx_TPD = i * n_data_TPD_each_fold
+    # Create the K-1 folds
+    for i in range(num_folds - 1):
+        start_TPD = i * n_data_TPD_each_fold
+        end_TPD = (i + 1) * n_data_TPD_each_fold
+        start_FPD = i * n_data_FPD_each_fold
+        end_FPD = (i + 1) * n_data_FPD_each_fold
 
-        start_idx_FPD = (i - 1) * n_data_FPD_each_fold
-        end_idx_FPD = i * n_data_FPD_each_fold
+        X_K_fold[i] = np.vstack((X_TPD_norm_rand[start_TPD:end_TPD, :],
+                                 X_FPD_norm_rand[start_FPD:end_FPD, :]))
+        Y_K_fold[i] = np.concatenate((np.ones(end_TPD - start_TPD),
+                                      np.zeros(end_FPD - start_FPD)))
 
-        X_K_fold[i - 1] = np.vstack((X_TPD_norm_rand[start_idx_TPD:end_idx_TPD, :],
-                                     X_FPD_norm_rand[start_idx_FPD:end_idx_FPD, :]))
-        Y_K_fold[i - 1] = np.concatenate((np.ones(end_idx_TPD - start_idx_TPD),
-                                          np.zeros(end_idx_FPD - start_idx_FPD)))
-        
-    #For Last fold
-    start_idx_TPD_last = (K - 1) * n_data_TPD_each_fold
-    end_idx_TPD_last = (K - 1) * n_data_TPD_each_fold + n_data_TPD_last_fold
+    # Create the last fold
+    start_TPD_last = (num_folds - 1) * n_data_TPD_each_fold
+    end_TPD_last = start_TPD_last + n_data_TPD_last_fold
+    start_FPD_last = (num_folds - 1) * n_data_FPD_each_fold
+    end_FPD_last = start_FPD_last + n_data_FPD_last_fold
 
-    start_idx_FPD_last = (K - 1) * n_data_FPD_each_fold
-    end_idx_FPD_last = (K - 1) * n_data_FPD_each_fold + n_data_FPD_last_fold
+    X_K_fold[num_folds - 1] = np.vstack((X_TPD_norm_rand[start_TPD_last:end_TPD_last, :],
+                                         X_FPD_norm_rand[start_FPD_last:end_FPD_last, :]))
+    Y_K_fold[num_folds - 1] = np.concatenate((np.ones(end_TPD_last - start_TPD_last),
+                                              np.zeros(end_FPD_last - start_FPD_last)))
 
-    X_K_fold[K - 1] = np.vstack((X_TPD_norm_rand[start_idx_TPD_last:end_idx_TPD_last, :],
-                                 X_FPD_norm_rand[start_idx_FPD_last:end_idx_FPD_last, :]))
-    Y_K_fold[K - 1] = np.concatenate((np.ones(end_idx_TPD_last - start_idx_TPD_last),
-                                      np.zeros(end_idx_FPD_last - start_idx_FPD_last)))
-
-    return X_K_fold, Y_K_fold, n_data_TPD_each_fold, n_data_TPD_last_fold, n_data_FPD_each_fold, n_data_FPD_last_fold, FPD_TPD_ratio, rand_num_TPD, rand_num_FPD
+    return {
+        "X_K_fold": X_K_fold,
+        "Y_K_fold": Y_K_fold,
+        "num_tpd_each_fold": n_data_TPD_each_fold,
+        "num_tpd_last_fold": n_data_TPD_last_fold,
+        "num_fpd_each_fold": n_data_FPD_each_fold,
+        "num_fpd_last_fold": n_data_FPD_last_fold,
+        "FPD_TPD_ratio": FPD_TPD_ratio,
+        "rand_num_TPD": rand_num_TPD,
+        "rand_num_FPD": rand_num_FPD
+    }
