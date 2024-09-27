@@ -17,7 +17,7 @@ from sklearn.model_selection import (
     StratifiedKFold
 )
 from collections import defaultdict
-from ._utils import gen_hash
+from ._utils import gen_hash, stratified_kfold
 from .pipeline import Pipeline
 from .ranking import FeatureRanker
 
@@ -227,43 +227,40 @@ class DataProcessor:
     def split_data(self,
                     data: np.ndarray,
                     strategy: Literal['holdout', 'kfold'] = 'holdout',
+                    custom_ratio: int|None = None,
                     num_folds: int = 5):
 
-        X, y = data[:, :-1], np.squeeze(data[:, -1])
+        X, y = data[:, :-1], data[:, -1]
         train, test = [], []
-        num_tpd_train, num_tpd_test = [], []
-        num_fpd_train, num_fpd_test = [], []
+        split_data = defaultdict()
 
         if strategy == 'holdout':
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-            train.append(np.concatenate([X_train, y_train[:, np.newaxis]], axis=1))
-            test.append(np.concatenate([X_test, y_test[:, np.newaxis]], axis=1))
-            num_tpd_train.append(np.sum(y_train == 1))
-            num_fpd_train.append(np.sum(y_train == 0))
-            num_tpd_test.append(np.sum(y_test == 1))
-            num_fpd_test.append(np.sum(y_test == 0))
+            raise NotImplementedError("TODO")
 
         # TODO: no mod from original implementation
         elif strategy == 'kfold':
-            skf = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=0)
+            X_TPD_norm = X[y == 1]
+            X_FPD_norm = X[y == 0]
 
-            for i, (train_idx, test_idx) in enumerate(skf.split(X, y)):
-                train.append(np.concatenate([X[train_idx], y[train_idx][:, np.newaxis]], axis=1))
-                test.append(np.concatenate([X[test_idx], y[test_idx][:, np.newaxis]], axis=1))
+            results = stratified_kfold(X_TPD_norm, X_FPD_norm, custom_ratio, num_folds)
+            for k in range(num_folds):
+                # Combine the k-th fold's X and Y to form the test set
+                test.append(np.concatenate([results['X_K_fold'][k], results['Y_K_fold'][k][:, np.newaxis]], axis=1))
+                
+                # Stack all folds except the k-th fold to form the training set
+                X_train_current = np.vstack([results['X_K_fold'][i] for i in range(num_folds) if i != k])
+                Y_train_current = np.concatenate([results['Y_K_fold'][i] for i in range(num_folds) if i != k])
 
-                num_tpd_train.append(np.sum(y[train_idx] == 1))
-                num_fpd_train.append(np.sum(y[train_idx] == 0))
-                num_tpd_test.append(np.sum(y[test_idx] == 1))
-                num_fpd_test.append(np.sum(y[test_idx] == 0))
+                train.append(np.concatenate([X_train_current, Y_train_current[:, np.newaxis]], axis=1))
 
-        return {
-            'train': train,
-            'test': test,
-            'num_tpd_train': num_tpd_train,
-            'num_fpd_train': num_fpd_train,
-            'num_tpd_test': num_tpd_test,
-            'num_fpd_test': num_fpd_test,
-        }
+        split_data['train'] = train
+        split_data['test'] = test
+        for key, val in results.items():
+            if key not in ('X_K_fold', 'Y_K_fold'):
+                split_data[key] = val
+        
+        return split_data
+
 
     def process(self, input_data: pd.DataFrame):
         self.logger.debug("Processing features...")
@@ -273,9 +270,9 @@ class DataProcessor:
         det_indices = input_data.get('det_indices').to_numpy(dtype=int)
         filename_hash = input_data.get('filename_hash').to_numpy(dtype=int)
         
-        top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
-                                                    func=self._feature_ranker.ensemble_ranking)
-        X_norm = X_norm[:, top_feat_indices]
+        # top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
+        #                                             func=self._feature_ranker.ensemble_ranking)
+        # X_norm = X_norm[:, top_feat_indices]
 
         # -3, -2, -1 are 'filename_hash', 'det_indices' and 'labels', respectively
         return np.concatenate([X_norm, filename_hash[:, np.newaxis],

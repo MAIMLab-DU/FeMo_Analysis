@@ -30,9 +30,10 @@ def main():
         train_cfg = yaml.safe_load(f)
 
     LOGGER.info(f"Working directory {args.work_dir}")
+    split_dataset = joblib.load(os.path.join(args.datasetDir, 'split_dataset.pkl'))
 
-    train_data = joblib.load(os.path.join(args.datasetDir, 'train.pkl'))
-    test_data = joblib.load(os.path.join(args.datasetDir, 'test.pkl'))
+    train_data = split_dataset['train']
+    test_data = split_dataset['test']
     LOGGER.info(f"Loaded train: {os.path.abspath(args.datasetDir)} " +
                 f"test: {os.path.abspath(args.datasetDir)}")
     
