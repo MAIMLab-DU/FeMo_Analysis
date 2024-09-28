@@ -18,6 +18,9 @@ def stratified_kfold(
         num_folds: int = 5
 ):
 
+    num_tpd = X_TPD_norm.shape[0]
+    num_fpd = X_FPD_norm.shape[0]
+
     # Randomize the datasets
     np.random.seed(0)
     rand_num_TPD = np.random.permutation(X_TPD_norm.shape[0])
@@ -69,11 +72,13 @@ def stratified_kfold(
     return {
         "X_K_fold": X_K_fold,
         "Y_K_fold": Y_K_fold,
+        "num_tpd": num_tpd,
+        "num_fpd": num_fpd,
         "num_tpd_each_fold": n_data_TPD_each_fold,
         "num_tpd_last_fold": n_data_TPD_last_fold,
         "num_fpd_each_fold": n_data_FPD_each_fold,
         "num_fpd_last_fold": n_data_FPD_last_fold,
-        "FPD_TPD_ratio": FPD_TPD_ratio,
-        "rand_num_TPD": rand_num_TPD,
-        "rand_num_FPD": rand_num_FPD
+        "tpd_fpd_ratio": FPD_TPD_ratio,
+        "rand_num_tpd": rand_num_TPD,
+        "rand_num_fpd": rand_num_FPD
     }

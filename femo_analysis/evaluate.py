@@ -3,16 +3,14 @@ import os
 import sys
 import json
 import yaml
+import joblib
 import pandas as pd
-import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              '..', 'src')))
 import argparse
-from skimage.measure import label
 from tqdm import tqdm
 from pathlib import Path
 from logger import LOGGER
-from data._utils import gen_hash
 from eval.metrics import FeMoMetrics
 from data.pipeline import Pipeline
 
@@ -36,7 +34,12 @@ def main():
     with open(config_path, "r") as f:
         dataproc_cfg = yaml.safe_load(f)
 
+    split_dataset = joblib.load(os.path.join(args.work_dir, 'split_dataset.pkl'))
     results_df = pd.read_csv(os.path.join(args.resultsDir, 'results.csv'), index_col=False)
+    overall_tpd_pred = results_df.get('predictions').to_numpy()[0: split_dataset['num_tpd']]
+    overall_fpd_pred = results_df.get('predictions').to_numpy()[split_dataset['num_tpd']:]
+    matching_index_tpd = 0
+    matching_index_fpd = 0
     LOGGER.info(f"Loaded results from {os.path.abspath(args.resultsDir)}")
 
     pipeline = Pipeline(
@@ -70,8 +73,6 @@ def main():
         if data_file_key is None:
             LOGGER.warning(f"{data_file_key = }")
             continue
-        feat_file_key = item.get('csvFileKey', None)
-        map_key = gen_hash(feat_file_key)
 
         pipeline_output = pipeline.process(
             filename=os.path.join(args.data_dir, data_file_key),
@@ -83,8 +84,10 @@ def main():
             imu_map=pipeline_output['imu_map'],
             sensation_map=pipeline_output['sensation_map'],
             scheme_dict=pipeline_output['scheme_dict'],
-            results_df=results_df,
-            filename_hash=map_key
+            overall_tpd_pred=overall_tpd_pred,
+            overall_fpd_pred=overall_fpd_pred,
+            matching_index_tpd=matching_index_tpd,
+            matching_index_fpd=matching_index_fpd
         )
         filewise_tpfp['filename'].append(data_file_key)
         
@@ -100,6 +103,9 @@ def main():
         filewise_tpfp['sensor_label'].append(tpfp_dict['num_sensor_sensed'])
         filewise_tpfp['num_tpd'].append(len(tpfp_dict['tpd_indices']))
         filewise_tpfp['num_fpd'].append(len(tpfp_dict['fpd_indices']))
+
+        matching_index_tpd = tpfp_dict['matching_index_tpd']
+        matching_index_fpd = tpfp_dict['matching_index_fpd']
         
     metrics_dict = metrics_calculator.calc_metrics(
         overall_tpfp
