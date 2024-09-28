@@ -10,10 +10,58 @@ from abc import ABC, abstractmethod
 @dataclass
 class Result:
     accuracy_scores: dict = None
-    preds: list[np.ndarray] = None
-    pred_scores: list[np.ndarray] = None
-    det_indices: list[np.ndarray] = None
-    filename_hash: list[np.ndarray] = None
+    preds: list[np.ndarray]|np.ndarray = None
+    pred_scores: list[np.ndarray]|np.ndarray = None
+    det_indices: list[np.ndarray]|np.ndarray = None
+    filename_hash: list[np.ndarray]|np.ndarray = None
+
+    @staticmethod
+    def process_attributes(attribute,
+                                   split_dict: dict,
+                                   nn_pred: bool,
+                                   preds: bool = False):
+        tpd_attribute_rand = np.zeros((1, 1))
+        fpd_attribute_rand = np.zeros((1, 1))
+
+        num_folds = len(split_dict['test'])
+        for i in range(num_folds):
+            # All except the last fold
+            if i != num_folds - 1:
+                tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:split_dict['num_tpd_each_fold'], np.newaxis]])
+                fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][split_dict['num_tpd_each_fold']:, np.newaxis]])
+            else:
+                tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:split_dict['num_tpd_last_fold'], np.newaxis]])
+                fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][split_dict['num_tpd_last_fold']:, np.newaxis]])
+
+        if nn_pred:
+            # Remove the initial zeros added
+            tpd_attribute_rand = tpd_attribute_rand[1:]
+            fpd_attribute_rand = fpd_attribute_rand[1:]
+
+            tpd_attribute = np.zeros((split_dict['num_tpd'], 1))
+            fpd_attribute = np.zeros((split_dict['num_fpd'], 1))
+
+            if num_folds > 1:  # Stratified K-fold division
+                # Non-randomized the predictions to match with the original data set
+                for i in range(split_dict['num_tpd']):
+                    index = split_dict['rand_num_tpd'][i]
+                    tpd_attribute[index] = tpd_attribute_rand[i]
+
+                for i in range(split_dict['num_fpd']):
+                    index = split_dict['rand_num_fpd'][i]
+                    fpd_attribute[index] = fpd_attribute_rand[i]
+            else:
+                tpd_attribute = tpd_attribute_rand
+                fpd_attribute = fpd_attribute_rand
+
+            if preds:
+                tpd_attribute = tpd_attribute >= 0.5
+                fpd_attribute = fpd_attribute >= 0.5
+
+            return np.concatenate([tpd_attribute, fpd_attribute])
+        else:
+            # TODO: for other models
+            raise NotImplementedError("TODO")
 
     def _assert_no_none_fields(self):
         # Check each field to ensure it is not None
@@ -23,33 +71,36 @@ class Result:
     
     def save(self, filename: str):
         results_df = {
-            'filename_hash': [item for fold in self.filename_hash for item in fold],
-            'det_indices': [item for fold in self.det_indices for item in fold],
-            'predictions': [item for fold in self.preds for item in fold],
-            'prediction_scores': [item for fold in self.pred_scores for item in fold]
+            'filename_hash': [item for fold in self.filename_hash for item in fold] 
+                            if isinstance(self.filename_hash, list) else np.squeeze(self.filename_hash).tolist(),
+            'det_indices': [item for fold in self.det_indices for item in fold] 
+                            if isinstance(self.det_indices, list) else np.squeeze(self.det_indices).tolist(),
+            'predictions': [item for fold in self.preds for item in fold] 
+                            if isinstance(self.preds, list) else np.squeeze(self.preds).tolist(),
+            'prediction_scores': [item for fold in self.pred_scores for item in fold] 
+                            if isinstance(self.pred_scores, list) else np.squeeze(self.pred_scores).tolist()
         }
         results_df = pd.DataFrame(results_df)
         results_df.to_csv(filename, index=False)
     
     def compile_results(self,
-                        features_df: pd.DataFrame|None = None,
+                        split_dict: dict,
+                        nn_pred: bool = False,
                         filename: str|None = None):
         self._assert_no_none_fields()
 
-        results_df = {
-            'filename_hash': [item for sublist in self.filename_hash for item in sublist],
-            'det_indices': [item for sublist in self.det_indices for item in sublist],
-            'predictions': [item for sublist in self.preds for item in sublist],
-            'prediction_scores': [item for sublist in self.pred_scores for item in sublist]
-        }
-        results_df = pd.DataFrame(results_df)
+        preds = self.process_attributes(self.preds, split_dict, nn_pred, preds=True)
+        pred_scores = self.process_attributes(self.pred_scores, split_dict, nn_pred)
+        det_indices = self.process_attributes(self.det_indices, split_dict, nn_pred)
+        filename_hash = self.process_attributes(self.filename_hash, split_dict, nn_pred)
 
-        if features_df is not None:
-            results_df = features_df.merge(results_df, on=['filename_hash', 'det_indices'])        
+        self.preds = preds.astype(float)
+        self.pred_scores = pred_scores.astype(float)
+        self.det_indices = det_indices.astype(int)
+        self.filename_hash = filename_hash.astype(int)
+
         if filename is not None:
-            results_df.to_csv(filename, index=False)
-        
-        return results_df
+            self.save(filename)
 
 
 class FeMoBaseClassifier(ABC):
