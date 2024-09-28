@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from skimage.measure import label
 from sklearn.metrics import accuracy_score
 
@@ -63,13 +62,13 @@ class FeMoMetrics(object):
         }
     
     def _get_ml_detection_map(self,
-                             filename_hash: int,
-                             results_df: pd.DataFrame,
                              scheme_dict: dict,
-                             sensation_map: np.ndarray):
+                             sensation_map: np.ndarray,
+                             overall_tpd_pred: np.ndarray,
+                             overall_fpd_pred: np.ndarray,
+                             matching_index_tpd: int,
+                             matching_index_fpd: int):
         
-        filtered_results = results_df[results_df['filename_hash'] == filename_hash]
-
         num_labels: int = scheme_dict['num_labels']
         labeled_user_scheme: np.ndarray = scheme_dict['labeled_user_scheme']
 
@@ -83,25 +82,27 @@ class FeMoMetrics(object):
                 indv_window = np.zeros(len(sensation_map))
                 indv_window[label_start:label_end] = 1
                 overlap = np.sum(indv_window * sensation_map)  # Checks the overlap with the maternal sensation
-                predicted_value = filtered_results.loc[filtered_results['det_indices'] == k,
-                                                        'predictions'].values[0]
 
                 if overlap:
                     # This is a TPD
-                    if predicted_value == 1:  # Checks the detection from the classifier
+                    if overall_tpd_pred[matching_index_tpd] == 1:  # Checks the detection from the classifier
                         segmented_sensor_data_ml[label_start:label_end] = 1
+                    matching_index_tpd += 1
                     tpd_indices.append(k)
                 else:
                     # This is an FPD
-                    if predicted_value == 1:  # Checks the detection from the classifier
+                    if overall_fpd_pred[matching_index_fpd] == 1:  # Checks the detection from the classifier
                         segmented_sensor_data_ml[label_start:label_end] = 1
+                    matching_index_fpd += 1
                     fpd_indices.append(k)
 
         return {
             'ml_detection_map': segmented_sensor_data_ml,
+            'num_labels': num_labels,
+            'matching_index_tpd': matching_index_tpd,
+            'matching_index_fpd': matching_index_fpd,
             'tpd_indices': tpd_indices,
-            'fpd_indices': fpd_indices,
-            'num_labels': num_labels
+            'fpd_indices': fpd_indices
         }
     
     def calc_tpfp(self,
@@ -204,6 +205,8 @@ class FeMoMetrics(object):
             'false_negative': false_neg,
             'num_maternal_sensed': num_maternal_sensed,
             'num_sensor_sensed': ml_dict['num_labels'],
+            'matching_index_tpd': ml_dict['matching_index_tpd'],
+            'matching_index_fpd': ml_dict['matching_index_fpd'],
             'tpd_indices': ml_dict['tpd_indices'],
             'fpd_indices': ml_dict['fpd_indices']
         }
