@@ -30,7 +30,7 @@ LAST_RUN=$(ls -d "$WORK_DIR"/run* 2>/dev/null | grep -o 'run[0-9]\+' | sort -V |
 NEXT_RUN=$((LAST_RUN + 1))
 
 # Create the next run directory
-RUN_DIR="$WORK_DIR/run$NEXT_RUN"
+RUN_DIR="$WORK_DIR/run25"
 mkdir -p "$RUN_DIR"
 
 # Output the created run directory and the DATA_MANIFEST
@@ -46,9 +46,9 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 #Install requirements
 pip install -r ./requirements.txt -q
 # Run process.py
-python "./$SCRIPT_DIR/process.py" "$DATA_MANIFEST" --work-dir "$RUN_DIR" --data-dir "./data"
+# python "./$SCRIPT_DIR/process.py" "$DATA_MANIFEST" --work-dir "$RUN_DIR" --data-dir "./data"
 # Run train.py
-python "./$SCRIPT_DIR/train.py" "$RUN_DIR" --work-dir "$RUN_DIR" --tune
+python "./$SCRIPT_DIR/train.py" "$RUN_DIR" --work-dir "$RUN_DIR"
 # Run evaluate.py
 python "./$SCRIPT_DIR/evaluate.py" "$DATA_MANIFEST" "$RUN_DIR" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
 
