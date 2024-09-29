@@ -2,30 +2,15 @@
 type: 'neural-net'
 config:
   search_space:
-    num_hidden_layers:
-      low: 1
-      high: 5
-      step: 1
-    units_first_layer:
-      low: 10
-      high: 200
-      step: 10
     units_per_layer: 
       low: 10
       high: 200
       step: 10
-    dropout_rate:
-      low: 0.1
-      high: 0.5
-      step: 0.05
-    learning_rate:
-      low: 0.0001
-      high: 0.01
-      log: True
   hyperparams:
     num_hidden_layers: 1
-    units_first_layer: 10
-    units_per_layer: 10
+    units_per_layer: 90
+    dropout_rate: 0.25
+    learning_rate: 0.001
 
 tune_params:
   epochs: 100
@@ -33,5 +18,5 @@ tune_params:
   n_trials: 10
 
 train_params:
-  epochs: 500
+  epochs: 100
   patience: 25

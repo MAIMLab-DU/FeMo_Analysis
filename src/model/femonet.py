@@ -1,6 +1,6 @@
 import time
 import copy
-import optuna
+from tqdm import tqdm
 import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
@@ -8,7 +8,6 @@ from keras.losses import BinaryCrossentropy
 from keras.callbacks import EarlyStopping
 from scipy.special import expit
 from sklearn.metrics import accuracy_score, roc_auc_score
-from sklearn.model_selection import KFold
 from .base import FeMoBaseClassifier
 import tensorflow as tf
 import warnings
@@ -19,13 +18,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 class FeMoNeuralNet:
     def __init__(self,
                  num_hidden_layers: int,
-                 units_first_layer: int,
                  units_per_layer: int,
                  dropout_rate: float = 0.25,
                  learning_rate: float = 1e-3) -> None:
         
         self.num_hidden_layers = num_hidden_layers
-        self.units_first_layer = units_first_layer
         self.units_per_layer = units_per_layer
         self.dropout_rate = dropout_rate
         self.learning_rate = learning_rate
@@ -36,7 +33,7 @@ class FeMoNeuralNet:
         
         # Add first layer with fixed units
         model.add(Dense(
-            units=self.units_first_layer,
+            units=self.units_per_layer,
             input_shape=input_shape,
             activation='relu',
             kernel_initializer='he_uniform'
@@ -75,11 +72,6 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                              'high': 5,
                              'step': 1
                          },
-                         'units_first_layer': {
-                             'low': 10,
-                             'high': 200,
-                             'step': 10
-                         },
                          'units_per_layer': {
                              'low': 10,
                              'high': 200,
@@ -97,8 +89,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                          }
                      },
                      'hyperparams': {
-                         'num_hidden_layers': 1, 
-                         'units_first_layer': 10,
+                         'num_hidden_layers': 1,
                          'units_per_layer': 10
                      }
                  }):
@@ -107,70 +98,61 @@ class FeMoNNClassifier(FeMoBaseClassifier):
     def tune(self,
                train_data: list[np.ndarray],
                test_data: list[np.ndarray],
-               epochs: int = 10,
-               patience: int = 5,
-               n_trials: int = 10):
+               epochs: int = 10):
         
         start = time.time()
 
         assert len(train_data) == len(test_data), "Train, test data must have same folds"
         num_folds = len(train_data)
+        units_per_layer = self.search_space.get('units_per_layer', {'low': 10, 'high': 200, 'step': 10})
+        num_val_iterations = (units_per_layer['high']-units_per_layer['low']) // units_per_layer['step'] + 1
+        hyperparams = copy.deepcopy(self.hyperparams)
 
-        def objective(trial: optuna.Trial):
+        best_params = None
+        best_accuracy = -1
 
-            params = {
-                'num_hidden_layers': trial.suggest_int('num_hidden_layers', **self.search_space['num_hidden_layers']),
-                'units_first_layer': trial.suggest_int('units_first_layer', **self.search_space['units_first_layer']),
-                'units_per_layer': trial.suggest_int('units_per_layer', **self.search_space['units_per_layer']),
-                'dropout_rate': trial.suggest_float('dropout_rate', **self.search_space['dropout_rate']),
-                'learning_rate': trial.suggest_float('learning_rate', **self.search_space['learning_rate'])
-            }
-            cv_inner = KFold(n_splits=5, shuffle=True, random_state=42)
+        for j in tqdm(range(num_val_iterations), desc="Hyperparameter tuning..."):
+            units_per_layer_value = units_per_layer['low'] + j * units_per_layer['step']
+            hyperparams.update({'units_per_layer': units_per_layer_value})
 
-            accuracy_scores = []
-            for i in range(num_folds):
-                X_train, y_train = train_data[i][:, :-3], train_data[i][:, -1]
+            val_accuracies = []
+            train_accuracies = []
+            for k in range(num_folds):
+                X_train, y_train = train_data[k][:, :-3], train_data[k][:, -1]
+                X_val, y_val = test_data[k][:, :-3], test_data[k][:, -1]
 
-                cv_scores = []
-                for train_idx, val_idx in cv_inner.split(X_train, y_train):
-                    X_train_fold, y_train_fold = X_train[train_idx], y_train[train_idx]
-                    X_val_fold, y_val_fold = X_train[val_idx], y_train[val_idx]
+                model = FeMoNeuralNet(**self.hyperparams).compile_model(
+                    input_shape=(X_train.shape[1], )
+                )
+                model.fit(
+                    X_train, y_train,
+                    epochs=epochs,
+                    verbose=0,
+                    class_weight={0:1, 1:2},
+                    shuffle=False
+                )
 
-                    estimator = FeMoNeuralNet(**params).compile_model(
-                        input_shape=(X_train_fold.shape[1], )
-                    )
-                    estimator.fit(
-                        X_train_fold,
-                        y_train_fold,
-                        epochs=epochs,
-                        shuffle=False,
-                        verbose=0,
-                        callbacks=[EarlyStopping(monitor='val_loss', patience=patience)]
-                    )
-                    y_hat_val = expit(estimator.predict(X_val_fold))
-                    y_val_pred = (y_hat_val >= 0.5).astype(int)
-                    cv_scores.append(
-                        accuracy_score(
-                            y_pred=y_val_pred,
-                            y_true=y_val_fold
-                        )
-                    )
-                accuracy_scores.append(np.mean(cv_scores))
+                # ---- Train accuracy -----
+                y_hat_train = expit(model.predict(X_train))
+                y_train_pred = (y_hat_train >= 0.5).astype(int)
+                train_accuracy = accuracy_score(y_train, y_train_pred)
+                train_accuracies.append(train_accuracy)
+
+                # ----- Validation accuracy -----
+                y_hat_val = expit(model.predict(X_val))
+                y_val_pred = (y_hat_val >= 0.5).astype(int)
+                val_accuracy = accuracy_score(y_val, y_val_pred)
+                val_accuracies.append(val_accuracy)
             
-            return np.mean(accuracy_scores)
-        
-        # By default, optuna uses TPE sampling
-        study = optuna.create_study(direction='maximize')
-        self.logger.info(f"Performing Grid Search with {num_folds}x5 Cross-validation")
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+            if np.mean(val_accuracies) > best_accuracy:
+                best_accuracy = np.mean(val_accuracies)
+                best_params = hyperparams
 
-        best_params = study.best_params
-        best_accuracy = study.best_value
+            self.logger.info(f"Params: {hyperparams} - train: {np.mean(train_accuracies)} - validation: {np.mean(val_accuracies)}")
         
-        self.logger.info(f"Optuna search took {time.time() - start: 0.2f} seconds")
+        self.logger.info(f"Hyperparam search took {time.time() - start: 0.2f} seconds")
         self.logger.info(f"Best model hyperparameters: {best_params}")
         self.logger.info(f"Best model accuracy: {best_accuracy}")
-
         for key, value in best_params.items():
             self.hyperparams.update({key: value})
 
