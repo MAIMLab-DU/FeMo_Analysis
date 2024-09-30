@@ -1,0 +1,22 @@
+# options: 'neural-net', 'logReg', 'svc', 'adaboost', 'random-forest'
+type: 'neural-net'
+config:
+  search_space:
+    units_per_layer: 
+      low: 10
+      high: 200
+      step: 10
+  hyperparams:
+    num_hidden_layers: 1
+    units_per_layer: 90
+    dropout_rate: 0.25
+    learning_rate: 0.001
+
+tune_params:
+  epochs: 100
+  patience: 15
+  n_trials: 10
+
+train_params:
+  epochs: 100
+  patience: 25
