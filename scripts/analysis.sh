@@ -38,7 +38,6 @@ echo "Created run directory: $RUN_DIR"
 echo "Data manifest: $DATA_MANIFEST"
 echo "Output file: $PERF_FILE"
 
-# TODO: process.py -> train.py -> evaluate.py pipeline
 VIRTUAL_ENV=.venv
 # Set up virtual env
 virtualenv -p python3.10 $VIRTUAL_ENV
@@ -46,9 +45,9 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 #Install requirements
 pip install -r ./requirements.txt -q
 # Run process.py
-# python "./$SCRIPT_DIR/process.py" "$DATA_MANIFEST" --work-dir "$RUN_DIR" --data-dir "./data"
+python "./$SCRIPT_DIR/process.py" "$DATA_MANIFEST" --work-dir "$RUN_DIR" --data-dir "./data"
 # Run train.py
-python "./$SCRIPT_DIR/train.py" "$RUN_DIR" --work-dir "$RUN_DIR"
+python "./$SCRIPT_DIR/train.py" "$RUN_DIR" --work-dir "$RUN_DIR" --tune
 # Run evaluate.py
 python "./$SCRIPT_DIR/evaluate.py" "$DATA_MANIFEST" "$RUN_DIR" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
 
