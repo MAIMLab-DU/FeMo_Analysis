@@ -95,6 +95,7 @@ class FeMoNNClassifier(FeMoBaseClassifier):
                  }):
         super().__init__(config)
 
+    # TODO: tune with optuna
     def tune(self,
                train_data: list[np.ndarray],
                test_data: list[np.ndarray],
