@@ -141,7 +141,7 @@ class FeatureRanker:
         """
         self.logger.debug("Recursive feature elimination is going on... \n")
         n_top_feats = X.shape[1] // self._feature_ratio
-        estimator_type = self._param_cfg.get('recursive_ranking').pop('estimator')
+        estimator_type = self._param_cfg.get('recursive_ranking').get('estimator', 'AdaBoost')
         
         if estimator_type == 'AdaBoost':
             estimator = AdaBoostClassifier(random_state=0)
@@ -149,10 +149,11 @@ class FeatureRanker:
             estimator = ExtraTreesClassifier(random_state=0)  # gives slightly low f1 score.
         else:
             raise ValueError(f"Invalid {estimator = }")
+        kwargs = {k: v for k, v in self._param_cfg.get('recursive_ranking').items() if k != 'estimator'}
         rfe = RFE(estimator=estimator,
                   n_features_to_select=n_top_feats,
                   verbose=1,
-                  **self._param_cfg.get('recursive_ranking'))
+                  **kwargs)
         rfe.fit(X, y)
         recursive_top_indices = rfe.get_support(indices=True)
         
