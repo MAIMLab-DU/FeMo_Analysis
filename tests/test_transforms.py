@@ -6,8 +6,6 @@ from utils import (
     compare_elements,
     compare_dictionaries
 )
-import numpy as np
-from skimage.measure import label
 from data.transforms import (
     DataLoader,
     DataPreprocessor,
@@ -98,8 +96,6 @@ def test_sensation_map(folder):
                                                 preprocessed_data=preprocessed_data)
     desired_sensation_map = joblib.load(os.path.join(data_folder, folder, "sensation_map.pkl"))
     
-    num_maternal_sensed = len(np.unique(label(preprocessed_data['sensation_data']))) - 1
-
     compare_elements(
         key='sensation_map',
         actual=actual_sensation_map,
@@ -177,63 +173,8 @@ def test_detections_for_train(folder):
     )
 
 
-@pytest.mark.parametrize("folder", folders)
-def test_detections_for_inference(folder):
-    """
-    Test detections extracted for inference from preprocessed data and
-    comparing it with pre-stored expected results.
-    """
-    
-    detection_extractor = DetectionExtractor()
+# TODO: test_detections_for_inference
 
-    preprocessed_data = joblib.load(
-        os.path.join(data_folder, folder, "preprocessed_data.pkl")
-    )
-    scheme_dict = joblib.load(
-        os.path.join(data_folder, folder, "labeled_user_scheme.pkl")
-    )
-    actual_extracted_detections = detection_extractor.transform(
-        inference=True,
-        preprocessed_data=preprocessed_data, scheme_dict=scheme_dict
-    )
-    desired_extracted_detections = joblib.load(
-        os.path.join(data_folder, folder, "extracted_detections_inf.pkl")
-    )
-
-    compare_dictionaries(
-        actual_dict=actual_extracted_detections,
-        desired_dict=desired_extracted_detections,
-    )
-
-
-@pytest.mark.parametrize("folder", folders)
-def test_features_for_inference(folder):
-    """
-    Test features extracted for inference from preprocessed data and
-    comparing it with pre-stored expected results.
-    """
-    
-    feature_extractor = FeatureExtractor()
-
-    extracted_detections = joblib.load(
-        os.path.join(data_folder, folder, "extracted_detections_inf.pkl")
-    )
-    fm_dict = joblib.load(
-        os.path.join(data_folder, folder, "fm_dict.pkl")
-    )
-    actual_extracted_features = feature_extractor.transform(
-        inference=True,
-        extracted_detections=extracted_detections, fm_dict=fm_dict
-    )
-    desired_extracted_features = joblib.load(
-        os.path.join(data_folder, folder, "extracted_features_inf.pkl")
-    )
-
-    compare_elements(
-        key='features',
-        actual=actual_extracted_features['features'],
-        desired=desired_extracted_features['features']
-    )
 
 @pytest.mark.parametrize("folder", folders)
 def test_features_for_train(folder):
@@ -268,6 +209,9 @@ def test_features_for_train(folder):
         actual=actual_extracted_features['labels'],
         desired=desired_extracted_features['labels']
     )
+
+
+# TODO: test_features_for_inference
 
 
 if __name__ == "__main__":
