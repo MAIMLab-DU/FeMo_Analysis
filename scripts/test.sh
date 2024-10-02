@@ -25,6 +25,10 @@ then
     pip install awscli
 fi
 
+aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID && \
+aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY && \
+aws configure set default.region $AWS_DEFAULT_REGION
+
 # Check if dataFiles directory exists, if not, download and unzip the file
 if [ ! -d "$DATA_FILES_DIR" ]; then
     echo "Directory $DATA_FILES_DIR does not exist. Downloading dataFiles.zip from S3..."
