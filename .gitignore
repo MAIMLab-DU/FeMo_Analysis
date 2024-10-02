@@ -131,6 +131,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.secrets
 
 # Spyder project settings
 .spyderproject
@@ -176,6 +177,7 @@ cython_debug/
 *.iso
 *.lz
 *.zst
+*.zip.*
 
 # Ignore log files
 *.log
@@ -206,7 +208,6 @@ logs/
 *.json
 *.xml
 *.csv
-!tests/datafiles/data_manifest.json
 
 practice.py
 reports/
@@ -214,3 +215,4 @@ reports/
 work_dir/
 work_dirs/
 */run*/
+tests/datafiles/
