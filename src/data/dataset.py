@@ -267,11 +267,21 @@ class DataProcessor:
         det_indices = input_data.get('det_indices').to_numpy(dtype=int)
         filename_hash = input_data.get('filename_hash').to_numpy(dtype=int)
         
-        top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
-                                                    func=self._feature_ranker.ensemble_ranking)
+        # Check if top feature indices are present
+        if indices_filename is None:
+            top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
+                                                        func=self._feature_ranker.ensemble_ranking)
+        else:
+            if not os.path.exists(indices_filename):
+                top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
+                                                            func=self._feature_ranker.ensemble_ranking)
+            else:
+                top_feat_indices = joblib.load(indices_filename)
+                self.logger.info(f"Top features loaded from {indices_filename}")
         if indices_filename is not None:
             joblib.dump(top_feat_indices, indices_filename, compress=True)
             self.logger.info(f"Top features saved to {indices_filename}")
+
         X_norm = X_norm[:, top_feat_indices]
 
         # -3, -2, -1 are 'filename_hash', 'det_indices' and 'labels', respectively
