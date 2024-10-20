@@ -275,12 +275,12 @@ class DataProcessor:
             if not os.path.exists(indices_filename):
                 top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
                                                             func=self._feature_ranker.ensemble_ranking)
+                joblib.dump(top_feat_indices, indices_filename, compress=True)
+                self.logger.info(f"Top features saved to {indices_filename}")
             else:
                 top_feat_indices = joblib.load(indices_filename)
                 self.logger.info(f"Top features loaded from {indices_filename}")
                 
-            joblib.dump(top_feat_indices, indices_filename, compress=True)
-            self.logger.info(f"Top features saved to {indices_filename}")
 
         X_norm = X_norm[:, top_feat_indices]
 
