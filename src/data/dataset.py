@@ -278,7 +278,7 @@ class DataProcessor:
             else:
                 top_feat_indices = joblib.load(indices_filename)
                 self.logger.info(f"Top features loaded from {indices_filename}")
-        if indices_filename is not None:
+                
             joblib.dump(top_feat_indices, indices_filename, compress=True)
             self.logger.info(f"Top features saved to {indices_filename}")
 
