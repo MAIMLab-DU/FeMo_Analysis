@@ -151,7 +151,7 @@ class FeMoDataset:
             bucket = item.get('bucketName', None)
             data_file_key = item.get('datFileKey', None)
             feat_file_key = item.get('csvFileKey', None)
-            map_key = gen_hash(feat_file_key)
+            map_key = gen_hash(data_file_key)
             if map_key in self.map.keys():
                 continue
 
@@ -189,7 +189,7 @@ class FeMoDataset:
                     pass
 
             if self.inference:
-                current_features['filename'] = data_file_key
+                current_features.drop('labels', axis=1, inplace=True)
 
             self.features_df = pd.concat([self.features_df, current_features], axis=0, ignore_index=True)
 
@@ -218,8 +218,8 @@ class DataProcessor:
 
     def _normalize_features(self,
                             data: np.ndarray,
-                            mu: float|None = None,
-                            dev: float|None = None):
+                            mu: np.ndarray|None = None,
+                            dev: np.ndarray|None = None):
         if mu is None:
             mu = np.mean(data, axis=0)
         norm_feats = data - mu
@@ -227,6 +227,7 @@ class DataProcessor:
             dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
         # Avoid division by zero by adding a small epsilon
         norm_feats = norm_feats / dev
+        self.logger.info(f"{mu.shape = }")
 
         return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)], mu, dev
     
@@ -267,43 +268,35 @@ class DataProcessor:
         
         return split_data
 
-
-    def process(self, input_data: pd.DataFrame, params_filename: str|None = None):
+    def process(self, input_data: pd.DataFrame, params_filename: str | None = None):
         self.logger.debug("Processing features...")
-        X = input_data.drop(['labels', 'det_indices', 'filename_hash'],
-                            axis=1, errors='ignore').to_numpy()
-        y_pre = input_data.get('labels').to_numpy(dtype=int)
-        det_indices = input_data.get('det_indices').to_numpy(dtype=int)
-        filename_hash = input_data.get('filename_hash').to_numpy(dtype=int)
-        
-        # Check if top feature indices are present
-        if params_filename is None:
-            X_norm, mu, dev = self._normalize_features(X)
-            top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
-                                                        func=self._feature_ranker.ensemble_ranking)
+
+        # Extract necessary columns from the input data
+        X = input_data.drop(['labels', 'det_indices', 'filename_hash'], axis=1, errors='ignore').to_numpy()
+        y_pre = input_data['labels'].to_numpy(dtype=int)
+        det_indices = input_data['det_indices'].to_numpy(dtype=int)
+        filename_hash = input_data['filename_hash'].to_numpy(dtype=int)
+
+        # Check if params_filename is provided and load or compute necessary data
+        if params_filename and os.path.exists(params_filename):
+            params_dict = joblib.load(params_filename)
+            self.logger.info(f"Top feature indices, mu and dev loaded from {params_filename}")
+            X_norm, mu, dev = self._normalize_features(X, params_dict['mu'], params_dict['dev'])
+            top_feat_indices = params_dict['top_feat_indices']
         else:
-            if not os.path.exists(params_filename):
-                X_norm, mu, dev = self._normalize_features(X)
-                top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
-                                                            func=self._feature_ranker.ensemble_ranking)
-                params_dict = {
-                    'top_feat_indices': top_feat_indices,
-                    'mu': mu,
-                    'dev': dev 
-                }
+            X_norm, mu, dev = self._normalize_features(X)
+            top_feat_indices = self._feature_ranker.fit(X_norm, y_pre, func=self._feature_ranker.ensemble_ranking)
+
+            if params_filename:  # Save the computed parameters if params_filename is provided
+                params_dict = {'top_feat_indices': top_feat_indices, 'mu': mu, 'dev': dev}
                 joblib.dump(params_dict, params_filename, compress=True)
                 self.logger.info(f"Top feature indices, mu and dev saved to {params_filename}")
-            else:
-                params_dict = joblib.load(params_filename)
-                X_norm = self._normalize_features(X, params_dict['mu'], params_dict['dev'])
-                top_feat_indices = params_dict['top_feat_indices']
-                self.logger.info(f"Top feature indices, mu and dev loaded from {params_filename}")
-                
+
+        # Select top features based on the computed/loaded indices
         X_norm = X_norm[:, top_feat_indices]
 
-        # -3, -2, -1 are 'filename_hash', 'det_indices' and 'labels', respectively
-        return np.concatenate([X_norm, filename_hash[:, np.newaxis],
-                               det_indices[:, np.newaxis], y_pre[:, np.newaxis]], axis=1)
+        # Combine normalized data with filename_hash, det_indices, and labels
+        return np.concatenate([X_norm, filename_hash[:, np.newaxis], det_indices[:, np.newaxis], y_pre[:, np.newaxis]], axis=1)
     
 
 
