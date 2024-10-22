@@ -68,7 +68,6 @@ def main():
     results_path = os.path.join(args.work_dir, 'results.csv')
     classifier.result.compile_results(
         split_dict=split_dataset,
-        nn_pred=True if classifier_type == 'neural-net' else False,
         filename=results_path
     )
     LOGGER.info(f"Results saved to {os.path.abspath(results_path)}")

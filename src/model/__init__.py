@@ -3,6 +3,7 @@ from .svm import FeMoSVClassifier
 from .random_forest import FeMoRFClassifier
 from .adaboost import FeMoAdaBoostClassifier
 from .femonet import FeMoNNClassifier
+from .ensemble import FeMoEnsembleClassifier
 
 
 __all__ = [
@@ -11,6 +12,7 @@ __all__ = [
     'FeMoRFClassifier',
     'FeMoAdaBoostClassifier',
     'FeMoNNClassifier',
+    'FeMoEnsembleClassifier'
 ]
 
 CLASSIFIER_MAP = {
@@ -18,5 +20,6 @@ CLASSIFIER_MAP = {
     'svc': FeMoSVClassifier,
     'random-forest': FeMoRFClassifier,
     'adaboost': FeMoAdaBoostClassifier,
-    'neural-net': FeMoNNClassifier
+    'neural-net': FeMoNNClassifier,
+    'ensemble': FeMoEnsembleClassifier
 }
