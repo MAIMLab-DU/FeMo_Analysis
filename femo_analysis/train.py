@@ -24,7 +24,10 @@ def parse_args():
 
 
 def main():
+    LOGGER.info("Starting training...")
     args = parse_args()
+
+    os.makedirs(args.work_dir, exist_ok=True)
 
     config_path = os.path.join(os.path.dirname(__file__), '..', 'configs', 'train-cfg.yaml')
     with open(config_path, "r") as f:
