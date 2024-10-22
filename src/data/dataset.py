@@ -59,6 +59,7 @@ class FeMoDataset:
         )
         self._data_manifest_path = Path(data_manifest_path)
         self._data_manifest = None
+        self.inference = inference
         self.features_df = pd.DataFrame([])
         self.map = defaultdict()
     
@@ -187,6 +188,9 @@ class FeMoDataset:
                     self.logger.warning(e)
                     pass
 
+            if self.inference:
+                current_features['filename'] = data_file_key
+
             self.features_df = pd.concat([self.features_df, current_features], axis=0, ignore_index=True)
 
             # Create mapping to get features give a filename from the dataset
@@ -212,14 +216,19 @@ class DataProcessor:
         self._feat_rank_cfg = feat_rank_cfg
         self._feature_ranker = FeatureRanker(**feat_rank_cfg) if feat_rank_cfg else FeatureRanker()
 
-    def _normalize_features(self, data: np.ndarray):
-        mu = np.mean(data, axis=0)
+    def _normalize_features(self,
+                            data: np.ndarray,
+                            mu: float|None = None,
+                            dev: float|None = None):
+        if mu is None:
+            mu = np.mean(data, axis=0)
         norm_feats = data - mu
-        dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
+        if dev is None:
+            dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
         # Avoid division by zero by adding a small epsilon
         norm_feats = norm_feats / dev
 
-        return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)]
+        return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)], mu, dev
     
     def split_data(self,
                     data: np.ndarray,
@@ -259,29 +268,37 @@ class DataProcessor:
         return split_data
 
 
-    def process(self, input_data: pd.DataFrame, indices_filename: str|None = None):
+    def process(self, input_data: pd.DataFrame, params_filename: str|None = None):
         self.logger.debug("Processing features...")
-        X_norm = self._normalize_features(input_data.drop(['labels', 'det_indices', 'filename_hash'],
-                                                          axis=1, errors='ignore').to_numpy())
+        X = input_data.drop(['labels', 'det_indices', 'filename_hash'],
+                            axis=1, errors='ignore').to_numpy()
         y_pre = input_data.get('labels').to_numpy(dtype=int)
         det_indices = input_data.get('det_indices').to_numpy(dtype=int)
         filename_hash = input_data.get('filename_hash').to_numpy(dtype=int)
         
         # Check if top feature indices are present
-        if indices_filename is None:
+        if params_filename is None:
+            X_norm, mu, dev = self._normalize_features(X)
             top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
                                                         func=self._feature_ranker.ensemble_ranking)
         else:
-            if not os.path.exists(indices_filename):
+            if not os.path.exists(params_filename):
+                X_norm, mu, dev = self._normalize_features(X)
                 top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
                                                             func=self._feature_ranker.ensemble_ranking)
-                joblib.dump(top_feat_indices, indices_filename, compress=True)
-                self.logger.info(f"Top features saved to {indices_filename}")
+                params_dict = {
+                    'top_feat_indices': top_feat_indices,
+                    'mu': mu,
+                    'dev': dev 
+                }
+                joblib.dump(params_dict, params_filename, compress=True)
+                self.logger.info(f"Top feature indices, mu and dev saved to {params_filename}")
             else:
-                top_feat_indices = joblib.load(indices_filename)
-                self.logger.info(f"Top features loaded from {indices_filename}")
+                params_dict = joblib.load(params_filename)
+                X_norm = self._normalize_features(X, params_dict['mu'], params_dict['dev'])
+                top_feat_indices = params_dict['top_feat_indices']
+                self.logger.info(f"Top feature indices, mu and dev loaded from {params_filename}")
                 
-
         X_norm = X_norm[:, top_feat_indices]
 
         # -3, -2, -1 are 'filename_hash', 'det_indices' and 'labels', respectively
