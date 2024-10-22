@@ -15,6 +15,7 @@ from model import CLASSIFIER_MAP
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("datasetDir", type=str, help="Directory containing train test pickle files")
+    parser.add_argument("ckptName", type=str, help="Name of model checkpoint file")
     parser.add_argument("--tune", action='store_true', help="Tune hyperparameters before training")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     args = parser.parse_args()
@@ -64,7 +65,15 @@ def main():
         test_data,
         **train_params
     )
+    try:
+        classifier.save_model(
+            model_name=os.path.join(args.work_dir, args.ckptName),
+            model_framework='keras' if classifier_type == 'neural-net' else 'sklearn'
+        )
+    except Exception:
+        return
     LOGGER.info("Finished training")
+    LOGGER.info(f"Model checkpoint saved to {os.path.join(args.work_dir, args.ckptName)}")
     results_path = os.path.join(args.work_dir, 'results.csv')
     classifier.result.compile_results(
         split_dict=split_dataset,

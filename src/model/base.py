@@ -142,11 +142,14 @@ class FeMoBaseClassifier(ABC):
         if self.classifier is not None:
             try:
                 if model_framework == 'sklearn':
-                    joblib.dump(self.classifier, f"{model_name}.pkl")
+                    assert model_name.endswith('.pkl'), "Must be a pickle filename"
+                    joblib.dump(self.classifier, f"{model_name}")
                 elif model_framework == 'keras':
-                    self.classifier.save(f"{model_name}.h5")
+                    assert model_name.endswith('.h5'), "Must be a h5 filename"
+                    self.classifier.save(f"{model_name}")
             except Exception as e:
                 self.logger.error(f"Error saving model: {e}")
+                raise Exception
         else:
             self.logger.error("No model trained yet. Cannot save.")
 
