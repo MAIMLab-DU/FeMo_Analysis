@@ -17,9 +17,8 @@ class Result:
 
     @staticmethod
     def process_attributes(attribute,
-                                   split_dict: dict,
-                                   nn_pred: bool,
-                                   preds: bool = False):
+                           split_dict: dict,
+                           preds: bool = False):
         tpd_attribute_rand = np.zeros((1, 1))
         fpd_attribute_rand = np.zeros((1, 1))
 
@@ -33,35 +32,31 @@ class Result:
                 tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:split_dict['num_tpd_last_fold'], np.newaxis]])
                 fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][split_dict['num_tpd_last_fold']:, np.newaxis]])
 
-        if nn_pred:
-            # Remove the initial zeros added
-            tpd_attribute_rand = tpd_attribute_rand[1:]
-            fpd_attribute_rand = fpd_attribute_rand[1:]
+        # Remove the initial zeros added
+        tpd_attribute_rand = tpd_attribute_rand[1:]
+        fpd_attribute_rand = fpd_attribute_rand[1:]
 
-            tpd_attribute = np.zeros((split_dict['num_tpd'], 1))
-            fpd_attribute = np.zeros((split_dict['num_fpd'], 1))
+        tpd_attribute = np.zeros((split_dict['num_tpd'], 1))
+        fpd_attribute = np.zeros((split_dict['num_fpd'], 1))
 
-            if num_folds > 1:  # Stratified K-fold division
-                # Non-randomized the predictions to match with the original data set
-                for i in range(split_dict['num_tpd']):
-                    index = split_dict['rand_num_tpd'][i]
-                    tpd_attribute[index] = tpd_attribute_rand[i]
+        if num_folds > 1:  # Stratified K-fold division
+            # Non-randomized the predictions to match with the original data set
+            for i in range(split_dict['num_tpd']):
+                index = split_dict['rand_num_tpd'][i]
+                tpd_attribute[index] = tpd_attribute_rand[i]
 
-                for i in range(split_dict['num_fpd']):
-                    index = split_dict['rand_num_fpd'][i]
-                    fpd_attribute[index] = fpd_attribute_rand[i]
-            else:
-                tpd_attribute = tpd_attribute_rand
-                fpd_attribute = fpd_attribute_rand
-
-            if preds:
-                tpd_attribute = tpd_attribute >= 0.5
-                fpd_attribute = fpd_attribute >= 0.5
-
-            return np.concatenate([tpd_attribute, fpd_attribute])
+            for i in range(split_dict['num_fpd']):
+                index = split_dict['rand_num_fpd'][i]
+                fpd_attribute[index] = fpd_attribute_rand[i]
         else:
-            # TODO: for other models
-            raise NotImplementedError("TODO")
+            tpd_attribute = tpd_attribute_rand
+            fpd_attribute = fpd_attribute_rand
+
+        if preds:
+            tpd_attribute = tpd_attribute >= 0.5
+            fpd_attribute = fpd_attribute >= 0.5
+
+        return np.concatenate([tpd_attribute, fpd_attribute])
 
     def _assert_no_none_fields(self):
         # Check each field to ensure it is not None
@@ -85,14 +80,13 @@ class Result:
     
     def compile_results(self,
                         split_dict: dict,
-                        nn_pred: bool = False,
                         filename: str|None = None):
         self._assert_no_none_fields()
 
-        preds = self.process_attributes(self.preds, split_dict, nn_pred, preds=True)
-        pred_scores = self.process_attributes(self.pred_scores, split_dict, nn_pred)
-        det_indices = self.process_attributes(self.det_indices, split_dict, nn_pred)
-        filename_hash = self.process_attributes(self.filename_hash, split_dict, nn_pred)
+        preds = self.process_attributes(self.preds, split_dict, preds=True)
+        pred_scores = self.process_attributes(self.pred_scores, split_dict)
+        det_indices = self.process_attributes(self.det_indices, split_dict)
+        filename_hash = self.process_attributes(self.filename_hash, split_dict)
 
         self.preds = preds.astype(float)
         self.pred_scores = pred_scores.astype(float)
