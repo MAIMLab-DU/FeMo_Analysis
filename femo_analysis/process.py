@@ -38,6 +38,8 @@ def main():
                           args.dataManifest,
                           args.inference,
                           dataproc_cfg.get('data_pipeline'))
+    data_processor = DataProcessor(feat_rank_cfg=dataproc_cfg.get('feature_ranking'))
+
     df = dataset.build(force_extract=args.extract)
     if args.inference:
         df.to_csv(os.path.join(args.work_dir, 'inference.csv'), header=True, index=False)
@@ -47,9 +49,8 @@ def main():
     LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
 
     LOGGER.info("Preprocessing raw input data")
-    data_processor = DataProcessor(feat_rank_cfg=dataproc_cfg.get('feature_ranking'))
     data_output = data_processor.process(input_data=df,
-                                         indices_filename=os.path.join(args.work_dir, 'top_feat_indices.pkl'))
+                                         params_filename=os.path.join(args.work_dir, 'params_dict.pkl'))
 
     LOGGER.info(f"Splitting {len(data_output)} rows of data into train, test datasets.")
     split_dict = data_processor.split_data(
