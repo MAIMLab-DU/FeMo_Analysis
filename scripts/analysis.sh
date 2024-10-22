@@ -4,55 +4,78 @@ set -e
 start_time="$(date +%s)"
 SCRIPT_DIR="femo_analysis"
 
-# Check if the first argument is provided and store it in DATA_MANIFEST
-if [ -z "$1"]; then
-    echo "Usage: $0 <data_manifest> $1 <output_file>"
+# Initialize CKPT_NAME
+CKPT_NAME=""
+
+# Process the positional arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        *)
+            # Store the positional arguments (data_manifest, output_file, run_dir, ckpt_name)
+            if [ -z "$DATA_MANIFEST" ]; then
+                DATA_MANIFEST="$1"
+            elif [ -z "$CKPT_NAME" ]; then
+                CKPT_NAME="$1"
+            elif [ -z "$PERF_FILE" ]; then
+                PERF_FILE="$1"
+            elif [ -z "$RUN_DIR" ]; then
+                RUN_DIR="$1"
+            else
+                echo "Unknown option or too many arguments: $1"
+                exit 1
+            fi
+            shift # Remove the argument from the list
+            ;;
+    esac
+done
+
+# Check if the required positional arguments are provided
+if [ -z "$DATA_MANIFEST" ] || [ -z "$CKPT_NAME" ]; then
+    echo "Usage: $0 <data_manifest> <ckpt_name> [output_file] [run_dir]"
     exit 1
-else
-    DATA_MANIFEST="$1"
 fi
-if [ -z "$2"]; then
-    PERF_FILE="peformance.csv"
-else
-    PERF_FILE="$2"
-fi
-if [ -z "$3"]; then
-    WORK_DIR=${WORK_DIR:-"./work_dir"}
 
-    # Create the $WORK_DIR directory if it doesn't exist
-    mkdir -p "$WORK_DIR"
+# Set defaults for optional arguments if not provided
+PERF_FILE=${PERF_FILE:-"performance.csv"}
+WORK_DIR=${WORK_DIR:-"./work_dir"}
 
-    # Find the highest numbered run directory (run1, run2, etc.)
-    # The command uses ls to list directories, grep to match the pattern, and sort to find the max number.
-    LAST_RUN=$(ls -d "$WORK_DIR"/run* 2>/dev/null | grep -o 'run[0-9]\+' | sort -V | tail -n 1 | grep -o '[0-9]\+')
+# Create the $WORK_DIR directory if it doesn't exist
+mkdir -p "$WORK_DIR"
 
-    # If no previous runs, start with 1, otherwise increment the last run number
-    NEXT_RUN=$((LAST_RUN + 1))
+# Find the highest numbered run directory (run1, run2, etc.)
+LAST_RUN=$(ls -d "$WORK_DIR"/run* 2>/dev/null | grep -o 'run[0-9]\+' | sort -V | tail -n 1 | grep -o '[0-9]\+')
 
-    # Create the next run directory
+# If no previous runs, start with 1, otherwise increment the last run number
+NEXT_RUN=$((LAST_RUN + 1))
+
+# Create the next run directory
+if [ -z "$RUN_DIR" ]; then
     RUN_DIR="$WORK_DIR/run$NEXT_RUN"
-    mkdir -p "$RUN_DIR"
-else
-    RUN_DIR="$3"
 fi
+mkdir -p "$RUN_DIR"
 
-# Output the created run directory and the DATA_MANIFEST
+# Output the created run directory and the DATA_MANIFEST and CKPT_NAME
 echo "Created run directory: $RUN_DIR"
 echo "Data manifest: $DATA_MANIFEST"
-echo "Output file: $PERF_FILE"
+echo "Performance file: $PERF_FILE"
+echo "Checkpoint name: $CKPT_NAME"
 
 VIRTUAL_ENV=.venv
 # Set up virtual env
 virtualenv -p python3.10 $VIRTUAL_ENV
 . $VIRTUAL_ENV/bin/activate
-#Install requirements
+
+# Install requirements
 pip install -r ./requirements.txt -q
+
 # Run process.py
 python "./$SCRIPT_DIR/process.py" "$DATA_MANIFEST" --work-dir "$RUN_DIR" --data-dir "./data"
+
 # Run train.py
-python "./$SCRIPT_DIR/train.py" "$RUN_DIR" --work-dir "$RUN_DIR" --tune
+python "./$SCRIPT_DIR/train.py" "$RUN_DIR" "$CKPT_NAME" --work-dir "$RUN_DIR" --tune
+
 # Run evaluate.py
-python "./$SCRIPT_DIR/evaluate.py" "$DATA_MANIFEST" "$RUN_DIR" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
+python "./$SCRIPT_DIR/evaluate.py" "$DATA_MANIFEST" "$RUN_DIR" --work-dir "$RUN_DIR" --outfile "$PERF_FILE" --ckpt-name "$CKPT_NAME"
 
 # Record the end time
 end_time="$(date +%s)"
