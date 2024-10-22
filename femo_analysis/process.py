@@ -28,6 +28,8 @@ def main():
     LOGGER.info("Starting data processing...")
     args = parse_args()
 
+    os.makedirs(args.work_dir, exist_ok=True)
+
     config_path = os.path.join(os.path.dirname(__file__), '..', 'configs', 'dataproc-cfg.yaml')
     with open(config_path, "r") as f:
         dataproc_cfg = yaml.safe_load(f)
@@ -42,7 +44,7 @@ def main():
 
     df = dataset.build(force_extract=args.extract)
     if args.inference:
-        df.to_csv(os.path.join(args.work_dir, 'inference.csv'), header=True, index=False)
+        joblib.dump(dataset, os.path.join(args.work_dir, 'inference_dataset.pkl'), compress=True)
         LOGGER.info("Dataset built for inference.")
         return
     df.to_csv(os.path.join(args.work_dir, 'features.csv'), header=True, index=False)
@@ -57,8 +59,6 @@ def main():
         data=data_output,
         **dataproc_cfg.get('data_processor', {})
     )
-
-    os.makedirs(args.work_dir, exist_ok=True)
 
     joblib.dump(split_dict, os.path.join(args.work_dir, 'split_dataset.pkl'), compress=True)
     LOGGER.info(f"Saved datasets to {os.path.abspath(args.work_dir)}")
