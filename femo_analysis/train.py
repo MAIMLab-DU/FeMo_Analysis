@@ -70,7 +70,7 @@ def main():
     )
     try:
         classifier.save_model(
-            model_name=os.path.join(args.work_dir, args.ckptName),
+            model_filename=os.path.join(args.work_dir, args.ckptName),
             model_framework='keras' if classifier_type == 'neural-net' else 'sklearn'
         )
     except Exception:
