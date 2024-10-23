@@ -13,8 +13,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("dataManifest", type=str, help="Path to data manifest json file")
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
+    parser.add_argument("--params-filename", type=str, default=None, help="Parameters dict filename")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
-    parser.add_argument("--inference", action='store_true', help="Flag enable data processing for inference")
     parser.add_argument("--extract", action='store_true', default=False, help="Extract features ")
     args = parser.parse_args()
 
@@ -35,20 +35,16 @@ def main():
 
     dataset = FeMoDataset(args.data_dir,
                           args.dataManifest,
-                          args.inference,
+                          False,
                           dataproc_cfg.get('data_pipeline'))
 
     df = dataset.build(force_extract=args.extract)
-    if args.inference:
-        joblib.dump(dataset, os.path.join(args.work_dir, 'inference_dataset.pkl'), compress=True)
-        LOGGER.info("Dataset built for inference.")
-        return
     df.to_csv(os.path.join(args.work_dir, 'features.csv'), header=True, index=False)
     LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
 
     LOGGER.info("Preprocessing raw input data")
     data_output = dataset.process(input_data=df,
-                                  params_filename=os.path.join(args.work_dir, 'params_dict.pkl'))
+                                  params_filename=args.params_filename)
 
     LOGGER.info(f"Splitting {len(data_output)} rows of data into train, test datasets.")
     split_dict = dataset.split_data(
