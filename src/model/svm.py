@@ -155,3 +155,10 @@ class FeMoSVClassifier(FeMoBaseClassifier):
         self.result.det_indices = det_indices
         self.result.filename_hash = filename_hash
 
+    def predict(self, X):
+        
+        assert self.classifier is not None, "Error loading classifier"
+
+        pred_labels = self.classifier.predict(X)
+
+        return pred_labels
