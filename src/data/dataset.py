@@ -14,7 +14,11 @@ from botocore.exceptions import (
 from pathlib import Path
 from typing import Union
 from collections import defaultdict
-from ._utils import gen_hash, stratified_kfold
+from .utils import (
+    gen_hash,
+    stratified_kfold,
+    normalize_features
+)
 from .pipeline import Pipeline
 from .ranking import FeatureRanker
 
@@ -201,26 +205,11 @@ class FeMoDataset:
         self.logger.info("FeMoDataset process completed.")
         return self.features_df
     
-    def _normalize_features(self,
-                            data: np.ndarray,
-                            mu: np.ndarray|None = None,
-                            dev: np.ndarray|None = None):
-        if mu is None:
-            mu = np.mean(data, axis=0)
-        norm_feats = data - mu
-        if dev is None:
-            dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
-        # Avoid division by zero by adding a small epsilon
-        norm_feats = norm_feats / dev
-        self.logger.info(f"{mu.shape = }")
-
-        return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)], mu, dev
-    
-    def split_data(self,
-                    data: np.ndarray,
-                    strategy: Literal['holdout', 'kfold'] = 'holdout',
-                    custom_ratio: int|None = None,
-                    num_folds: int = 5):
+    @staticmethod
+    def split_data(data: np.ndarray,
+                   strategy: Literal['holdout', 'kfold'] = 'holdout',
+                   custom_ratio: int|None = None,
+                   num_folds: int = 5):
 
         X, y = data[:, :-1], data[:, -1]
         train, test = [], []
@@ -266,10 +255,10 @@ class FeMoDataset:
         if params_filename and os.path.exists(params_filename):
             params_dict = joblib.load(params_filename)
             self.logger.info(f"Top feature indices, mu and dev loaded from {params_filename}")
-            X_norm, mu, dev = self._normalize_features(X, params_dict['mu'], params_dict['dev'])
+            X_norm, mu, dev = normalize_features(X, params_dict['mu'], params_dict['dev'])
             top_feat_indices = params_dict['top_feat_indices']
         else:
-            X_norm, mu, dev = self._normalize_features(X)
+            X_norm, mu, dev = normalize_features(X)
             top_feat_indices = self._feature_ranker.fit(X_norm, y_pre, func=self._feature_ranker.ensemble_ranking)
 
             if params_filename:  # Save the computed parameters if params_filename is provided
