@@ -6,10 +6,7 @@ import yaml
 import joblib
 import argparse
 from logger import LOGGER
-from data.dataset import (
-    FeMoDataset,
-    DataProcessor
-)
+from data.dataset import FeMoDataset
 
 
 def parse_args():
@@ -40,7 +37,6 @@ def main():
                           args.dataManifest,
                           args.inference,
                           dataproc_cfg.get('data_pipeline'))
-    data_processor = DataProcessor(feat_rank_cfg=dataproc_cfg.get('feature_ranking'))
 
     df = dataset.build(force_extract=args.extract)
     if args.inference:
@@ -51,13 +47,13 @@ def main():
     LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
 
     LOGGER.info("Preprocessing raw input data")
-    data_output = data_processor.process(input_data=df,
-                                         params_filename=os.path.join(args.work_dir, 'params_dict.pkl'))
+    data_output = dataset.process(input_data=df,
+                                  params_filename=os.path.join(args.work_dir, 'params_dict.pkl'))
 
     LOGGER.info(f"Splitting {len(data_output)} rows of data into train, test datasets.")
-    split_dict = data_processor.split_data(
+    split_dict = dataset.split_data(
         data=data_output,
-        **dataproc_cfg.get('data_processor', {})
+        **dataproc_cfg.get('split_config', {})
     )
 
     joblib.dump(split_dict, os.path.join(args.work_dir, 'split_dataset.pkl'), compress=True)

@@ -34,6 +34,10 @@ class FeMoDataset:
         return self._pipeline
     
     @property
+    def feat_rank_cfg(self) -> dict:
+        return self._feat_rank_cfg  
+    
+    @property
     def data_manifest(self) -> Path:
         if self._data_manifest is None:
             assert self._data_manifest_path.suffix == '.json', \
@@ -49,7 +53,8 @@ class FeMoDataset:
                  base_dir: Union[Path, str],
                  data_manifest_path: Union[Path, str],
                  inference: bool,
-                 pipeline_cfg: dict
+                 pipeline_cfg: dict,
+                 feat_rank_cfg: dict = None
                 ) -> None:
         
         self._base_dir = Path(base_dir)
@@ -59,8 +64,11 @@ class FeMoDataset:
         )
         self._data_manifest_path = Path(data_manifest_path)
         self._data_manifest = None
+        self.inference = inference
         self.features_df = pd.DataFrame([])
         self.map = defaultdict()
+        self._feat_rank_cfg = feat_rank_cfg
+        self._feature_ranker = FeatureRanker(**feat_rank_cfg) if feat_rank_cfg else FeatureRanker()
     
     def __len__(self):
         return self.features_df.shape[0]
@@ -192,23 +200,7 @@ class FeMoDataset:
         
         self.logger.info("FeMoDataset process completed.")
         return self.features_df
-
-
-class DataProcessor:
-    @property
-    def logger(self):
-        return LOGGER
-        
-    @property
-    def feat_rank_cfg(self) -> dict:
-        return self._feat_rank_cfg     
-
-    def __init__(self,
-                 feat_rank_cfg: dict = None) -> None:
-        
-        self._feat_rank_cfg = feat_rank_cfg
-        self._feature_ranker = FeatureRanker(**feat_rank_cfg) if feat_rank_cfg else FeatureRanker()
-
+    
     def _normalize_features(self,
                             data: np.ndarray,
                             mu: np.ndarray|None = None,
@@ -290,8 +282,3 @@ class DataProcessor:
 
         # Combine normalized data with filename_hash, det_indices, and labels
         return np.concatenate([X_norm, filename_hash[:, np.newaxis], det_indices[:, np.newaxis], y_pre[:, np.newaxis]], axis=1)
-    
-
-
-
-        
