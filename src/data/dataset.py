@@ -59,7 +59,6 @@ class FeMoDataset:
         )
         self._data_manifest_path = Path(data_manifest_path)
         self._data_manifest = None
-        self.inference = inference
         self.features_df = pd.DataFrame([])
         self.map = defaultdict()
     
@@ -131,12 +130,9 @@ class FeMoDataset:
         features_df = pd.DataFrame(features, columns=columns)
 
         # Add optional columns based on existence
-        if key is not None:
-            features_df['filename_hash'] = key
-        if det_indices is not None:
-            features_df['det_indices'] = det_indices
-        if labels is not None:
-            features_df['labels'] = labels
+        features_df['filename_hash'] = key
+        features_df['det_indices'] = det_indices
+        features_df['labels'] = labels
 
         # Ensure the columns order is: filename_hash, det_indices, labels
         features_df.to_csv(filename, header=columns is not None, index=False)
@@ -187,9 +183,6 @@ class FeMoDataset:
                 except Exception as e:
                     self.logger.warning(e)
                     pass
-
-            if self.inference:
-                current_features.drop('labels', axis=1, inplace=True)
 
             self.features_df = pd.concat([self.features_df, current_features], axis=0, ignore_index=True)
 
