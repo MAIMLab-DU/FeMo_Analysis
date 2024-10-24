@@ -48,7 +48,8 @@ def main():
 
     LOGGER.info("Preprocessing raw input data")
     data_processor = DataProcessor(feat_rank_cfg=dataproc_cfg.get('feature_ranking'))
-    data_output = data_processor.process(input_data=df)
+    data_output = data_processor.process(input_data=df,
+                                         indices_filename=os.path.join(args.work_dir, 'top_feat_indices.pkl'))
 
     LOGGER.info(f"Splitting {len(data_output)} rows of data into train, test datasets.")
     split_dict = data_processor.split_data(
