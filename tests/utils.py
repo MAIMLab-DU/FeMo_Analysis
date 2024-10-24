@@ -46,6 +46,9 @@ def compare_dictionaries(actual_dict: dict, desired_dict: dict):
             assert len(actual) == len(desired), f"{key} {len(actual) = } != {len(desired) = }"
             for i in range(len(actual)):
                 compare_elements(key, actual[i], desired[i])
+
+def foo():
+    print("Foo")
         
 
         
