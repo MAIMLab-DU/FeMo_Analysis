@@ -52,7 +52,7 @@ feature_ranking:
       step: 1
       estimator: 'AdaBoost'
 
-data_processor:
+split_config:
   strategy: 'kfold'
   num_folds: 5
 
