@@ -208,6 +208,7 @@ logs/
 *.json
 *.xml
 *.csv
+*.xlsx
 
 practice.py
 reports/

@@ -140,8 +140,6 @@ class FeatureExtractor(BaseTransform):
         
         return {
             'features': X_extracted,
-            'labels': np.full((X_extracted.shape[0], 1), -1),
-            'det_indices': np.full((X_extracted.shape[0], 1), -1),
             'columns': columns
         }
 

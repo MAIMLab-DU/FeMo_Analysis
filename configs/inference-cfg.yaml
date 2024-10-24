@@ -1,2 +1,3 @@
 # options: 'neural-net', 'logReg', 'svc', 'adaboost', 'random-forest'
 type: 'neural-net'
+skip_imu_features: true
