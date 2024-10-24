@@ -259,12 +259,12 @@ For cloning using SSH, make sure to create and store SSH key on your device. The
 
 To run a data processing and training job, run the following command:
 ```sh
-❯ bash scripts/analysis.sh
+❯ bash scripts/analysis.sh <data_manifest> <ckpt_name> [output_file] [run_dir] [params_filename]
 ```
 
 To run an inference job, run the following command:
 ```sh
-❯ bash scripts/inference.sh
+❯ bash scripts/inference.sh <data_filename> <ckpt_name> <params_dict> [output_file] [run_dir]
 ```
 
 ### 🧪 Tests
