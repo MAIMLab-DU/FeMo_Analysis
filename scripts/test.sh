@@ -17,6 +17,10 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 # Install requirements
 pip install -r tests/requirements.txt
 
+# Run Ruff for linting
+echo "Running ruff to check for linting issues"
+ruff check ./**/*.py
+
 # Install AWS CLI if needed
 if ! command -v aws &> /dev/null
 then
@@ -39,10 +43,6 @@ if [ ! -d "$DATA_FILES_DIR" ]; then
 else
     echo "Directory $DATA_FILES_DIR exists. Skipping download."
 fi
-
-# Run Ruff for linting
-echo "Running ruff to check for linting issues"
-ruff check ./**/*.py
 
 # Run tests
 echo "Running tests"
