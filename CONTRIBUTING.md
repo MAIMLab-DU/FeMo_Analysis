@@ -19,7 +19,7 @@ Welcome! We're excited that you're considering contributing to our [FeMo_Analysi
 
 We greatly appreciate contributions in the form of pull requests. To make the review process as smooth as possible, please follow these steps:
 
-1. **[Fork the repository](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo):** Start by forking the Ultralytics YOLO repository to your GitHub account.
+1. **[Fork the repository](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo):** Start by forking the [FeMo_Analysis](https://github.com/MAIMLab/FeMo_Analysis) repository to your GitHub account.
 
 2. **[Create a branch](https://docs.github.com/en/desktop/making-changes-in-a-branch/managing-branches-in-github-desktop):** Create a new branch in your forked repository with a clear, descriptive name that reflects your changes.
 
@@ -29,7 +29,7 @@ We greatly appreciate contributions in the form of pull requests. To make the re
 
 5. **[Commit your changes](https://docs.github.com/en/desktop/making-changes-in-a-branch/committing-and-reviewing-changes-to-your-project-in-github-desktop):** Commit your changes with a concise and descriptive commit message. If your changes address a specific issue, include the issue number in your commit message.
 
-6. **[Create a pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request):** Submit a pull request from your forked repository to the main Ultralytics YOLO repository. Provide a clear and detailed explanation of your changes and how they improve the project.
+6. **[Create a pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request):** Submit a pull request from your forked repository to the main repository. Provide a clear and detailed explanation of your changes and how they improve the project.
 
 ### Google-Style Docstrings
 
