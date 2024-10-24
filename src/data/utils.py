@@ -82,3 +82,17 @@ def stratified_kfold(
         "rand_num_tpd": rand_num_TPD,
         "rand_num_fpd": rand_num_FPD
     }
+
+
+def normalize_features(data: np.ndarray,
+                       mu: np.ndarray|None = None,
+                       dev: np.ndarray|None = None):
+    if mu is None:
+        mu = np.mean(data, axis=0)
+    norm_feats = data - mu
+    if dev is None:
+        dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
+    # Avoid division by zero by adding a small epsilon
+    norm_feats = norm_feats / dev
+
+    return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)], mu, dev
