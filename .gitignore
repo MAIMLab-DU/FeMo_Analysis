@@ -209,6 +209,8 @@ logs/
 *.xml
 *.csv
 *.xlsx
+*.txt
+!requirements.txt
 
 practice.py
 reports/
