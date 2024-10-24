@@ -1,24 +1,27 @@
-# TODO: implement functionality
 import os
 import sys
 import yaml
 import joblib
+import numpy as np
+import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              '..', 'src')))
 import argparse
-import pandas as pd
-from tqdm import tqdm
 from logger import LOGGER
-from keras.models import load_model
-from data.dataset import FeMoDataset
+from data.pipeline import Pipeline
+from data.utils import normalize_features
+from eval.metrics import FeMoMetrics
+from model import CLASSIFIER_MAP
+from model.base import FeMoBaseClassifier
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("datasetDir", type=str, help="Directory containing inference dataset file")
-    parser.add_argument("ckptFile", type=str, help="Path to model checkpoint file")
+    parser.add_argument("dataFilename", type=str, help="Path to data file")
+    parser.add_argument("ckptFilename", type=str, help="Name of model checkpoint file")
+    parser.add_argument("paramsFilename", type=str,  help="Parameters dict filename")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
-    parser.add_argument("--outfile", type=str, default="meta_info.csv", help="Output file containing meta info")
+    parser.add_argument("--outfile", type=str, default="meta_info.xlsx", help="Metrics output file")
     args = parser.parse_args()
 
     return args
@@ -28,30 +31,75 @@ def main():
     LOGGER.info("Starting inference...")
     args = parse_args()
 
-    os.makedirs(args.work_dir, exist_ok=True)
+    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
+    config_files = ['inference-cfg.yaml', 'dataproc-cfg.yaml']
+    inf_cfg, dataproc_cfg = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
 
-    LOGGER.info(f"Working directory {args.work_dir}")
-
-    dataset: FeMoDataset = joblib.load(os.path.join(args.datasetDir, 'inference_dataset.pkl'))
-    LOGGER.info(f"Loaded inference dataset: {os.path.abspath(args.datasetDir)}")
-
-    ckpt_ext = os.path.basename(args.ckptFile).split('.')[-1]
-    if ckpt_ext == '.h5':
-        model = load_model(args.ckptFile)
-    elif ckpt_ext == '.pkl':
-        model = joblib.load(args.ckptFile)
-    else:
-        raise NotImplementedError(f"Model checkpoint with extension {ckpt_ext} not supported")
+    try:
+        params_dict = joblib.load(args.paramsFilename)
+    except FileNotFoundError:
+        LOGGER.error(f"Parameters file not found: {args.paramsFilename}")
+        sys.exit(1)
     
-    for i in tqdm(range(len(dataset.data_manifest['items'])), desc="Inferencing files..."):
-        item = dataset.data_manifest['items'][i]
-        data_file_key = item.get('csvFileKey', None)
-        if data_file_key is None:
-            LOGGER.warning(f"{data_file_key = }")
-            continue
-        
-        ...
+    try:
+        classifier_type = inf_cfg.get('type')        
+        classifier: type[FeMoBaseClassifier] = CLASSIFIER_MAP[classifier_type]()
+        classifier.load_model(
+            model_filename=args.ckptFilename,
+            model_framework='keras' if classifier_type == 'neural-net' else 'sklearn'
+        )
+    except KeyError:
+        LOGGER.error(f"Invalid classifier specified: {inf_cfg.get('classifier')}")
+        sys.exit(1)
 
+    metrics_calculator = FeMoMetrics()
+    pipeline = Pipeline(
+            inference=True,
+            cfg=dataproc_cfg.get('data_pipeline')
+        )
+    data_filename = args.dataFilename
+    pipeline_output = pipeline.process(
+            filename=data_filename
+        )
+    
+    X_extracted = pipeline_output['extracted_features']['features']
+
+    # Skip IMU features if desired
+    if inf_cfg.get('skip_imu_features'):
+        X_extracted = X_extracted[:, :319]
+        mask = np.all(np.isin(X_extracted, [0, 1]), axis=0)
+        X_extracted = X_extracted[:, ~mask]
+
+    X_norm, _, _ = normalize_features(X_extracted, params_dict['mu'], params_dict['dev'])
+    X_norm_ranked = X_norm[:, params_dict['top_feat_indices']]
+
+    y_pred_labels = classifier.predict(X_norm_ranked)
+
+    metainfo_dict = metrics_calculator.calc_meta_info(
+        filename=data_filename,
+        y_pred=y_pred_labels,
+        preprocessed_data=pipeline_output['preprocessed_data'],
+        fm_dict=pipeline_output['fm_dict'],
+        scheme_dict=pipeline_output['scheme_dict']
+    )
+
+    # Check if the file exists
+    if os.path.exists(args.outfile):
+        # If file exists, read it and append the new data
+        df_existing = pd.read_excel(args.outfile)
+        df_new = pd.DataFrame(metainfo_dict)
+        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+    else:
+        # If file does not exist, create a new DataFrame with titles and new data
+        df_combined = pd.DataFrame(metainfo_dict)
+
+    # Write the combined DataFrame to the Excel file
+    df_combined.to_excel(args.outfile, index=False)
+
+    LOGGER.info(f"Meta info saved to {args.outfile}")
+
+    # TODO: plot results
+    
 
 if __name__ == "__main__":
     main()
