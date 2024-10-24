@@ -14,7 +14,11 @@ from botocore.exceptions import (
 from pathlib import Path
 from typing import Union
 from collections import defaultdict
-from ._utils import gen_hash, stratified_kfold
+from .utils import (
+    gen_hash,
+    stratified_kfold,
+    normalize_features
+)
 from .pipeline import Pipeline
 from .ranking import FeatureRanker
 
@@ -34,6 +38,10 @@ class FeMoDataset:
         return self._pipeline
     
     @property
+    def feat_rank_cfg(self) -> dict:
+        return self._feat_rank_cfg  
+    
+    @property
     def data_manifest(self) -> Path:
         if self._data_manifest is None:
             assert self._data_manifest_path.suffix == '.json', \
@@ -49,7 +57,8 @@ class FeMoDataset:
                  base_dir: Union[Path, str],
                  data_manifest_path: Union[Path, str],
                  inference: bool,
-                 pipeline_cfg: dict
+                 pipeline_cfg: dict,
+                 feat_rank_cfg: dict = None
                 ) -> None:
         
         self._base_dir = Path(base_dir)
@@ -59,8 +68,11 @@ class FeMoDataset:
         )
         self._data_manifest_path = Path(data_manifest_path)
         self._data_manifest = None
+        self.inference = inference
         self.features_df = pd.DataFrame([])
         self.map = defaultdict()
+        self._feat_rank_cfg = feat_rank_cfg
+        self._feature_ranker = FeatureRanker(**feat_rank_cfg) if feat_rank_cfg else FeatureRanker()
     
     def __len__(self):
         return self.features_df.shape[0]
@@ -130,12 +142,9 @@ class FeMoDataset:
         features_df = pd.DataFrame(features, columns=columns)
 
         # Add optional columns based on existence
-        if key is not None:
-            features_df['filename_hash'] = key
-        if det_indices is not None:
-            features_df['det_indices'] = det_indices
-        if labels is not None:
-            features_df['labels'] = labels
+        features_df['filename_hash'] = key
+        features_df['det_indices'] = det_indices
+        features_df['labels'] = labels
 
         # Ensure the columns order is: filename_hash, det_indices, labels
         features_df.to_csv(filename, header=columns is not None, index=False)
@@ -150,7 +159,7 @@ class FeMoDataset:
             bucket = item.get('bucketName', None)
             data_file_key = item.get('datFileKey', None)
             feat_file_key = item.get('csvFileKey', None)
-            map_key = gen_hash(feat_file_key)
+            map_key = gen_hash(data_file_key)
             if map_key in self.map.keys():
                 continue
 
@@ -195,37 +204,12 @@ class FeMoDataset:
         
         self.logger.info("FeMoDataset process completed.")
         return self.features_df
-
-
-class DataProcessor:
-    @property
-    def logger(self):
-        return LOGGER
-        
-    @property
-    def feat_rank_cfg(self) -> dict:
-        return self._feat_rank_cfg     
-
-    def __init__(self,
-                 feat_rank_cfg: dict = None) -> None:
-        
-        self._feat_rank_cfg = feat_rank_cfg
-        self._feature_ranker = FeatureRanker(**feat_rank_cfg) if feat_rank_cfg else FeatureRanker()
-
-    def _normalize_features(self, data: np.ndarray):
-        mu = np.mean(data, axis=0)
-        norm_feats = data - mu
-        dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
-        # Avoid division by zero by adding a small epsilon
-        norm_feats = norm_feats / dev
-
-        return norm_feats[:, ~np.any(np.isnan(norm_feats), axis=0)]
     
-    def split_data(self,
-                    data: np.ndarray,
-                    strategy: Literal['holdout', 'kfold'] = 'holdout',
-                    custom_ratio: int|None = None,
-                    num_folds: int = 5):
+    @staticmethod
+    def split_data(data: np.ndarray,
+                   strategy: Literal['holdout', 'kfold'] = 'holdout',
+                   custom_ratio: int|None = None,
+                   num_folds: int = 5):
 
         X, y = data[:, :-1], data[:, -1]
         train, test = [], []
@@ -258,37 +242,32 @@ class DataProcessor:
         
         return split_data
 
-
-    def process(self, input_data: pd.DataFrame, indices_filename: str|None = None):
+    def process(self, input_data: pd.DataFrame, params_filename: str | None = None):
         self.logger.debug("Processing features...")
-        X_norm = self._normalize_features(input_data.drop(['labels', 'det_indices', 'filename_hash'],
-                                                          axis=1, errors='ignore').to_numpy())
-        y_pre = input_data.get('labels').to_numpy(dtype=int)
-        det_indices = input_data.get('det_indices').to_numpy(dtype=int)
-        filename_hash = input_data.get('filename_hash').to_numpy(dtype=int)
-        
-        # Check if top feature indices are present
-        if indices_filename is None:
-            top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
-                                                        func=self._feature_ranker.ensemble_ranking)
-        else:
-            if not os.path.exists(indices_filename):
-                top_feat_indices = self._feature_ranker.fit(X_norm, y_pre,
-                                                            func=self._feature_ranker.ensemble_ranking)
-                joblib.dump(top_feat_indices, indices_filename, compress=True)
-                self.logger.info(f"Top features saved to {indices_filename}")
-            else:
-                top_feat_indices = joblib.load(indices_filename)
-                self.logger.info(f"Top features loaded from {indices_filename}")
-                
 
+        # Extract necessary columns from the input data
+        X = input_data.drop(['labels', 'det_indices', 'filename_hash'], axis=1, errors='ignore').to_numpy()
+        y_pre = input_data['labels'].to_numpy(dtype=int)
+        det_indices = input_data['det_indices'].to_numpy(dtype=int)
+        filename_hash = input_data['filename_hash'].to_numpy(dtype=int)
+
+        # Check if params_filename is provided and load or compute necessary data
+        if params_filename and os.path.exists(params_filename):
+            params_dict = joblib.load(params_filename)
+            self.logger.info(f"Top feature indices, mu and dev loaded from {params_filename}")
+            X_norm, mu, dev = normalize_features(X, params_dict['mu'], params_dict['dev'])
+            top_feat_indices = params_dict['top_feat_indices']
+        else:
+            X_norm, mu, dev = normalize_features(X)
+            top_feat_indices = self._feature_ranker.fit(X_norm, y_pre, func=self._feature_ranker.ensemble_ranking)
+
+            if params_filename:  # Save the computed parameters if params_filename is provided
+                params_dict = {'top_feat_indices': top_feat_indices, 'mu': mu, 'dev': dev}
+                joblib.dump(params_dict, params_filename, compress=True)
+                self.logger.info(f"Top feature indices, mu and dev saved to {params_filename}")
+
+        # Select top features based on the computed/loaded indices
         X_norm = X_norm[:, top_feat_indices]
 
-        # -3, -2, -1 are 'filename_hash', 'det_indices' and 'labels', respectively
-        return np.concatenate([X_norm, filename_hash[:, np.newaxis],
-                               det_indices[:, np.newaxis], y_pre[:, np.newaxis]], axis=1)
-    
-
-
-
-        
+        # Combine normalized data with filename_hash, det_indices, and labels
+        return np.concatenate([X_norm, filename_hash[:, np.newaxis], det_indices[:, np.newaxis], y_pre[:, np.newaxis]], axis=1)

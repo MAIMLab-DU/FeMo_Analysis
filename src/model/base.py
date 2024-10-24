@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from logger import LOGGER
 from typing import Literal
+from keras.models import load_model
 from dataclasses import dataclass, fields
 from abc import ABC, abstractmethod
 
@@ -118,7 +119,7 @@ class FeMoBaseClassifier(ABC):
         self.result = Result()
     
     def __repr__(self) -> str:
-        return f"{type(self)} hyperparameters: {self.hyperparams}\nsearch_space: {self.search_space}"
+        return f"{type(self)} hyperparameters: {self.hyperparams}\nsearch_space: {self.search_space}\nmodel: {self.classifier}"
 
     @staticmethod
     def _update_class_weight(y: np.ndarray, params: dict|None = None):
@@ -137,18 +138,35 @@ class FeMoBaseClassifier(ABC):
             return class_weight
         
     def save_model(self,
-                   model_name: str,
+                   model_filename: str,
                    model_framework: Literal['sklearn', 'keras']):
         if self.classifier is not None:
             try:
                 if model_framework == 'sklearn':
-                    joblib.dump(self.classifier, f"{model_name}.pkl")
-                elif model_framework == 'keras':
-                    self.classifier.save(f"{model_name}.h5")
+                    assert model_filename.endswith('.pkl'), "Must be a pickle filename"
+                    joblib.dump(self.classifier, model_filename)
+                if model_framework == 'keras':
+                    assert model_filename.endswith('.h5'), "Must be a h5 filename"
+                    self.classifier.save(model_filename)
             except Exception as e:
                 self.logger.error(f"Error saving model: {e}")
+                raise Exception
         else:
             self.logger.error("No model trained yet. Cannot save.")
+
+    def load_model(self,
+                   model_filename: str,
+                   model_framework: Literal['sklearn', 'keras']):
+        try:
+            if model_framework == 'sklearn':
+                assert model_filename.endswith('.pkl'), "Must be a pickle filename"
+                self.classifier = joblib.load(model_filename)
+            if model_framework == 'keras':
+                assert model_filename.endswith('.h5'), "Must be a h5 filename"
+                self.classifier = load_model(model_filename)
+        except Exception as e:
+            self.logger.error(f"Error loading model: {e}")
+            raise Exception
 
     @abstractmethod
     def tune(self, *args, **kwargs):
@@ -164,6 +182,15 @@ class FeMoBaseClassifier(ABC):
     @abstractmethod
     def fit(self, *args, **kwargs):
         """Class method used to fit the model
+
+        Raises:
+            NotImplementedError
+        """
+        raise NotImplementedError
+    
+    @abstractmethod
+    def predict(self, *args, **kwargs):
+        """Class method used to predict the target
 
         Raises:
             NotImplementedError

@@ -10,7 +10,7 @@ class DataPreprocessor(BaseTransform):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
     
-    def transform(self, loaded_data):
+    def transform(self, loaded_data: dict):
         start = time.time()
         preprocessed_data = loaded_data.copy()
         
