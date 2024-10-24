@@ -14,8 +14,6 @@ config:
 
 tune_params:
   epochs: 100
-  patience: 15
-  n_trials: 10
 
 train_params:
   epochs: 100
