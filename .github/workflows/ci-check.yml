@@ -19,15 +19,12 @@ jobs:
             exit 1
           fi
         shell: bash
-    if: github.event.pull_request.base.ref == 'dev'
-    steps:
-      - name: Check if PR is from dev branch
-        run: true
 
   # CI check (runs after the enforce-pr-from-dev check passes, or directly for dev branch)
   ci-check:
     runs-on: ubuntu-latest
     needs: enforce-pr-from-dev  # Runs after enforce-pr-from-dev for main branch
+    if: github.event.pull_request.base.ref == 'dev' || github.event.pull_request.base.ref == 'main'  # Always runs for dev or main
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
