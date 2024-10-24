@@ -252,3 +252,12 @@ class FeMoNNClassifier(FeMoBaseClassifier):
         self.result.pred_scores = prediction_scores
         self.result.det_indices = det_indices
         self.result.filename_hash = filename_hash
+
+    def predict(self, X):
+        
+        assert self.classifier is not None, "Error loading classifier"
+
+        pred_probabilities = expit(self.classifier.predict(X))
+        pred_labels = (pred_probabilities >= 0.5).astype(int)
+
+        return pred_labels

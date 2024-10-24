@@ -1,9 +1,15 @@
+import os
 import numpy as np
+from logger import LOGGER
 from skimage.measure import label
 from sklearn.metrics import accuracy_score
 
 
 class FeMoMetrics(object):
+
+    @property
+    def logger(self):
+        return LOGGER
 
     @property
     def sensor_map(self):
@@ -252,6 +258,74 @@ class FeMoMetrics(object):
         metric_dict['PABAK'] = pabak
 
         return metric_dict
+    
+    def calc_meta_info(self,
+                       filename: str,
+                       y_pred: np.ndarray,
+                       preprocessed_data: dict,
+                       fm_dict: dict,
+                       scheme_dict: dict):
+        
+        self.logger.info(f"Calculating meta info for {filename}")
 
+        ones = np.sum(y_pred)
+        self.logger.info(f"Number of bouts: {ones}")
 
+        num_labels = scheme_dict['num_labels']
+        ml_map = np.zeros_like(scheme_dict['labeled_user_scheme'])
+
+        for k in range(1, num_labels+1):
+            L_min = np.argmax(scheme_dict['labeled_user_scheme'] == k)
+            L_max = len(scheme_dict['labeled_user_scheme']) - np.argmax(scheme_dict['labeled_user_scheme'][::-1] == k)
+
+            if y_pred[k-1] == 1:
+                ml_map[L_min:L_max] = 1
+            else:
+                ml_map[L_min:L_max] = 0
+
+        self.fm_dilation = 3 # Detections within this s will be considered as the same detection  
+
+        #Now get the reduced detection_map
+        reduced_detection_map = ml_map * fm_dict['fm_segmented']  # Reduced, because of the new dilation length
+        reduced_detection_map_labeled = label(reduced_detection_map)
+
+        n_movements = np.max(reduced_detection_map_labeled)
+
+        # Keeps only the detected segments
+        detection_only = reduced_detection_map[reduced_detection_map == 1]
+        # Dilation length on sides of each detection is removed and converted to minutes
+        total_FM_duration = (len(detection_only) / self._sensor_freq - n_movements * self.fm_dilation / 2) / 60
+
+        #If there are no detection
+        if n_movements != 0:
+            # mean duration in s
+            mean_FM_duration = total_FM_duration * 60 / n_movements
+        #If no movement then make mean zero
+        else:
+            mean_FM_duration =  total_FM_duration * 0
+
+        onset_interval = []
+        for j in range(1, n_movements):
+            onset1 = np.where(reduced_detection_map_labeled == j)[0][0]  # Sample no. corresponding to start of the label
+            onset2 = np.where(reduced_detection_map_labeled == j + 1)[0][0]  # Sample no. corresponding to start of the next label
+            onset_interval.append( (onset2 - onset1) / self._sensor_freq ) # onset to onset interval in seconds
+
+        # Median onset interval in s
+        median_onset_interval = np.median(onset_interval)
+
+        duration_trimmed_data_files = len(preprocessed_data['sensor_1']) / 1024 / 60 # in minutes
+        # Time fetus was not moving
+        total_nonFM_duration = np.array(duration_trimmed_data_files) - np.array(total_FM_duration)
+        active_time = (total_FM_duration / (total_FM_duration + total_nonFM_duration)) *100
+        detection_per_hr = (np.array(n_movements) *60)  /  (total_FM_duration + total_nonFM_duration)
+
+        data = {
+            "File Name": [os.path.basename(filename)],
+            "Number of bouts per hour": [detection_per_hr],
+            "Mean duration of fetal movement (seconds)": [mean_FM_duration],
+            "Median onset interval (seconds)": [median_onset_interval],
+            "Active time of fetal movement (%)": [active_time]
+        }
+
+        return data
     
