@@ -19,7 +19,7 @@ pip install -r tests/requirements.txt
 
 # Run Ruff for linting
 echo "Running ruff to check for linting issues"
-ruff check ./**/*.py --x
+ruff check ./**/*.py
 
 # Install AWS CLI if needed
 if ! command -v aws &> /dev/null
