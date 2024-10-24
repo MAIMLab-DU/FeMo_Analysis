@@ -16,7 +16,6 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 
 # Install requirements
 pip install -r tests/requirements.txt
-pip install pyflakes==2.1.1
 
 # Install AWS CLI if needed
 if ! command -v aws &> /dev/null
@@ -48,7 +47,7 @@ ruff check ./**/*.py
 # Run tests
 echo "Running tests"
 export PYTHONPATH=./src
-pytest --tb=short --junitxml=$TEST_REPORT_PATH ./tests
+pytest --tb=short --junitxml=$TEST_REPORT_PATH ./$TEST_DIR
 
 # Deactivate virtual env
 deactivate
