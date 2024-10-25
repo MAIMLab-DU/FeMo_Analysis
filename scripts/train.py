@@ -3,7 +3,7 @@ import sys
 import yaml
 import joblib
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'src')))
+                                             '..', 'femo')))
 import argparse
 from logger import LOGGER
 from model.base import FeMoBaseClassifier
