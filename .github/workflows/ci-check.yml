@@ -1,31 +1,13 @@
-name: pr-validation-ci-check
+name: CI
 
 on:
   pull_request:
     branches:
       - main
-      - dev
 
-jobs:
-  # Enforce PRs from dev branch only when targeting main
-  enforce-pr-from-dev:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check if PR is from dev branch
-        run: |
-          if [[ "${{ github.event.pull_request.base.ref }}" == "main" && "${{ github.head_ref }}" != "dev" ]]; then
-              echo "Pull requests to main branch must come from the dev branch."
-              exit 1
-          fi
-          if [[ "${{ github.event.pull_request.base.ref }}" == "dev" ]]; then
-              exit 0
-          fi
-        shell: bash
-
-  # CI check (runs after the enforce-pr-from-dev check passes, or directly for dev branch)
+jobs: 
   ci-check:
     runs-on: ubuntu-latest
-    needs: enforce-pr-from-dev  # Runs after enforce-pr-from-dev for main branch
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
