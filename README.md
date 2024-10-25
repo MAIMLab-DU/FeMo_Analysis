@@ -68,7 +68,7 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     │   └── workflows
     │       └── ci.yml
     ├── README.md
-    ├── aws-sagemaker
+    ├── aws_sagemaker
     │   ├── inference.py
     │   ├── ml_pipeline
     │   │   ├── run_pipeline.py
@@ -80,18 +80,7 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     │   ├── dataproc-cfg.yaml
     |   ├── inference-cfg.yaml
     │   └── train-cfg.yaml
-    ├── femo_analysis
-    │   ├── evaluate.py
-    │   ├── inference.py
-    │   ├── process.py
-    │   └── train.py
-    ├── pytest.ini
-    ├── requirements.txt
-    ├── scripts
-    │   ├── analysis.sh
-    |   ├── inference.sh
-    │   └── test.sh
-    ├── src
+    ├── femo
     │   ├── __init__.py
     │   ├── __version__.py
     │   ├── data
@@ -116,6 +105,16 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     │       ├── log_regression.py
     │       ├── random_forest.py
     │       └── svm.py
+    ├── pytest.ini
+    ├── requirements.txt
+    ├── scripts
+    │   ├── analysis.sh
+    │   ├── evaluate.py
+    │   ├── inference.py
+    |   ├── inference.sh
+    │   ├── process.py
+    │   └── test.sh
+    │   └── train.py
     └── tests
         ├── requirements.txt
         ├── test_transforms.py
@@ -144,41 +143,41 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 | [dataManifest.json.template](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/dataManifest.json.template) | <code>JSON template for data manifest</code> |
 </details>
 
-<details closed><summary>src</summary>
+<details closed><summary>femo</summary>
 
 | File | Summary |
 | --- | --- |
-| [__version__.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/__version__.py) | <code>Version of the project</code> |
+| [__version__.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/__version__.py) | <code>Version of the project</code> |
 
 </details>
 
-<details closed><summary>src.model</summary>
+<details closed><summary>femo.model</summary>
 
 | File | Summary |
 | --- | --- |
-| [base.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/model/base.py) | <code>Module containing FeMoBaseClassifier</code> |
-| [adaboost.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/model/adaboost.py) | <code>Module containing FeMoAdaBoostClassifier</code> |
-| [log_regression.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/model/log_regression.py) | <code>Module containing FeMoLogRegClassifier</code> |
-| [femonet.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/model/femonet.py) | <code>Module containing FeMoNNClassifier</code> |
-| [random_forest.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/model/random_forest.py) | <code>Module containing FeMoRFClassifier</code> |
-| [svm.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/model/svm.py) | <code>Module containing FeMoSVClassifier</code> |
-| [ensemble.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/model/ensemble.py) | <code>Module containing FeMoEnsembleClassifier</code> |
+| [base.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/model/base.py) | <code>Module containing FeMoBaseClassifier</code> |
+| [adaboost.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/model/adaboost.py) | <code>Module containing FeMoAdaBoostClassifier</code> |
+| [log_regression.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/model/log_regression.py) | <code>Module containing FeMoLogRegClassifier</code> |
+| [femonet.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/model/femonet.py) | <code>Module containing FeMoNNClassifier</code> |
+| [random_forest.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/model/random_forest.py) | <code>Module containing FeMoRFClassifier</code> |
+| [svm.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/model/svm.py) | <code>Module containing FeMoSVClassifier</code> |
+| [ensemble.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/model/ensemble.py) | <code>Module containing FeMoEnsembleClassifier</code> |
 
 </details>
 
-<details closed><summary>src.logger</summary>
+<details closed><summary>femo.logger</summary>
 
 | File | Summary |
 | --- | --- |
-| [_utils.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/logger/_utils.py) | <code>Utility functions for logger</code> |
+| [_utils.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/logger/_utils.py) | <code>Utility functions for logger</code> |
 
 </details>
 
-<details closed><summary>src.eval</summary>
+<details closed><summary>femo.eval</summary>
 
 | File | Summary |
 | --- | --- |
-| [metrics.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/src/eval/metrics.py) | <code>Module containing FeMoMetrics class for calculating necessary metrics</code> |
+| [metrics.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/eval/metrics.py) | <code>Module containing FeMoMetrics class for calculating necessary metrics</code> |
 
 </details>
 
@@ -188,14 +187,7 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 | --- | --- |
 | [test.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/test.sh) | <code>Bash script for running linting and pytests</code> |
 | [analysis.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/analysis.sh) | <code>Bash script for running data processing and training job</code> |
-| [analysis.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/analysis.sh) | <code>Bash script for running an inference job</code> |
-
-</details>
-
-<details closed><summary>femo_analysis</summary>
-
-| File | Summary |
-| --- | --- |
+| [inference.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/inference.sh) | <code>Bash script for running an inference job</code> |
 | [inference.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/inference.py) | <code>Python script for an inference job</code> |
 | [evaluate.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/evaluate.py) | <code>Python script for evaluating a trained classifier</code> |
 | [train.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/train.py) | <code>Python script for a training job</code> |
@@ -257,12 +249,74 @@ For cloning using SSH, make sure to create and store SSH key on your device. The
 
 ### 🤖 Usage
 
-To run a data processing and training job, run the following command:
+**When running python scripts, first activate appropriate virtual environment. Bash scripts for a particular job automatically creates
+environment with necessary dependencies.**
+
+To run a **data processing** job, run the `process.py` script:
+```sh
+❯ python scripts/process.py [-h] [--data-dir DATA_DIR] [--params-filename PARAMS_FILENAME] [--work-dir WORK_DIR] [--extract] dataManifest
+
+positional arguments:
+  dataManifest          Path to data manifest json file
+
+options:
+  -h, --help            show this help message and exit
+  --data-dir DATA_DIR   Path to directory containing .dat and .csv files ( default ./data )
+  --params-filename PARAMS_FILENAME
+                        Parameters dict filename ( default params_dict.pkl)
+  --work-dir WORK_DIR   Path to save generated artifacts ( default ./work_dir/ )
+  --extract             Extract features
+```
+
+To run a training job, run the `train.py` script:
+```sh
+❯ python scripts/train.py [-h] [--tune] [--work-dir WORK_DIR] datasetDir ckptName
+
+positional arguments:
+  datasetDir           Directory containing train test pickle files
+  ckptName             Name of model checkpoint file
+
+options:
+  -h, --help           show this help message and exit
+  --tune               Tune hyperparameters before training
+  --work-dir WORK_DIR  Path to save generated artifacts
+```
+
+To run an evaluation job, run the `evaluate.py` script:
+```sh
+❯ python scripts/evaluate.py [-h] [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--outfile OUTFILE] dataManifest resultsDir
+
+positional arguments:
+  dataManifest         Path to data manifest json file
+  resultsDir           Directory containing prediction results
+
+options:
+  -h, --help           show this help message and exit
+  --data-dir DATA_DIR  Path to directory containing .dat and .csv files
+  --work-dir WORK_DIR  Path to save generated artifacts
+  --outfile OUTFILE    Metrics output file
+```
+
+Together, an analysis job (process -> train -> evaluate) can be run with following command:
 ```sh
 ❯ bash scripts/analysis.sh <data_manifest> <ckpt_name> [output_file] [run_dir] [params_filename]
 ```
 
-To run an inference job, run the following command:
+To run an inference job using `python`, run the following command:
+```sh
+❯ python scripts/inference.py [-h] [--work-dir WORK_DIR] [--outfile OUTFILE] dataFilename ckptFilename paramsFilename
+
+positional arguments:
+  dataFilename         Path to data file
+  ckptFilename         Name of model checkpoint file
+  paramsFilename       Parameters dict filename
+
+options:
+  -h, --help           show this help message and exit
+  --work-dir WORK_DIR  Path to save generated artifacts
+  --outfile OUTFILE    Metrics output file
+```
+To run an inference job using `bash`, run the following command:
 ```sh
 ❯ bash scripts/inference.sh <data_filename> <ckpt_name> <params_dict> [output_file] [run_dir]
 ```
