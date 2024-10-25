@@ -343,7 +343,7 @@ Execute the test suite using the following command:
 Contributions are welcome! Here are several ways you can contribute:
 
 - **[Report Issues](https://github.com/MAIMLab/FeMo_Analysis/issues)**: Submit bugs found or log feature requests for the `FeMo_Analysis` project.
-- **[Submit Pull Requests](https://github.com/MAIMLab/FeMo_Analysis/blob/dev/CONTRIBUTING.md)**: Review open PRs, and submit your own PRs.
+- **[Submit Pull Requests](https://github.com/MAIMLab/FeMo_Analysis/blob/main/CONTRIBUTING.md)**: Review open PRs, and submit your own PRs.
 
 <details closed>
 <summary>Contributing Guidelines</summary>
@@ -353,25 +353,21 @@ Contributions are welcome! Here are several ways you can contribute:
    ```sh
    git clone https://github.com/MAIMLab/FeMo_Analysis
    ```
-3. **Navigate to the dev branch**: Always work off of the `dev` branch to ensure working with the latest development updates.
-   ```sh
-   git checkout dev
-   ```
-4. **Create a New Branch**: Always work on a new branch, giving it a descriptive name.
+3. **Create a New Branch**: Always work on a new branch, giving it a descriptive name.
    ```sh
    git checkout -b new-feature-x
    ```
-5. **Make Your Changes**: Develop and test your changes locally.
-6. **Commit Your Changes**: Commit with a clear message describing your updates.
+4. **Make Your Changes**: Develop and test your changes locally.
+5. **Commit Your Changes**: Commit with a clear message describing your updates.
    ```sh
    git commit -m 'Implemented new feature x.'
    ```
-7. **Push to github**: Push the changes to your forked repository.
+6. **Push to github**: Push the changes to your forked repository.
    ```sh
    git push origin new-feature-x
    ```
-8. **Submit a Pull Request**: Create a PR against the original project repository. Clearly describe the changes and their motivations.
-9.  **Review**: Once your PR is reviewed and approved, it will be merged into the main branch. Congratulations on your contribution!
+7. **Submit a Pull Request**: Create a PR against the original project repository. Clearly describe the changes and their motivations.
+8.  **Review**: Once your PR is reviewed and approved, it will be merged into the main branch. Congratulations on your contribution!
 </details>
 
 <details closed>
