@@ -195,22 +195,22 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 
 </details>
 
-<details closed><summary>aws-sagemaker</summary>
+<details closed><summary>aws_sagemaker</summary>
 
 | File | Summary |
 | --- | --- |
-| [inference.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws-sagemaker/inference.py) | <code>TODO implementation</code> |
-| [process.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws-sagemaker/process.py) | <code>TODO implementation</code> |
-| [transform.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws-sagemaker/transform.py) | <code>TODO implementation</code> |
+| [inference.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/inference.py) | <code>TODO implementation</code> |
+| [process.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/process.py) | <code>TODO implementation</code> |
+| [transform.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/transform.py) | <code>TODO implementation</code> |
 
 </details>
 
-<details closed><summary>aws-sagemaker.ml_pipeline</summary>
+<details closed><summary>aws_sagemaker.ml_pipeline</summary>
 
 | File | Summary |
 | --- | --- |
-| [run_pipeline.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws-sagemaker/ml_pipeline/run_pipeline.sh) | <code>TODO implementation</code> |
-| [run_pipeline.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws-sagemaker/ml_pipeline/run_pipeline.py) | <code>TODO implementation</code> |
+| [run_pipeline.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/ml_pipeline/run_pipeline.sh) | <code>TODO implementation</code> |
+| [run_pipeline.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/ml_pipeline/run_pipeline.py) | <code>TODO implementation</code> |
 
 </details>
 
