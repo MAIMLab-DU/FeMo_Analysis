@@ -1,2 +1,4 @@
 __version__ = '0.3.0'
 __url__ = "<https://www.maimlab.com/"
+
+change = "foo change 1"
