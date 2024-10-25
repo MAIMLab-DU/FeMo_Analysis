@@ -95,7 +95,7 @@ def example_small_function(arg1: int, arg2: int = 4) -> bool:
 
 ### GitHub Actions CI Tests
 
-All pull requests must pass the GitHub Actions [Continuous Integration](https://github.com/MAIMLab/FeMo_Analysis/actions/workflows/ci.yml) (CI) tests before they can be merged. These tests include linting, unit tests, and other checks to ensure that your changes meet the project's quality standards. Review the CI output and address any issues that arise.
+All pull requests must pass the GitHub Actions [Continuous Integration](https://github.com/MAIMLab-DU/FeMo_Analysis/actions/workflows/ci-check.yml) (CI) tests before they can be merged. These tests include linting, unit tests, and other checks to ensure that your changes meet the project's quality standards. Review the CI output and address any issues that arise.
 
 ## Reporting Bugs
 
