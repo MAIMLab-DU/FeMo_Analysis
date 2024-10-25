@@ -5,7 +5,7 @@ import joblib
 import numpy as np
 import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'src')))
+                                             '..', 'femo')))
 import argparse
 from tqdm import tqdm
 from logger import LOGGER

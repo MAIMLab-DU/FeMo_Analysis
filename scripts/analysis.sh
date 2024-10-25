@@ -2,7 +2,7 @@
 set -e
 
 start_time="$(date +%s)"
-SCRIPT_DIR="femo_analysis"
+SCRIPT_DIR="scripts"
 
 # Process the positional arguments
 while [[ "$#" -gt 0 ]]; do
@@ -66,7 +66,7 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 . $VIRTUAL_ENV/bin/activate
 
 # Install requirements
-pip install -r ./requirements.txt -q
+pip install -r ./requirements.txt
 
 # Run process.py
 python "./$SCRIPT_DIR/process.py" "$DATA_MANIFEST" --work-dir "$RUN_DIR" --data-dir "./data" --params-filename "$PARAMS_FILE"
