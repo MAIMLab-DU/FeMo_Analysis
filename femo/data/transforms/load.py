@@ -2,7 +2,7 @@ import time
 import numpy as np
 import pandas as pd
 from scipy.spatial.transform import Rotation as R
-from .base import BaseTransform, FeMo
+from .base import BaseTransform, FeMoData
 
 
 class DataLoader(BaseTransform): 
@@ -28,7 +28,7 @@ class DataLoader(BaseTransform):
             k:[] for k in keys
         } 
                 
-        read_data = FeMo(filename)
+        read_data = FeMoData(filename)
         all_sensor_df = (read_data.dataframes["piezos"]
                         .join(read_data.dataframes["accelerometers"])
                         .join(read_data.dataframes["imu"])
