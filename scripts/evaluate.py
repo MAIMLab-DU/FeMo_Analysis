@@ -1,4 +1,3 @@
-# TODO: implement functionality
 import os
 import sys
 import json
@@ -6,7 +5,7 @@ import yaml
 import joblib
 import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'src')))
+                                             '..', 'femo')))
 import argparse
 from tqdm import tqdm
 from pathlib import Path
