@@ -66,7 +66,7 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     │   │   ├── bug_report.md
     │   │   └── feature_request.md
     │   └── workflows
-    │       └── ci.yml
+    │       └── ci-check.yml
     ├── README.md
     ├── aws_sagemaker
     │   ├── inference.py
@@ -129,7 +129,7 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 
 | File | Summary |
 | --- | --- |
-| [ci.yml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/.github/workflows/ci.yml) | <code>CI pipeline workflow template</code> |
+| [ci-check.yml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/.github/workflows/ci-check.yml) | <code>CI pipeline workflow template</code> |
 
 </details>
 
