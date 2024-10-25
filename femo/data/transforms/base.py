@@ -88,7 +88,7 @@ class Header:
     freqforce: int
 
 
-class FeMo:
+class FeMoData:
     def __init__(self, inputfile):
         self.inputfile=inputfile
         self.piezo_list = []
