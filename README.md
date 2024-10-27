@@ -33,6 +33,11 @@
   - [🔖 Prerequisites](#-prerequisites)
   - [📦 Installation](#-installation)
   - [🤖 Usage](#-usage)
+    - [Data Processing](#data-processing)
+    - [Training](#training)
+    - [Evaluation](#evaluation)
+    - [Analysis](#analysis)
+    - [Inference](#inference)
   - [🧪 Tests](#-tests)
 - [📌 Project Roadmap](#-project-roadmap)
 - [🤝 Contributing](#-contributing)
@@ -252,7 +257,7 @@ For cloning using SSH, make sure to create and store SSH key on your device. The
 **When running python scripts, first activate appropriate virtual environment. Bash scripts for a particular job automatically creates
 environment with necessary dependencies.**
 
-To run a **data processing** job, run the `process.py` script:
+#### Data Processing
 ```sh
 ❯ python scripts/process.py [-h] [--data-dir DATA_DIR] [--params-filename PARAMS_FILENAME] [--work-dir WORK_DIR] [--extract] dataManifest
 
@@ -268,7 +273,7 @@ options:
   --extract             Extract features
 ```
 
-To run a training job, run the `train.py` script:
+#### Training
 ```sh
 ❯ python scripts/train.py [-h] [--tune] [--work-dir WORK_DIR] datasetDir ckptName
 
@@ -282,7 +287,7 @@ options:
   --work-dir WORK_DIR  Path to save generated artifacts
 ```
 
-To run an evaluation job, run the `evaluate.py` script:
+#### Evaluation
 ```sh
 ❯ python scripts/evaluate.py [-h] [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--outfile OUTFILE] dataManifest resultsDir
 
@@ -297,12 +302,12 @@ options:
   --outfile OUTFILE    Metrics output file
 ```
 
-Together, an analysis job (process -> train -> evaluate) can be run with following command:
+#### Analysis
 ```sh
 ❯ bash scripts/analysis.sh <data_manifest> <ckpt_name> [output_file] [run_dir] [params_filename]
 ```
 
-To run an inference job using `python`, run the following command:
+#### Inference
 ```sh
 ❯ python scripts/inference.py [-h] [--work-dir WORK_DIR] [--outfile OUTFILE] dataFilename ckptFilename paramsFilename
 
