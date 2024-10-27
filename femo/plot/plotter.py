@@ -39,18 +39,21 @@ class FeMoPlotter(object):
         self.fig, self.ax = None, None
 
     def create_figure(self,
-                      num_detections: int = 2,
                       figsize: tuple = (16, 15)):
         
-        self.fig, self.ax = plt.subplots(self.num_sensors + num_detections, 1,
+        # Plot num_sensors and 2 more rows (detections) of subplots
+        self.fig, self.ax = plt.subplots(self.num_sensors + 2, 1,
                                          figsize=figsize, sharex=True)
     
     def plot_sensor_data(self,
-                         ax,
                          axis_idx: int,
                          data: Union[List, np.ndarray],
                          sensor_name: str,
                          x_unit: Literal['min', 'sec'] = 'min'):
+        if self.ax is None:
+            raise ValueError('ax must be specified')
+        
+        self.logger.info(f"Plotting sensor data for '{sensor_name}'")
         
         time_data = np.arange(0, len(data), 1)
         if x_unit == 'sec':
@@ -58,17 +61,22 @@ class FeMoPlotter(object):
         if x_unit == 'min':
             time_data = time_data / self._sensor_freq / 60
         
-        ax[axis_idx].plot(time_data, data, label=sensor_name)
-        ax[axis_idx].set_ylabel("Signal")
-        ax[axis_idx].set_xlabel("")
-        ax[axis_idx].legend()
+        self.ax[axis_idx].plot(time_data, data, label=sensor_name)
+        self.ax[axis_idx].set_ylabel("Signal")
+        self.ax[axis_idx].set_xlabel("")
+        self.ax[axis_idx].legend()
 
     def plot_detections(self,
-                        ax,
                         axis_idx: int,
                         detection_map: Union[List, np.ndarray],
                         det_type: str,
+                        xlabel: str,
+                        ylabel: str,
                         x_unit: Literal['min', 'sec'] = 'min'):
+        if self.ax is None:
+            raise ValueError('ax must be specified')
+        
+        self.logger.info(f"Plotting detections for '{det_type}'")
         
         time_data = np.arange(0, len(detection_map), 1)
         if x_unit == 'sec':
@@ -76,10 +84,10 @@ class FeMoPlotter(object):
         if x_unit == 'min':
             time_data = time_data / self._sensor_freq / 60
         
-        ax[axis_idx].plot(time_data, detection_map, label=det_type)
-        ax[axis_idx].set_ylabel("Detection")
-        ax[axis_idx].set_xlabel("")
-        ax[axis_idx].legend()
+        self.ax[axis_idx].plot(time_data, detection_map, label=det_type)
+        self.ax[axis_idx].set_ylabel(ylabel)
+        self.ax[axis_idx].set_xlabel(xlabel)
+        self.ax[axis_idx].legend()
 
     def save_figure(self, filename: str) -> None:
         plt.tight_layout()

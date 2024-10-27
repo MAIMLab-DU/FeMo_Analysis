@@ -327,5 +327,5 @@ class FeMoMetrics(object):
             "Active time of fetal movement (%)": [active_time]
         }
 
-        return data
+        return data, ml_map
     
