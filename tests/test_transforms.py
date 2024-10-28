@@ -6,7 +6,7 @@ from utils import (
     compare_elements,
     compare_dictionaries
 )
-from data.transforms import (
+from femo.data.transforms import (
     DataLoader,
     DataPreprocessor,
     SensorFusion,
