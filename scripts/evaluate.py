@@ -1,17 +1,14 @@
 import os
-import sys
 import json
 import yaml
 import joblib
 import pandas as pd
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'femo')))
 import argparse
 from tqdm import tqdm
 from pathlib import Path
-from logger import LOGGER
-from eval.metrics import FeMoMetrics
-from data.pipeline import Pipeline
+from femo.logger import LOGGER
+from femo.eval.metrics import FeMoMetrics
+from femo.data.pipeline import Pipeline
 
 
 def parse_args():

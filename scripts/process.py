@@ -1,12 +1,9 @@
 import os
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'femo')))
 import yaml
 import joblib
 import argparse
-from logger import LOGGER
-from data.dataset import FeMoDataset
+from femo.logger import LOGGER
+from femo.data.dataset import FeMoDataset
 
 
 def parse_args():
