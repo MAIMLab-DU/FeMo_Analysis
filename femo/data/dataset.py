@@ -5,7 +5,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from logger import LOGGER
+from ..logger import LOGGER
 from typing import Literal
 from botocore.exceptions import (
     ClientError,

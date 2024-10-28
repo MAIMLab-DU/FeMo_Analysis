@@ -2,12 +2,10 @@ import os
 import sys
 import yaml
 import joblib
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'femo')))
 import argparse
-from logger import LOGGER
-from model.base import FeMoBaseClassifier
-from model import CLASSIFIER_MAP
+from femo.logger import LOGGER
+from femo.model.base import FeMoBaseClassifier
+from femo.model import CLASSIFIER_MAP
 
 
 

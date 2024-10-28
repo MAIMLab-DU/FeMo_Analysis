@@ -1,6 +1,6 @@
 import yaml
 import time
-from logger import LOGGER
+from ..logger import LOGGER
 from collections import defaultdict
 from .transforms import (
     DataLoader,
