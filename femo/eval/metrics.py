@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from logger import LOGGER
+from ..logger import LOGGER
 from skimage.measure import label
 from sklearn.metrics import accuracy_score
 

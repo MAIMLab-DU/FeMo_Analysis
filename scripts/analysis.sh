@@ -13,10 +13,10 @@ while [[ "$#" -gt 0 ]]; do
                 DATA_MANIFEST="$1"
             elif [ -z "$CKPT_NAME" ]; then
                 CKPT_NAME="$1"
-            elif [ -z "$PERF_FILE" ]; then
-                PERF_FILE="$1"
             elif [ -z "$RUN_DIR" ]; then
                 RUN_DIR="$1"
+            elif [ -z "$PERF_FILE" ]; then
+                PERF_FILE="$1"
             elif [ -z "$PARAMS_FILE" ]; then
                 PARAMS_FILE="$1"
             else
@@ -30,7 +30,7 @@ done
 
 # Check if the required positional arguments are provided
 if [ -z "$DATA_MANIFEST" ] || [ -z "$CKPT_NAME" ]; then
-    echo "Usage: $0 <data_manifest> <ckpt_name> [output_file] [run_dir] [params_filename]"
+    echo "Usage: $0 <data_manifest> <ckpt_name> [run_dir] [performance_filename] [params_filename]"
     exit 1
 fi
 
@@ -66,16 +66,19 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 . $VIRTUAL_ENV/bin/activate
 
 # Install requirements
-pip install -r ./requirements.txt
+pip install -e .
 
-# Run process.py
-python "./$SCRIPT_DIR/process.py" "$DATA_MANIFEST" --work-dir "$RUN_DIR" --data-dir "./data" --params-filename "$PARAMS_FILE"
+# Run extract.py
+python "./$SCRIPT_DIR/extract.py" --data-manifest "$DATA_MANIFEST" --work-dir "$RUN_DIR"
+
+# Run preprocess.py
+python "./$SCRIPT_DIR/preprocess.py" --dataset-path "$RUN_DIR/dataset.csv" --work-dir "$RUN_DIR" --params-filename "$PARAMS_FILE"
 
 # Run train.py
-python "./$SCRIPT_DIR/train.py" "$RUN_DIR" "$CKPT_NAME" --work-dir "$RUN_DIR" --tune
+python "./$SCRIPT_DIR/train.py" --dataset-path "$RUN_DIR/preprocessed_dataset.csv" --ckpt-name "$CKPT_NAME" --work-dir "$RUN_DIR" --tune
 
 # Run evaluate.py
-python "./$SCRIPT_DIR/evaluate.py" "$DATA_MANIFEST" "$RUN_DIR" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
+python "./$SCRIPT_DIR/evaluate.py" --data-manifest "$DATA_MANIFEST" --results-path "$RUN_DIR/results.csv" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
 
 # Record the end time
 end_time="$(date +%s)"
