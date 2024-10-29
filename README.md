@@ -82,8 +82,9 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     │   └── transform.py
     ├── configs
     │   ├── dataManifest.json.template
-    │   ├── dataproc-cfg.yaml
-    |   ├── inference-cfg.yaml
+    │   ├── dataset-cfg.yaml
+    │   ├── preprocess-cfg.yaml
+    │   ├── inference-cfg.yaml
     │   └── train-cfg.yaml
     ├── femo
     │   ├── __init__.py
@@ -93,8 +94,10 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     │   │   ├── _utils.py
     │   │   ├── dataset.py
     │   │   ├── pipeline.py
+    │   │   ├── preprocess.py
     │   │   ├── ranking.py
     │   │   └── transforms
+    │   │       └── ... 
     │   ├── eval
     │   │   ├── __init__.py
     │   │   └── metrics.py
@@ -115,10 +118,11 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     ├── scripts
     │   ├── analysis.sh
     │   ├── evaluate.py
+    │   ├── extract.py
     │   ├── inference.py
-    |   ├── inference.sh
-    │   ├── process.py
-    │   └── test.sh
+    │   ├── inference.sh
+    │   ├── preprocess.py
+    │   ├── test.sh
     │   └── train.py
     └── tests
         ├── requirements.txt
@@ -129,24 +133,6 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 ---
 
 ## 🧩 Modules
-
-<details closed><summary>.github.workflows</summary>
-
-| File | Summary |
-| --- | --- |
-| [ci-check.yml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/.github/workflows/ci-check.yml) | <code>CI pipeline workflow template</code> |
-
-</details>
-
-<details closed><summary>configs</summary>
-
-| File | Summary |
-| --- | --- |
-| [train-cfg.yaml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/train-cfg.yaml) | <code>Configuration template for training job</code> |
-| [inference-cfg.yaml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/inference-cfg.yaml) | <code>Configuration template for inference job</code> |
-| [dataproc-cfg.yaml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/dataproc-cfg.yaml) | <code>Configuration template for data processing job</code> |
-| [dataManifest.json.template](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/dataManifest.json.template) | <code>JSON template for data manifest</code> |
-</details>
 
 <details closed><summary>femo</summary>
 
@@ -183,39 +169,6 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 | File | Summary |
 | --- | --- |
 | [metrics.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo/eval/metrics.py) | <code>Module containing FeMoMetrics class for calculating necessary metrics</code> |
-
-</details>
-
-<details closed><summary>scripts</summary>
-
-| File | Summary |
-| --- | --- |
-| [test.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/test.sh) | <code>Bash script for running linting and pytests</code> |
-| [analysis.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/analysis.sh) | <code>Bash script for running data processing and training job</code> |
-| [inference.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/inference.sh) | <code>Bash script for running an inference job</code> |
-| [inference.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/inference.py) | <code>Python script for an inference job</code> |
-| [evaluate.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/evaluate.py) | <code>Python script for evaluating a trained classifier</code> |
-| [train.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/train.py) | <code>Python script for a training job</code> |
-| [process.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/process.py) | <code>Python script for a data processing job</code> |
-
-</details>
-
-<details closed><summary>aws_sagemaker</summary>
-
-| File | Summary |
-| --- | --- |
-| [inference.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/inference.py) | <code>TODO implementation</code> |
-| [process.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/process.py) | <code>TODO implementation</code> |
-| [transform.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/transform.py) | <code>TODO implementation</code> |
-
-</details>
-
-<details closed><summary>aws_sagemaker.ml_pipeline</summary>
-
-| File | Summary |
-| --- | --- |
-| [run_pipeline.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/ml_pipeline/run_pipeline.sh) | <code>TODO implementation</code> |
-| [run_pipeline.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/ml_pipeline/run_pipeline.py) | <code>TODO implementation</code> |
 
 </details>
 
