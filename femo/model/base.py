@@ -1,11 +1,15 @@
+import os
+import json
 import joblib
 import numpy as np
 import pandas as pd
-from logger import LOGGER
+from ..logger import LOGGER
+from collections import defaultdict
 from typing import Literal
 from keras.models import load_model
 from dataclasses import dataclass, fields
 from abc import ABC, abstractmethod
+from .utils import stratified_kfold
 
 
 @dataclass
@@ -18,36 +22,36 @@ class Result:
 
     @staticmethod
     def process_attributes(attribute,
-                           split_dict: dict,
+                           metadata: dict,
                            preds: bool = False):
         tpd_attribute_rand = np.zeros((1, 1))
         fpd_attribute_rand = np.zeros((1, 1))
 
-        num_folds = len(split_dict['test'])
+        num_folds = metadata['num_folds']
         for i in range(num_folds):
             # All except the last fold
             if i != num_folds - 1:
-                tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:split_dict['num_tpd_each_fold'], np.newaxis]])
-                fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][split_dict['num_tpd_each_fold']:, np.newaxis]])
+                tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:metadata['num_tpd_each_fold'], np.newaxis]])
+                fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][metadata['num_tpd_each_fold']:, np.newaxis]])
             else:
-                tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:split_dict['num_tpd_last_fold'], np.newaxis]])
-                fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][split_dict['num_tpd_last_fold']:, np.newaxis]])
+                tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:metadata['num_tpd_last_fold'], np.newaxis]])
+                fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][metadata['num_tpd_last_fold']:, np.newaxis]])
 
         # Remove the initial zeros added
         tpd_attribute_rand = tpd_attribute_rand[1:]
         fpd_attribute_rand = fpd_attribute_rand[1:]
 
-        tpd_attribute = np.zeros((split_dict['num_tpd'], 1))
-        fpd_attribute = np.zeros((split_dict['num_fpd'], 1))
+        tpd_attribute = np.zeros((metadata['num_tpd'], 1))
+        fpd_attribute = np.zeros((metadata['num_fpd'], 1))
 
         if num_folds > 1:  # Stratified K-fold division
             # Non-randomized the predictions to match with the original data set
-            for i in range(split_dict['num_tpd']):
-                index = split_dict['rand_num_tpd'][i]
+            for i in range(metadata['num_tpd']):
+                index = metadata['rand_num_tpd'][i]
                 tpd_attribute[index] = tpd_attribute_rand[i]
 
-            for i in range(split_dict['num_fpd']):
-                index = split_dict['rand_num_fpd'][i]
+            for i in range(metadata['num_fpd']):
+                index = metadata['rand_num_fpd'][i]
                 fpd_attribute[index] = fpd_attribute_rand[i]
         else:
             tpd_attribute = tpd_attribute_rand
@@ -80,14 +84,14 @@ class Result:
         results_df.to_csv(filename, index=False)
     
     def compile_results(self,
-                        split_dict: dict,
+                        metadata: dict,
                         filename: str|None = None):
         self._assert_no_none_fields()
 
-        preds = self.process_attributes(self.preds, split_dict, preds=True)
-        pred_scores = self.process_attributes(self.pred_scores, split_dict)
-        det_indices = self.process_attributes(self.det_indices, split_dict)
-        filename_hash = self.process_attributes(self.filename_hash, split_dict)
+        preds = self.process_attributes(self.preds, metadata, preds=True)
+        pred_scores = self.process_attributes(self.pred_scores, metadata)
+        det_indices = self.process_attributes(self.det_indices, metadata)
+        filename_hash = self.process_attributes(self.filename_hash, metadata)
 
         self.preds = preds.astype(float)
         self.pred_scores = pred_scores.astype(float)
@@ -96,6 +100,11 @@ class Result:
 
         if filename is not None:
             self.save(filename)
+            for key, val in metadata.items():
+                if isinstance(val, np.ndarray):
+                    metadata[key] = val.tolist()
+            with open(os.path.join(os.path.dirname(filename), 'metadata.json'), 'w') as f:
+                json.dump(metadata, f, indent=2)
 
 
 class FeMoBaseClassifier(ABC):
@@ -136,6 +145,41 @@ class FeMoBaseClassifier(ABC):
             return params
         else:
             return class_weight
+    
+    @staticmethod
+    def split_data(data: np.ndarray,
+                   strategy: Literal['holdout', 'kfold'] = 'holdout',
+                   custom_ratio: int|None = None,
+                   num_folds: int = 5):
+
+        X, y = data[:, :-1], data[:, -1]
+        train, test = [], []
+        metadata = defaultdict()
+
+        if strategy == 'holdout':
+            raise NotImplementedError("TODO")
+
+        # TODO: no mod from original implementation
+        elif strategy == 'kfold':
+            X_TPD_norm = X[y == 1]
+            X_FPD_norm = X[y == 0]
+
+            folds_dict = stratified_kfold(X_TPD_norm, X_FPD_norm, custom_ratio, num_folds)
+            for k in range(num_folds):
+                # Combine the k-th fold's X and Y to form the test set
+                test.append(np.concatenate([folds_dict['X_K_fold'][k], folds_dict['Y_K_fold'][k][:, np.newaxis]], axis=1))
+                
+                # Stack all folds except the k-th fold to form the training set
+                X_train_current = np.vstack([folds_dict['X_K_fold'][i] for i in range(num_folds) if i != k])
+                Y_train_current = np.concatenate([folds_dict['Y_K_fold'][i] for i in range(num_folds) if i != k])
+
+                train.append(np.concatenate([X_train_current, Y_train_current[:, np.newaxis]], axis=1))
+
+        for key, val in folds_dict.items():
+            if key not in ('X_K_fold', 'Y_K_fold'):
+                metadata[key] = val
+        
+        return train, test, metadata
         
     def save_model(self,
                    model_filename: str,
