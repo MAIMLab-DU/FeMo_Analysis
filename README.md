@@ -33,7 +33,8 @@
   - [🔖 Prerequisites](#-prerequisites)
   - [📦 Installation](#-installation)
   - [🤖 Usage](#-usage)
-    - [Data process](#data-process)
+    - [Feature Extraction](#feature-extraction)
+    - [Data Preprocessing](#data-preprocessing)
     - [Train](#train)
     - [Evaluation](#evaluation)
     - [Inference](#inference)
@@ -256,69 +257,80 @@ For cloning using SSH, make sure to create and store SSH key on your device. The
 *When running python scripts, first activate appropriate virtual environment. Bash scripts for a particular job automatically creates
 environment with necessary dependencies.*
 
-#### Data process
+#### Feature Extraction
 ```sh
-❯ python scripts/process.py [-h] [--data-dir DATA_DIR] [--params-filename PARAMS_FILENAME] [--work-dir WORK_DIR] [--extract] dataManifest
-
-positional arguments:
-  dataManifest          Path to data manifest json file
+❯ python scripts/extract.py [-h] --data-manifest DATA_MANIFEST [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--extract]
 
 options:
   -h, --help            show this help message and exit
-  --data-dir DATA_DIR   Path to directory containing .dat and .csv files ( default ./data )
-  --params-filename PARAMS_FILENAME
-                        Parameters dict filename ( default params_dict.pkl)
-  --work-dir WORK_DIR   Path to save generated artifacts ( default ./work_dir/ )
+  --data-manifest DATA_MANIFEST
+                        Path to data manifest json file
+  --data-dir DATA_DIR   Path to directory containing .dat and .csv files
+  --work-dir WORK_DIR   Path to save generated artifacts
   --extract             Extract features
+```
+
+#### Data Preprocessing
+```sh
+❯ python scripts/preprocess.py [-h] --dataset-path DATASET_PATH [--params-filename PARAMS_FILENAME] [--work-dir WORK_DIR]
+
+options:
+  -h, --help            show this help message and exit
+  --dataset-path DATASET_PATH
+                        Path to 'dataset.csv' file
+  --params-filename PARAMS_FILENAME
+                        Parameters dict filename
+  --work-dir WORK_DIR   Path to save generated artifacts
 ```
 
 #### Train
 ```sh
-❯ python scripts/train.py [-h] [--tune] [--work-dir WORK_DIR] datasetDir ckptName
-
-positional arguments:
-  datasetDir           Directory containing train test pickle files
-  ckptName             Name of model checkpoint file
+❯ python scripts/train.py [-h] --dataset-path DATASET_PATH --ckpt-name CKPT_NAME [--tune] [--work-dir WORK_DIR]
 
 options:
-  -h, --help           show this help message and exit
-  --tune               Tune hyperparameters before training
-  --work-dir WORK_DIR  Path to save generated artifacts
+  -h, --help            show this help message and exit
+  --dataset-path DATASET_PATH
+                        Path to dataset csv file
+  --ckpt-name CKPT_NAME
+                        Name of model checkpoint file
+  --tune                Tune hyperparameters before training
+  --work-dir WORK_DIR   Path to save generated artifacts
 ```
 
 #### Evaluation
 ```sh
-❯ python scripts/evaluate.py [-h] [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--outfile OUTFILE] dataManifest resultsDir
-
-positional arguments:
-  dataManifest         Path to data manifest json file
-  resultsDir           Directory containing prediction results
+❯ python scripts/evaluate.py [-h] --data-manifest DATA_MANIFEST --results-path RESULTS_PATH [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--outfile OUTFILE]
 
 options:
-  -h, --help           show this help message and exit
-  --data-dir DATA_DIR  Path to directory containing .dat and .csv files
-  --work-dir WORK_DIR  Path to save generated artifacts
-  --outfile OUTFILE    Metrics output file
+  -h, --help            show this help message and exit
+  --data-manifest DATA_MANIFEST
+                        Path to data manifest json file
+  --results-path RESULTS_PATH
+                        Directory containing prediction results
+  --data-dir DATA_DIR   Path to directory containing .dat and .csv files
+  --work-dir WORK_DIR   Path to save generated artifacts
+  --outfile OUTFILE     Metrics output file
 ```
 
-Together, an **analysis job** (process -> train -> evaluate) can be run with following command:
+Together, an **analysis job** (feature_extraction -> process -> train -> evaluate) can be run with following command:
 ```sh
-❯ bash scripts/analysis.sh <data_manifest> <ckpt_name> [output_file] [run_dir] [params_filename]
+❯ bash scripts/analysis.sh <data_manifest> <ckpt_name> [run_dir] [performance_filename] [params_filename]
 ```
 
 #### Inference
 ```sh
-❯ python scripts/inference.py [-h] [--work-dir WORK_DIR] [--outfile OUTFILE] dataFilename ckptFilename paramsFilename
-
-positional arguments:
-  dataFilename         Path to data file
-  ckptFilename         Name of model checkpoint file
-  paramsFilename       Parameters dict filename
+❯ python scripts/inference.py [-h] --data-file DATA_FILE --ckpt-file CKPT_FILE --params-file PARAMS_FILE [--work-dir WORK_DIR] [--outfile OUTFILE]
 
 options:
-  -h, --help           show this help message and exit
-  --work-dir WORK_DIR  Path to save generated artifacts
-  --outfile OUTFILE    Metrics output file
+  -h, --help            show this help message and exit
+  --data-file DATA_FILE
+                        Path to data file
+  --ckpt-file CKPT_FILE
+                        Path to model checkpoint file
+  --params-file PARAMS_FILE
+                        Path to params file
+  --work-dir WORK_DIR   Path to save generated artifacts
+  --outfile OUTFILE     Metrics output file
 ```
 To run an inference job using `bash`, run the following command:
 ```sh
