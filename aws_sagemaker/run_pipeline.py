@@ -87,14 +87,14 @@ def main():
         LOGGER.info(pipeline_steps)
 
         model_package_name = get_model_package_name(pipeline_steps)
-        with open("pipelineExecution.json", "wb") as f:
+        with open("pipelineExecution.json", "w") as f:
             json.dump({"arn": model_package_name}, f, indent=2)
         # out_file = open("pipelineExecutionArn", "w")
         # out_file.write(model_package_name)
         # out_file.close()
                 
     except Exception as e:
-        LOGGER.error(f"Exception: {e}")
+        LOGGER.exception(e)
         sys.exit(1)
 
 

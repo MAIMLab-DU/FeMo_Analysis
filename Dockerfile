@@ -2,10 +2,12 @@ FROM python:3.10-slim
 
 WORKDIR /code
 
-COPY requirements.txt .
-COPY README.md .
-COPY setup.py .
-COPY femo/ /code/femo/
+COPY requirements.txt /code/
+RUN pip install -r requirements.txt
 
-RUN pip install -e .
+COPY . /code/
+
+RUN pip install .
+
+CMD [ "python3" ]
 

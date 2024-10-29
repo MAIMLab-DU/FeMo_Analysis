@@ -4,12 +4,15 @@ import argparse
 from femo.logger import LOGGER
 from femo.data.dataset import FeMoDataset
 
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
+    parser.add_argument("--config-dir", type=str, default=None, help="Path to configuration directory")
     parser.add_argument("--extract", action='store_true', default=False, help="Extract features ")
     args = parser.parse_args()
 
@@ -22,7 +25,9 @@ def main():
 
     os.makedirs(args.work_dir, exist_ok=True)
 
-    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
+    config_dir = args.config_dir
+    if config_dir is None:
+        config_dir = os.path.join(BASE_DIR, '..', 'configs')
     config_files = ['dataset-cfg.yaml']
     [dataset_cfg] = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
 

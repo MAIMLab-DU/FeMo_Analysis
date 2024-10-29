@@ -5,7 +5,7 @@ from sagemaker.workflow.steps import ProcessingStep
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
-def get_processing_step(image_uri,
+def get_train_step(image_uri,
                         instance_type,
                         instance_count,
                         sagemaker_session,
