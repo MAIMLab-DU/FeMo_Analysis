@@ -1,2 +1,2 @@
--r ../requirements.txt
+-e .
 sagemaker==2.232.0
