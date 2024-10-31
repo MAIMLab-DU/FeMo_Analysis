@@ -17,8 +17,6 @@ while [[ "$#" -gt 0 ]]; do
                 RUN_DIR="$1"
             elif [ -z "$PERF_FILE" ]; then
                 PERF_FILE="$1"
-            elif [ -z "$PARAMS_FILE" ]; then
-                PARAMS_FILE="$1"
             else
                 echo "Unknown option or too many arguments: $1"
                 exit 1
@@ -37,7 +35,6 @@ fi
 # Set defaults for optional arguments if not provided
 PERF_FILE=${PERF_FILE:-"performance.csv"}
 WORK_DIR=${WORK_DIR:-"./work_dir"}
-PARAMS_FILE=${PARAMS_FILE:-null}
 
 # Create the $WORK_DIR directory if it doesn't exist
 mkdir -p "$WORK_DIR"
@@ -72,7 +69,7 @@ pip install -e .
 python "./$SCRIPT_DIR/extract.py" --data-manifest "$DATA_MANIFEST" --work-dir "$RUN_DIR"
 
 # Run preprocess.py
-python "./$SCRIPT_DIR/preprocess.py" --dataset-path "$RUN_DIR/dataset.csv" --work-dir "$RUN_DIR" --params-filename "$PARAMS_FILE"
+python "./$SCRIPT_DIR/process.py" --dataset-path "$RUN_DIR/dataset.csv" --work-dir "$RUN_DIR"
 
 # Run train.py
 python "./$SCRIPT_DIR/train.py" --dataset-path "$RUN_DIR/preprocessed_dataset.csv" --ckpt-name "$CKPT_NAME" --work-dir "$RUN_DIR" --tune
@@ -82,6 +79,7 @@ python "./$SCRIPT_DIR/evaluate.py" --data-manifest "$DATA_MANIFEST" --results-pa
 
 # Record the end time
 end_time="$(date +%s)"
-# Calculate the running time
-running_time="$((end_time - start_time)) seconds"
-echo "Total time taken: $running_time"
+# Calculate the running time in seconds
+running_time=$((end_time - start_time))
+# Print the running time with "seconds" appended
+echo "Total time taken: ${running_time} seconds"
