@@ -309,6 +309,9 @@ Execute the test suite using the following command:
 
 ## 🤝 Contributing
 
+### ⚠️ **Caution**
+Currently, branch protection rules are not enforced; however, contributors are strongly advised **not** to merge pull requests without at least one `Approved` review. Please ensure compliance with the _Contributing Guidelines_ below.
+
 Contributions are welcome! Here are several ways you can contribute:
 
 - **[Report Issues](https://github.com/MAIMLab/FeMo_Analysis/issues)**: Submit bugs found or log feature requests for the `FeMo_Analysis` project.
