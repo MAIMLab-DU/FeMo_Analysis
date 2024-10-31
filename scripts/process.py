@@ -2,15 +2,15 @@ import os
 import yaml
 import joblib
 import argparse
+import numpy as np
 import pandas as pd
 from femo.logger import LOGGER
-from femo.data.preprocess import Preprocessor
+from femo.data.process import Processor
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-path", type=str, required=True, help="Path to 'dataset.csv' file")
-    parser.add_argument("--params-filename", type=str, default=None, help="Parameters dict filename")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     args = parser.parse_args()
 
@@ -18,7 +18,7 @@ def parse_args():
 
 
 def main():
-    LOGGER.info("Starting training...")
+    LOGGER.info("Starting data processing...")
     args = parse_args()
 
     os.makedirs(args.work_dir, exist_ok=True)
@@ -27,21 +27,22 @@ def main():
     config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
     config_files = ['preprocess-cfg.yaml']
     [preproc_cfg] = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
-
-    data_preprocessor = Preprocessor(preproc_cfg)
-
-    if args.params_filename is None or args.params_filename == 'null':
-        params_dict = None
-    else:
-        try:
-            params_dict = joblib.load(args.params_filename)
-        except FileNotFoundError:
-            params_dict = None
+    
     dataset = pd.read_csv(args.dataset_path)
+    X, y = dataset.to_numpy()[:, :-1], dataset.to_numpy()[:, -1]
 
-    preprocessed_data, params_dict = data_preprocessor.preprocess(dataset, params_dict)
-    if args.params_filename is not None and args.params_filename != 'null':
-        joblib.dump(params_dict, args.params_filename, compress=True)
+    if os.path.exists(os.path.join(args.work_dir, 'processor.joblib')):
+        data_processor: Processor = joblib.load(os.path.join(args.work_dir, 'processor.joblib'))
+        X_pre = data_processor.predict(X)
+    else:
+        data_processor = Processor(preprocess_config=preproc_cfg)
+        X_pre = data_processor.fit(X, y).predict(X)
+
+    preprocessed_data = data_processor.convert_to_df(
+        np.concatenate([X_pre, y[:, np.newaxis]], axis=1),
+        columns=dataset.columns
+    )
+    joblib.dump(data_processor, os.path.join(args.work_dir, 'processor.joblib'))
 
     preprocessed_data.to_csv(os.path.join(args.work_dir, 'preprocessed_dataset.csv'), header=True, index=False)
     LOGGER.info(f"Preprocessed dataset saved to {os.path.abspath(args.work_dir)}")
