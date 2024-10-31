@@ -13,16 +13,42 @@ import os
 import boto3
 import sagemaker
 import sagemaker.session
+
+from sagemaker.estimator import Estimator
+from sagemaker.inputs import TrainingInput
+from sagemaker.model_metrics import (
+    MetricsSource,
+    ModelMetrics,
+)
+from sagemaker.processing import (
+    ProcessingInput,
+    ProcessingOutput,
+    ScriptProcessor,
+)
+from sagemaker.sklearn import SKLearnModel
+from sagemaker.sklearn.processing import SKLearnProcessor
+from sagemaker.workflow.functions import Join
+from sagemaker.workflow.conditions import ConditionLessThanOrEqualTo
+from sagemaker.workflow.condition_step import (
+    ConditionStep,
+    JsonGet,
+)
 from sagemaker.workflow.parameters import (
     ParameterInteger,
     ParameterString,
 )
 from sagemaker.workflow.pipeline import Pipeline
-from steps import (
-    get_feature_extraction_step
+from sagemaker.workflow.properties import PropertyFile
+from sagemaker.workflow.steps import (
+    ProcessingStep,
+    TrainingStep
 )
+from sagemaker.model import Model
+from sagemaker.pipeline import PipelineModel
+from sagemaker.workflow.step_collections import RegisterModel
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+OUT_DIR = "/opt/ml/processing/"
 
 def get_session(region, default_bucket):
     """Gets the sagemaker session based on the region.
@@ -50,11 +76,11 @@ def get_pipeline(
     region,
     role=None,
     default_bucket=None,
-    model_package_group_name="AbaloneModelPackageGroup",
-    pipeline_name="AbalonePipeline",
-    base_job_prefix="Abalone",
+    model_package_group_name="FeMoModelPackageGroup",
+    pipeline_name="FeMoPipeline",
+    base_job_prefix="FeMo",
 ):
-    """Gets a SageMaker ML Pipeline instance working with on abalone data.
+    """Gets a SageMaker ML Pipeline instance working with on femo data.
 
     Args:
         region: AWS region to create and run the pipeline.
@@ -74,15 +100,96 @@ def get_pipeline(
         name="ProcessingInstanceType", default_value="ml.m5.xlarge"
     )
 
-    # Feature extraction step
-    step_extract = get_feature_extraction_step(
+
+    # ===== Feature Extraction Step =====
+    feat_processor = ScriptProcessor(
         image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+        command=["python3"],
         instance_type=processing_instance_type,
         instance_count=processing_instance_count,
+        base_job_name=f"{base_job_prefix}/feature-extract",
         sagemaker_session=sagemaker_session,
-        base_job_prefix=base_job_prefix,
-        role=role
+        role=role,
     )
+
+    manifest_path = os.path.join(OUT_DIR, "input", "dataManifest/dataManifest.json")
+    feat_args = ["--data-manifest", manifest_path,
+                 "--work-dir", os.path.join(OUT_DIR, "features"),
+                 "--config-dir", os.path.join(OUT_DIR, "input", "config")]
+    if os.getenv("FORCE_EXTRACT_FEATURES", False):
+        feat_args.append("--extract")
+
+    step_extract = ProcessingStep(
+        name="ExtractFeatures",
+        processor=feat_processor,
+        inputs=[
+            ProcessingInput(input_name="config",
+                            source=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"),
+                            destination=os.path.join(OUT_DIR, "input", "config")),
+            ProcessingInput(input_name="dataManifest",
+                            source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
+                            destination=os.path.join(OUT_DIR, "input", "dataManifest")),                
+        ],
+        outputs=[
+            ProcessingOutput(output_name="features", source=os.path.join(OUT_DIR, "features"))
+        ],
+        code=os.path.join(BASE_DIR, "..", "scripts", "extract.py"),
+        job_arguments=feat_args,
+    )
+
+
+    # ===== Data Preprocessing Step =====
+    data_processor = ScriptProcessor(
+        image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+        command=["python3"],
+        instance_type=processing_instance_type,
+        instance_count=processing_instance_count,
+        base_job_name=f"{base_job_prefix}/data-preprocess",
+        sagemaker_session=sagemaker_session,
+        role=role,
+    )
+
+    features_dir = os.path.join(OUT_DIR, "input", "features")
+    preproc_args = ["--dataset-path", os.path.join(features_dir, "features.csv"),
+                    "--params-filename", os.path.join(OUT_DIR, "params", "params_dict.joblib"),
+                    "--work-dir", os.path.join(OUT_DIR, "dataset"),
+                    "--config-dir", os.path.join(OUT_DIR, "input", "config")]
+
+    step_preprocess = ProcessingStep(
+        name="PreprocessData",
+        processor=data_processor,
+        inputs=[
+            ProcessingInput(input_name="features",
+                            source=step_extract.properties.ProcessingOutputConfig.Outputs[
+                                "features"
+                            ].S3Output.S3Uri,
+                            destination=features_dir),
+            ProcessingInput(input_name="config",
+                            source=os.path.join(BASE_DIR, "..", "configs/preprocess-cfg.yaml"),
+                            destination=os.path.join(OUT_DIR, "input", "config")),                
+        ],
+        outputs=[
+            ProcessingOutput(output_name="params", source=os.path.join(OUT_DIR, "params")),
+            ProcessingOutput(output_name="dataset", source=os.path.join(OUT_DIR, "dataset"))
+        ],
+        code=os.path.join(BASE_DIR, "..", "scripts", "preprocess.py"),
+        job_arguments=preproc_args,
+    )
+
+
+    # ===== Model Training Step =====
+    """
+    /opt/ml/model – Your algorithm should write all final model artifacts to this directory.
+    SageMaker copies this data as a single object in compressed tar format to the S3 location that you specified in the CreateTrainingJob request.
+    If multiple containers in a single training job write to this directory they should ensure no file/directory names clash.
+    SageMaker aggregates the result in a TAR file and uploads to S3 at the end of the training job.
+
+    /opt/ml/output/data – Your algorithm should write artifacts you want to store other than the final model to this directory.
+    SageMaker copies this data as a single object in compressed tar format to the S3 location that you specified in the CreateTrainingJob request.
+    If multiple containers in a single training job write to this directory they should ensure no file/directory names clash.
+    SageMaker aggregates the result in a TAR file and uploads to S3 at the end of the training job.
+    """
+    
 
     # pipeline instance
     pipeline = Pipeline(
@@ -91,7 +198,7 @@ def get_pipeline(
             processing_instance_type,
             processing_instance_count
         ],
-        steps=[step_extract],
+        steps=[step_extract, step_preprocess],
         sagemaker_session=sagemaker_session,
     )
     return pipeline

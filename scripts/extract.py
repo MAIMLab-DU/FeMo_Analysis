@@ -20,7 +20,7 @@ def parse_args():
 
 
 def main():
-    LOGGER.info("Starting data processing...")
+    LOGGER.info("Starting feature extraction...")
     args = parse_args()
 
     os.makedirs(args.work_dir, exist_ok=True)
@@ -39,8 +39,8 @@ def main():
                           dataset_cfg.get('data_pipeline'))
 
     df = dataset.build(force_extract=args.extract)
-    df.to_csv(os.path.join(args.work_dir, 'dataset.csv'), header=True, index=False)
-    LOGGER.info(f"Dataset saved to {os.path.abspath(args.work_dir)}")
+    df.to_csv(os.path.join(args.work_dir, 'features.csv'), header=True, index=False)
+    LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
 
 
 if __name__ == "__main__":

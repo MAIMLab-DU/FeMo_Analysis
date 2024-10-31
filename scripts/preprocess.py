@@ -6,25 +6,30 @@ import pandas as pd
 from femo.logger import LOGGER
 from femo.data.preprocess import Preprocessor
 
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-path", type=str, required=True, help="Path to 'dataset.csv' file")
     parser.add_argument("--params-filename", type=str, default=None, help="Parameters dict filename")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
+    parser.add_argument("--config-dir", type=str, default=None, help="Path to configuration directory")
     args = parser.parse_args()
 
     return args
 
 
 def main():
-    LOGGER.info("Starting training...")
+    LOGGER.info("Starting data preprocessing...")
     args = parse_args()
 
     os.makedirs(args.work_dir, exist_ok=True)
     LOGGER.info(f"Working directory {args.work_dir}")
 
-    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
+    config_dir = args.config_dir
+    if config_dir is None:
+        config_dir = os.path.join(BASE_DIR, '..', 'configs')
     config_files = ['preprocess-cfg.yaml']
     [preproc_cfg] = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
 
@@ -43,7 +48,7 @@ def main():
     if args.params_filename is not None and args.params_filename != 'null':
         joblib.dump(params_dict, args.params_filename, compress=True)
 
-    preprocessed_data.to_csv(os.path.join(args.work_dir, 'preprocessed_dataset.csv'), header=True, index=False)
+    preprocessed_data.to_csv(os.path.join(args.work_dir, 'dataset.csv'), header=True, index=False)
     LOGGER.info(f"Preprocessed dataset saved to {os.path.abspath(args.work_dir)}")
     
 
