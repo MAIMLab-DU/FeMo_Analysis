@@ -8,8 +8,10 @@ import argparse
 from tqdm import tqdm
 from femo.logger import LOGGER
 from femo.data.pipeline import Pipeline
+from femo.data.transforms import SensorFusion
 from femo.data.utils import normalize_features
 from femo.eval.metrics import FeMoMetrics
+from femo.plot.plotter import FeMoPlotter
 from femo.model import CLASSIFIER_MAP
 from femo.model.base import FeMoBaseClassifier
 
