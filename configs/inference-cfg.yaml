@@ -1,3 +1,6 @@
 # options: 'neural-net', 'logReg', 'svc', 'adaboost', 'random-forest'
 type: 'neural-net'
 skip_imu_features: true
+plot:
+  figsize: [16, 15]
+  x_unit: 'min'

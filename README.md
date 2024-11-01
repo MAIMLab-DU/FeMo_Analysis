@@ -236,6 +236,7 @@ options:
   --work-dir WORK_DIR   Path to save generated artifacts
 ```
 
+
 #### Train
 ```sh
 ❯ python scripts/train.py [-h] --dataset-path DATASET_PATH --ckpt-name CKPT_NAME [--tune] [--work-dir WORK_DIR]
@@ -264,6 +265,7 @@ options:
   --work-dir WORK_DIR   Path to save generated artifacts
   --outfile OUTFILE     Metrics output file
 ```
+
 
 Together, an **analysis job** (feature_extraction -> process -> train -> evaluate) can be run with following command:
 ```sh

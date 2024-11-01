@@ -23,6 +23,7 @@ class SensorFusion(BaseTransform):
 
         fm_segmented = fm_dict['fm_segmented']
         if not self.use_all_sensors:
+            user_scheme = fm_dict['fm_map']
             labeled_user_scheme = labeled_fm_map
         else:
             user_scheme = np.zeros_like(fm_segmented[0])
@@ -61,6 +62,7 @@ class SensorFusion(BaseTransform):
         labeled_user_scheme = labeled_user_scheme.reshape((labeled_user_scheme.size, ))
         
         return {
+            'user_scheme': user_scheme,
             'labeled_user_scheme': labeled_user_scheme,
             'num_labels': num_labels,
         }
