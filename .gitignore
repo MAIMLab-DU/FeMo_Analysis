@@ -212,7 +212,7 @@ logs/
 *.txt
 !requirements.txt
 
-practice.py
+practice.*
 reports/
 # Ignore working directories
 work_dir/

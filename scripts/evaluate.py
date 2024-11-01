@@ -1,23 +1,19 @@
 import os
-import sys
 import json
 import yaml
-import joblib
 import pandas as pd
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'femo')))
 import argparse
 from tqdm import tqdm
 from pathlib import Path
-from logger import LOGGER
-from eval.metrics import FeMoMetrics
-from data.pipeline import Pipeline
+from femo.logger import LOGGER
+from femo.eval.metrics import FeMoMetrics
+from femo.data.pipeline import Pipeline
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("dataManifest", type=str, help="Path to data manifest json file")
-    parser.add_argument("resultsDir", type=str, help="Directory containing prediction results")
+    parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
+    parser.add_argument("--results-path", type=str, required=True, help="Directory containing prediction results")
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--outfile", type=str, default="performance.csv", help="Metrics output file")
@@ -29,21 +25,23 @@ def parse_args():
 def main():
     args = parse_args()
 
-    config_path = os.path.join(os.path.dirname(__file__), '..', 'configs', 'dataproc-cfg.yaml')
-    with open(config_path, "r") as f:
-        dataproc_cfg = yaml.safe_load(f)
+    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
+    config_files = ['dataset-cfg.yaml']
+    [dataset_cfg] = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
 
-    split_dataset = joblib.load(os.path.join(args.work_dir, 'split_dataset.pkl'))
-    results_df = pd.read_csv(os.path.join(args.resultsDir, 'results.csv'), index_col=False)
-    overall_tpd_pred = results_df.get('predictions').to_numpy()[0: split_dataset['num_tpd']]
-    overall_fpd_pred = results_df.get('predictions').to_numpy()[split_dataset['num_tpd']:]
+    with open(os.path.join(os.path.dirname(args.results_path), 'metadata.json'), 'r') as f:
+        metadata = json.load(f)
+    results_df = pd.read_csv(args.results_path, index_col=False)
+
+    overall_tpd_pred = results_df.get('predictions').to_numpy()[0: metadata['num_tpd']]
+    overall_fpd_pred = results_df.get('predictions').to_numpy()[metadata['num_tpd']:]
     matching_index_tpd = 0
     matching_index_fpd = 0
-    LOGGER.info(f"Loaded results from {os.path.abspath(args.resultsDir)}")
+    LOGGER.info(f"Loaded results from {args.results_path}")
 
     pipeline = Pipeline(
             inference=False,
-            cfg=dataproc_cfg.get('data_pipeline')
+            cfg=dataset_cfg.get('data_pipeline')
         )
     metrics_calculator = FeMoMetrics()
     overall_tpfp = {
@@ -66,7 +64,7 @@ def main():
         'num_fpd': []
     }
 
-    data_manifest = json.load(Path(args.dataManifest).open())
+    data_manifest = json.load(Path(args.data_manifest).open())
     for item in tqdm(data_manifest['items'], desc="Processing items", unit="item"):
         data_file_key = item.get('datFileKey', None)
         if data_file_key is None:

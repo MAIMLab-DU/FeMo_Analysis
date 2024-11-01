@@ -1,21 +1,17 @@
 import os
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'femo')))
 import yaml
 import joblib
 import argparse
-from logger import LOGGER
-from data.dataset import FeMoDataset
+import numpy as np
+import pandas as pd
+from femo.logger import LOGGER
+from femo.data.process import Processor
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("dataManifest", type=str, help="Path to data manifest json file")
-    parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
-    parser.add_argument("--params-filename", type=str, default=None, help="Parameters dict filename")
+    parser.add_argument("--dataset-path", type=str, required=True, help="Path to 'dataset.csv' file")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
-    parser.add_argument("--extract", action='store_true', default=False, help="Extract features ")
     args = parser.parse_args()
 
     return args
@@ -26,35 +22,31 @@ def main():
     args = parse_args()
 
     os.makedirs(args.work_dir, exist_ok=True)
+    LOGGER.info(f"Working directory {args.work_dir}")
 
-    config_path = os.path.join(os.path.dirname(__file__), '..', 'configs', 'dataproc-cfg.yaml')
-    with open(config_path, "r") as f:
-        dataproc_cfg = yaml.safe_load(f)
+    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
+    config_files = ['preprocess-cfg.yaml']
+    [preproc_cfg] = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
+    
+    dataset = pd.read_csv(args.dataset_path)
+    X, y = dataset.to_numpy()[:, :-1], dataset.to_numpy()[:, -1]
 
-    LOGGER.info("Downloading raw input data")
+    if os.path.exists(os.path.join(args.work_dir, 'processor.joblib')):
+        data_processor: Processor = joblib.load(os.path.join(args.work_dir, 'processor.joblib'))
+        X_pre = data_processor.predict(X)
+    else:
+        data_processor = Processor(preprocess_config=preproc_cfg)
+        X_pre = data_processor.fit(X, y).predict(X)
 
-    dataset = FeMoDataset(args.data_dir,
-                          args.dataManifest,
-                          False,
-                          dataproc_cfg.get('data_pipeline'))
-
-    df = dataset.build(force_extract=args.extract)
-    df.to_csv(os.path.join(args.work_dir, 'features.csv'), header=True, index=False)
-    LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
-
-    LOGGER.info("Preprocessing raw input data")
-    data_output = dataset.process(input_data=df,
-                                  params_filename=args.params_filename)
-
-    LOGGER.info(f"Splitting {len(data_output)} rows of data into train, test datasets.")
-    split_dict = dataset.split_data(
-        data=data_output,
-        **dataproc_cfg.get('split_config', {})
+    preprocessed_data = data_processor.convert_to_df(
+        np.concatenate([X_pre, y[:, np.newaxis]], axis=1),
+        columns=dataset.columns
     )
+    joblib.dump(data_processor, os.path.join(args.work_dir, 'processor.joblib'))
 
-    joblib.dump(split_dict, os.path.join(args.work_dir, 'split_dataset.pkl'), compress=True)
-    LOGGER.info(f"Saved datasets to {os.path.abspath(args.work_dir)}")
-
+    preprocessed_data.to_csv(os.path.join(args.work_dir, 'preprocessed_dataset.csv'), header=True, index=False)
+    LOGGER.info(f"Preprocessed dataset saved to {os.path.abspath(args.work_dir)}")
+    
 
 if __name__ == "__main__":
     main()

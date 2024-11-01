@@ -4,25 +4,21 @@ import yaml
 import joblib
 import numpy as np
 import pandas as pd
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', 'femo')))
 import argparse
 from tqdm import tqdm
-from logger import LOGGER
-from data.pipeline import Pipeline
-from data.transforms import SensorFusion
-from data.utils import normalize_features
-from eval.metrics import FeMoMetrics
-from plot.plotter import FeMoPlotter
-from model import CLASSIFIER_MAP
-from model.base import FeMoBaseClassifier
+from femo.logger import LOGGER
+from femo.data.pipeline import Pipeline
+from femo.data.utils import normalize_features
+from femo.eval.metrics import FeMoMetrics
+from femo.model import CLASSIFIER_MAP
+from femo.model.base import FeMoBaseClassifier
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("dataFilename", type=str, help="Path to data file")
-    parser.add_argument("ckptFilename", type=str, help="Name of model checkpoint file")
-    parser.add_argument("paramsFilename", type=str,  help="Parameters dict filename")
+    parser.add_argument("--data-file", type=str, required=True, help="Path to data file")
+    parser.add_argument("--ckpt-file", type=str, required=True, help="Path to model checkpoint file")
+    parser.add_argument("--params-file", type=str, required=True, help="Path to params file")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--outfile", type=str, default="meta_info.xlsx", help="Metrics output file")
     args = parser.parse_args()
@@ -34,12 +30,12 @@ def main():
     LOGGER.info("Starting inference...")
     args = parse_args()
 
-    if args.dataFilename.endswith('.dat'):
+    if args.data_file.endswith('.dat'):
         # If it's a .dat file, store it in a list
-        filenames = [args.dataFilename]
-    elif args.dataFilename.endswith('.txt'):
+        filenames = [args.data_file]
+    elif args.data_file.endswith('.txt'):
         # If it's a .txt file, read each line and store filenames in a list
-        with open(args.dataFilename, 'r') as file:
+        with open(args.data_file, 'r') as file:
             filenames = [line.strip() for line in file if line.strip()]  # Strips newlines and empty lines
             filenames = [line for line in filenames if line.endswith('.dat')]
     else:
@@ -51,16 +47,16 @@ def main():
     inf_cfg, dataproc_cfg = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
 
     try:
-        params_dict = joblib.load(args.paramsFilename)
+        params_dict = joblib.load(args.params_file)
     except FileNotFoundError:
-        LOGGER.error(f"Parameters file not found: {args.paramsFilename}")
+        LOGGER.error(f"Parameters file not found: {args.params_file}")
         sys.exit(1)
     
     try:
         classifier_type = inf_cfg.get('type')        
         classifier: type[FeMoBaseClassifier] = CLASSIFIER_MAP[classifier_type]()
         classifier.load_model(
-            model_filename=args.ckptFilename,
+            model_filename=args.ckpt_file,
             model_framework='keras' if classifier_type == 'neural-net' else 'sklearn'
         )
     except KeyError:

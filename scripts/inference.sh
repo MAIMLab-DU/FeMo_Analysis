@@ -63,7 +63,7 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 pip install -r ./requirements.txt -q
 
 # Run inference.py
-python "./$SCRIPT_DIR/inference.py" "$DATA_FILENAME" "$CKPT_NAME" "$PARAMS_DICT" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
+python "./$SCRIPT_DIR/inference.py" --data-file "$DATA_FILENAME" --ckpt-file "$CKPT_NAME" --params-file "$PARAMS_DICT" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
 
 # Record the end time
 end_time="$(date +%s)"

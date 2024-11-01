@@ -33,10 +33,10 @@
   - [🔖 Prerequisites](#-prerequisites)
   - [📦 Installation](#-installation)
   - [🤖 Usage](#-usage)
-    - [Data Processing](#data-processing)
-    - [Training](#training)
+    - [Feature Extraction](#feature-extraction)
+    - [Data Preprocessing](#data-preprocessing)
+    - [Train](#train)
     - [Evaluation](#evaluation)
-    - [Analysis](#analysis)
     - [Inference](#inference)
   - [🧪 Tests](#-tests)
 - [📌 Project Roadmap](#-project-roadmap)
@@ -82,8 +82,9 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     │   └── transform.py
     ├── configs
     │   ├── dataManifest.json.template
-    │   ├── dataproc-cfg.yaml
-    |   ├── inference-cfg.yaml
+    │   ├── dataset-cfg.yaml
+    │   ├── preprocess-cfg.yaml
+    │   ├── inference-cfg.yaml
     │   └── train-cfg.yaml
     ├── femo
     │   ├── __init__.py
@@ -93,8 +94,10 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     │   │   ├── _utils.py
     │   │   ├── dataset.py
     │   │   ├── pipeline.py
+    │   │   ├── preprocess.py
     │   │   ├── ranking.py
     │   │   └── transforms
+    │   │       └── ... 
     │   ├── eval
     │   │   ├── __init__.py
     │   │   └── metrics.py
@@ -115,10 +118,11 @@ The FeMo device collects movement data continuously from the fetus, and this rep
     ├── scripts
     │   ├── analysis.sh
     │   ├── evaluate.py
+    │   ├── extract.py
     │   ├── inference.py
-    |   ├── inference.sh
-    │   ├── process.py
-    │   └── test.sh
+    │   ├── inference.sh
+    │   ├── preprocess.py
+    │   ├── test.sh
     │   └── train.py
     └── tests
         ├── requirements.txt
@@ -129,24 +133,6 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 ---
 
 ## 🧩 Modules
-
-<details closed><summary>.github.workflows</summary>
-
-| File | Summary |
-| --- | --- |
-| [ci-check.yml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/.github/workflows/ci-check.yml) | <code>CI pipeline workflow template</code> |
-
-</details>
-
-<details closed><summary>configs</summary>
-
-| File | Summary |
-| --- | --- |
-| [train-cfg.yaml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/train-cfg.yaml) | <code>Configuration template for training job</code> |
-| [inference-cfg.yaml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/inference-cfg.yaml) | <code>Configuration template for inference job</code> |
-| [dataproc-cfg.yaml](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/dataproc-cfg.yaml) | <code>Configuration template for data processing job</code> |
-| [dataManifest.json.template](https://github.com/MAIMLab/FeMo_Analysis/blob/main/configs/dataManifest.json.template) | <code>JSON template for data manifest</code> |
-</details>
 
 <details closed><summary>femo</summary>
 
@@ -186,39 +172,6 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 
 </details>
 
-<details closed><summary>scripts</summary>
-
-| File | Summary |
-| --- | --- |
-| [test.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/test.sh) | <code>Bash script for running linting and pytests</code> |
-| [analysis.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/analysis.sh) | <code>Bash script for running data processing and training job</code> |
-| [inference.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/scripts/inference.sh) | <code>Bash script for running an inference job</code> |
-| [inference.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/inference.py) | <code>Python script for an inference job</code> |
-| [evaluate.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/evaluate.py) | <code>Python script for evaluating a trained classifier</code> |
-| [train.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/train.py) | <code>Python script for a training job</code> |
-| [process.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/femo_analysis/process.py) | <code>Python script for a data processing job</code> |
-
-</details>
-
-<details closed><summary>aws_sagemaker</summary>
-
-| File | Summary |
-| --- | --- |
-| [inference.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/inference.py) | <code>TODO implementation</code> |
-| [process.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/process.py) | <code>TODO implementation</code> |
-| [transform.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/transform.py) | <code>TODO implementation</code> |
-
-</details>
-
-<details closed><summary>aws_sagemaker.ml_pipeline</summary>
-
-| File | Summary |
-| --- | --- |
-| [run_pipeline.sh](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/ml_pipeline/run_pipeline.sh) | <code>TODO implementation</code> |
-| [run_pipeline.py](https://github.com/MAIMLab/FeMo_Analysis/blob/main/aws_sagemaker/ml_pipeline/run_pipeline.py) | <code>TODO implementation</code> |
-
-</details>
-
 ---
 
 ## 🚀 Getting Started
@@ -247,79 +200,92 @@ For cloning using SSH, make sure to create and store SSH key on your device. The
 ❯ cd FeMo_Analysis
 ```
 
-3. Install the required dependencies:
+3. Install the repo as a package:
 ```sh
-❯ pip install -r requirements.txt
+❯ pip install -e .
 ```
 
 ### 🤖 Usage
 
-**When running python scripts, first activate appropriate virtual environment. Bash scripts for a particular job automatically creates
-environment with necessary dependencies.**
+*When running python scripts, first activate appropriate virtual environment. Bash scripts for a particular job automatically creates
+environment with necessary dependencies.*
 
-#### Data Processing
+#### Feature Extraction
 ```sh
-❯ python scripts/process.py [-h] [--data-dir DATA_DIR] [--params-filename PARAMS_FILENAME] [--work-dir WORK_DIR] [--extract] dataManifest
-
-positional arguments:
-  dataManifest          Path to data manifest json file
+❯ python scripts/extract.py [-h] --data-manifest DATA_MANIFEST [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--extract]
 
 options:
   -h, --help            show this help message and exit
-  --data-dir DATA_DIR   Path to directory containing .dat and .csv files ( default ./data )
-  --params-filename PARAMS_FILENAME
-                        Parameters dict filename ( default params_dict.pkl)
-  --work-dir WORK_DIR   Path to save generated artifacts ( default ./work_dir/ )
+  --data-manifest DATA_MANIFEST
+                        Path to data manifest json file
+  --data-dir DATA_DIR   Path to directory containing .dat and .csv files
+  --work-dir WORK_DIR   Path to save generated artifacts
   --extract             Extract features
 ```
 
-#### Training
+#### Data Preprocessing
 ```sh
-❯ python scripts/train.py [-h] [--tune] [--work-dir WORK_DIR] datasetDir ckptName
-
-positional arguments:
-  datasetDir           Directory containing train test pickle files
-  ckptName             Name of model checkpoint file
+❯ python scripts/preprocess.py [-h] --dataset-path DATASET_PATH [--params-filename PARAMS_FILENAME] [--work-dir WORK_DIR]
 
 options:
-  -h, --help           show this help message and exit
-  --tune               Tune hyperparameters before training
-  --work-dir WORK_DIR  Path to save generated artifacts
+  -h, --help            show this help message and exit
+  --dataset-path DATASET_PATH
+                        Path to 'dataset.csv' file
+  --params-filename PARAMS_FILENAME
+                        Parameters dict filename
+  --work-dir WORK_DIR   Path to save generated artifacts
+```
+
+
+#### Train
+```sh
+❯ python scripts/train.py [-h] --dataset-path DATASET_PATH --ckpt-name CKPT_NAME [--tune] [--work-dir WORK_DIR]
+
+options:
+  -h, --help            show this help message and exit
+  --dataset-path DATASET_PATH
+                        Path to dataset csv file
+  --ckpt-name CKPT_NAME
+                        Name of model checkpoint file
+  --tune                Tune hyperparameters before training
+  --work-dir WORK_DIR   Path to save generated artifacts
 ```
 
 #### Evaluation
 ```sh
-❯ python scripts/evaluate.py [-h] [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--outfile OUTFILE] dataManifest resultsDir
-
-positional arguments:
-  dataManifest         Path to data manifest json file
-  resultsDir           Directory containing prediction results
+❯ python scripts/evaluate.py [-h] --data-manifest DATA_MANIFEST --results-path RESULTS_PATH [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--outfile OUTFILE]
 
 options:
-  -h, --help           show this help message and exit
-  --data-dir DATA_DIR  Path to directory containing .dat and .csv files
-  --work-dir WORK_DIR  Path to save generated artifacts
-  --outfile OUTFILE    Metrics output file
+  -h, --help            show this help message and exit
+  --data-manifest DATA_MANIFEST
+                        Path to data manifest json file
+  --results-path RESULTS_PATH
+                        Directory containing prediction results
+  --data-dir DATA_DIR   Path to directory containing .dat and .csv files
+  --work-dir WORK_DIR   Path to save generated artifacts
+  --outfile OUTFILE     Metrics output file
 ```
 
-#### Analysis
+
+Together, an **analysis job** (feature_extraction -> process -> train -> evaluate) can be run with following command:
 ```sh
-❯ bash scripts/analysis.sh <data_manifest> <ckpt_name> [output_file] [run_dir] [params_filename]
+❯ bash scripts/analysis.sh <data_manifest> <ckpt_name> [run_dir] [performance_filename] [params_filename]
 ```
 
 #### Inference
 ```sh
-❯ python scripts/inference.py [-h] [--work-dir WORK_DIR] [--outfile OUTFILE] dataFilename ckptFilename paramsFilename
-
-positional arguments:
-  dataFilename         Path to data file
-  ckptFilename         Name of model checkpoint file
-  paramsFilename       Parameters dict filename
+❯ python scripts/inference.py [-h] --data-file DATA_FILE --ckpt-file CKPT_FILE --params-file PARAMS_FILE [--work-dir WORK_DIR] [--outfile OUTFILE]
 
 options:
-  -h, --help           show this help message and exit
-  --work-dir WORK_DIR  Path to save generated artifacts
-  --outfile OUTFILE    Metrics output file
+  -h, --help            show this help message and exit
+  --data-file DATA_FILE
+                        Path to data file
+  --ckpt-file CKPT_FILE
+                        Path to model checkpoint file
+  --params-file PARAMS_FILE
+                        Path to params file
+  --work-dir WORK_DIR   Path to save generated artifacts
+  --outfile OUTFILE     Metrics output file
 ```
 To run an inference job using `bash`, run the following command:
 ```sh
@@ -344,6 +310,9 @@ Execute the test suite using the following command:
 ---
 
 ## 🤝 Contributing
+
+### ⚠️ **Caution**
+Currently, branch protection rules are not enforced; however, contributors are strongly advised **not** to merge pull requests without at least one `Approved` review. Please ensure compliance with the _Contributing Guidelines_ below.
 
 Contributions are welcome! Here are several ways you can contribute:
 

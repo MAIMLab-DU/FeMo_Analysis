@@ -1,5 +1,5 @@
 import os
-from logger import LOGGER
+from ...logger import LOGGER
 import struct
 import pandas as pd
 from abc import ABC, abstractmethod
