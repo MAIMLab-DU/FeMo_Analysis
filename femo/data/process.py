@@ -1,3 +1,6 @@
+import os
+import joblib
+import tarfile
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
@@ -95,3 +98,16 @@ class Processor(BaseEstimator):
         if self.top_feat_indices is not None:
             columns = columns[self.top_feat_indices].tolist() + ['filename_hash', 'det_indices', 'labels']
         return pd.DataFrame(data, columns=columns)
+    
+    def save(self, file_path):
+        """Save the processor to a joblib file
+
+        Args:
+            file_path (str): Path to directory for saving the processor
+        """
+        
+        joblib.dump(self, os.path.join(file_path, "processor.joblib"))
+        tar = tarfile.open(os.path.join(file_path, "process.tar.gz", "w:gz"))
+        tar.add(os.path.join(file_path, "processor.joblib"), arcname="processor.joblib")
+        tar.close()
+        self.logger.debug(f"Processor saved to {file_path}")

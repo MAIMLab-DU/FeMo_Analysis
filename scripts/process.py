@@ -36,8 +36,8 @@ def main():
     dataset = pd.read_csv(args.dataset_path)
     X, y = dataset.to_numpy()[:, :-1], dataset.to_numpy()[:, -1]
 
-    if os.path.exists(os.path.join(args.work_dir, 'processor.joblib')):
-        data_processor: Processor = joblib.load(os.path.join(args.work_dir, 'processor.joblib'))
+    if os.path.exists(os.path.join(args.work_dir, 'processor', 'processor.joblib')):
+        data_processor: Processor = joblib.load(os.path.join(args.work_dir, 'processor', 'processor.joblib'))
         X_pre = data_processor.predict(X)
     else:
         data_processor = Processor(preprocess_config=preproc_cfg)
@@ -47,7 +47,7 @@ def main():
         np.concatenate([X_pre, y[:, np.newaxis]], axis=1),
         columns=dataset.columns
     )
-    joblib.dump(data_processor, os.path.join(args.work_dir, 'processor.joblib'))
+    data_processor.save(os.path.join(args.work_dir, 'processor'))
 
     preprocessed_data.to_csv(os.path.join(args.work_dir, 'dataset.csv'), header=True, index=False)
     LOGGER.info(f"Preprocessed dataset saved to {os.path.abspath(args.work_dir)}")

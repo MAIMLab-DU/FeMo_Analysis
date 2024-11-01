@@ -131,32 +131,31 @@ def get_pipeline(
                             destination=os.path.join(OUT_DIR, "input", "dataManifest")),                
         ],
         outputs=[
-            ProcessingOutput(output_name="features", source=os.path.join(OUT_DIR, "features"))
+            ProcessingOutput(output_name="features", source=os.path.join(OUT_DIR, "features")),
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "extract.py"),
         job_arguments=feat_args,
     )
 
 
-    # ===== Data Preprocessing Step =====
+    # ===== Data Processing Step =====
     data_processor = ScriptProcessor(
         image_uri=os.getenv("PROCESSING_IMAGE_URI"),
         command=["python3"],
         instance_type=processing_instance_type,
         instance_count=processing_instance_count,
-        base_job_name=f"{base_job_prefix}/data-preprocess",
+        base_job_name=f"{base_job_prefix}/data-process",
         sagemaker_session=sagemaker_session,
         role=role,
     )
 
     features_dir = os.path.join(OUT_DIR, "input", "features")
     preproc_args = ["--dataset-path", os.path.join(features_dir, "features.csv"),
-                    "--params-filename", os.path.join(OUT_DIR, "params", "params_dict.joblib"),
                     "--work-dir", os.path.join(OUT_DIR, "dataset"),
                     "--config-dir", os.path.join(OUT_DIR, "input", "config")]
 
     step_preprocess = ProcessingStep(
-        name="PreprocessData",
+        name="ProcessData",
         processor=data_processor,
         inputs=[
             ProcessingInput(input_name="features",
@@ -169,10 +168,10 @@ def get_pipeline(
                             destination=os.path.join(OUT_DIR, "input", "config")),                
         ],
         outputs=[
-            ProcessingOutput(output_name="params", source=os.path.join(OUT_DIR, "params")),
-            ProcessingOutput(output_name="dataset", source=os.path.join(OUT_DIR, "dataset"))
+            ProcessingOutput(output_name="dataset", source=os.path.join(OUT_DIR, "dataset")),
+            ProcessingOutput(output_name="processor", source=os.path.join(OUT_DIR, "dataset/processor"))
         ],
-        code=os.path.join(BASE_DIR, "..", "scripts", "preprocess.py"),
+        code=os.path.join(BASE_DIR, "..", "scripts", "process.py"),
         job_arguments=preproc_args,
     )
 
