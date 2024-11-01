@@ -30,10 +30,11 @@ def compare_elements(key, actual, desired):
         pd.testing.assert_frame_equal(left=actual, right=desired, rtol=1e-4, atol=1)
 
 
-def compare_dictionaries(actual_dict: dict, desired_dict: dict):
-    for key in actual_dict.keys():
+def compare_dictionaries(actual_dict: dict, desired_dict: dict, keys: list = None):
+    comparing_keys = keys if keys is not None else actual_dict.keys()
+    for key in comparing_keys:
         if key not in desired_dict.keys():
-            raise KeyError(f"{key} not in {desired_dict.keys()}")
+            raise KeyError(f"'{key}' not in {desired_dict.keys()}")
         actual = actual_dict[key]
         desired = desired_dict[key]
 
@@ -43,7 +44,7 @@ def compare_dictionaries(actual_dict: dict, desired_dict: dict):
         if not isinstance(actual, list):
             compare_elements(key, actual, desired)
         else:
-            assert len(actual) == len(desired), f"{key} {len(actual) = } != {len(desired) = }"
+            assert len(actual) == len(desired), f"'{key}' {len(actual) = } != {len(desired) = }"
             for i in range(len(actual)):
                 compare_elements(key, actual[i], desired[i])
         
