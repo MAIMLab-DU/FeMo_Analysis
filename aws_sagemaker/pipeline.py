@@ -14,38 +14,19 @@ import boto3
 import sagemaker
 import sagemaker.session
 
-from sagemaker.estimator import Estimator
-from sagemaker.inputs import TrainingInput
-from sagemaker.model_metrics import (
-    MetricsSource,
-    ModelMetrics,
-)
 from sagemaker.processing import (
     ProcessingInput,
     ProcessingOutput,
     ScriptProcessor,
-)
-from sagemaker.sklearn import SKLearnModel
-from sagemaker.sklearn.processing import SKLearnProcessor
-from sagemaker.workflow.functions import Join
-from sagemaker.workflow.conditions import ConditionLessThanOrEqualTo
-from sagemaker.workflow.condition_step import (
-    ConditionStep,
-    JsonGet,
 )
 from sagemaker.workflow.parameters import (
     ParameterInteger,
     ParameterString,
 )
 from sagemaker.workflow.pipeline import Pipeline
-from sagemaker.workflow.properties import PropertyFile
 from sagemaker.workflow.steps import (
-    ProcessingStep,
-    TrainingStep
+    ProcessingStep
 )
-from sagemaker.model import Model
-from sagemaker.pipeline import PipelineModel
-from sagemaker.workflow.step_collections import RegisterModel
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 OUT_DIR = "/opt/ml/processing/"
