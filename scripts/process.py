@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 from femo.logger import LOGGER
 from femo.data.process import Processor
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -22,9 +20,8 @@ def parse_args():
     return args
 
 
-def main():
+def main(args):
     LOGGER.info("Starting data processing...")
-    args = parse_args()
 
     dataset_dir = os.path.join(args.work_dir, "dataset")
     processor_dir = os.path.join(args.work_dir, "processor")
@@ -38,7 +35,7 @@ def main():
     features = pd.read_csv(os.path.join(args.dataset_path, "features.csv"))
     X, y = features.to_numpy()[:, :-1], features.to_numpy()[:, -1]
 
-    if os.path.exists(os.path.join(args.work_dir, 'processor.joblib')):
+    if os.path.exists(os.path.join(processor_dir, 'processor.joblib')):
         data_processor: Processor = joblib.load(os.path.join(args.work_dir, 'processor', 'processor.joblib'))
         X_pre = data_processor.predict(X)
     else:
@@ -58,4 +55,5 @@ def main():
     
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)

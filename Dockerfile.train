@@ -1,0 +1,32 @@
+# Use an official SageMaker base image with Python support
+FROM python:3.10-slim
+
+# Install essential packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setting some environment variables.
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /opt/ml/code
+
+COPY requirements.txt /opt/ml/code/requirements.txt
+
+# Install python dependencies
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
+
+# Copy the training script and other files
+ADD femo/ /opt/ml/code/femo/
+ADD setup.py /opt/ml/code/setup.py
+ADD README.md /opt/ml/code/README.md
+ADD scripts/train.py /opt/ml/code/train.py
+
+# Install femo package
+RUN pip install .
+
+# Define the entry point for SageMaker
+ENTRYPOINT ["python", "train.py"]

@@ -9,8 +9,6 @@ from pathlib import Path
 from femo.logger import LOGGER
 from femo.eval.metrics import FeMoMetrics
 from femo.data.pipeline import Pipeline
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -29,8 +27,8 @@ def parse_args():
     return args
 
 
-def main():
-    args = parse_args()
+def main(args):
+    LOGGER.info("Starting evaluation...")
 
     with open(args.config_path, 'r') as f:
         dataset_cfg = yaml.safe_load(f)
@@ -131,4 +129,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)

@@ -19,9 +19,8 @@ def parse_args():
     return args
 
 
-def main():
+def main(args):
     LOGGER.info("Starting feature extraction...")
-    args = parse_args()
 
     features_dir = os.path.join(args.work_dir, "features")
     os.makedirs(features_dir, exist_ok=True)
@@ -42,4 +41,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)

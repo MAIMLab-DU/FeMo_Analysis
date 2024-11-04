@@ -169,6 +169,7 @@ def get_pipeline(
     If multiple containers in a single training job write to this directory they should ensure no file/directory names clash.
     SageMaker aggregates the result in a TAR file and uploads to S3 at the end of the training job.
     """
+
     
 
     # pipeline instance

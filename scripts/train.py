@@ -6,14 +6,14 @@ import pandas as pd
 from femo.logger import LOGGER
 from femo.model.base import FeMoBaseClassifier
 from femo.model import CLASSIFIER_MAP
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 os.environ.setdefault('SM_CHANNEL_TRAIN', '')
 os.environ.setdefault('SM_MODEL_DIR', '')
 os.environ.setdefault('SM_OUTPUT_DATA_DIR', '')
-
-BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+os.environ.setdefault('SM_TRAIN_CFG', os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml"))
+os.environ.setdefault('SM_CKPT_NAME', 'model.h5')
 
 
 def parse_args():
@@ -25,17 +25,16 @@ def parse_args():
     parser.add_argument("--output-data-dir", type=str, default=os.environ['SM_OUTPUT_DATA_DIR'], help="Model output directory")
 
     # Additional arguments
-    parser.add_argument("--ckpt-name", type=str, default="model.h5", help="Name of model checkpoint file")
-    parser.add_argument("--tune", action='store_true', help="Tune hyperparameters before training")
-    parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml"), help="Path to config file")
+    parser.add_argument("--ckpt-name", type=str, default=os.environ['SM_CKPT_NAME'], help="Name of model checkpoint file")
+    parser.add_argument("--tune", action='store_true', default=os.getenv('SM_TUNE', False), help="Tune hyperparameters before training")
+    parser.add_argument("--config-path", type=str, default=os.environ['SM_TRAIN_CFG'], help="Path to config file")
 
     args = parser.parse_args()
     return args
 
 
-def main():
+def main(args):
     LOGGER.info("Starting training...")
-    args = parse_args()
 
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(args.output_data_dir, exist_ok=True)
@@ -124,4 +123,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1] == 'train':
+        sys.argv.pop(1)    
+    args = parse_args()
+    main(args)
