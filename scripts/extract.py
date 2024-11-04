@@ -12,7 +12,7 @@ def parse_args():
     parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
-    parser.add_argument("--config-dir", type=str, default=None, help="Path to configuration directory")
+    parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"), help="Path to config file")
     parser.add_argument("--extract", action='store_true', default=False, help="Extract features ")
     args = parser.parse_args()
 
@@ -23,13 +23,11 @@ def main():
     LOGGER.info("Starting feature extraction...")
     args = parse_args()
 
-    os.makedirs(args.work_dir, exist_ok=True)
+    features_dir = os.path.join(args.work_dir, "features")
+    os.makedirs(features_dir, exist_ok=True)
 
-    config_dir = args.config_dir
-    if config_dir is None:
-        config_dir = os.path.join(BASE_DIR, '..', 'configs')
-    config_files = ['dataset-cfg.yaml']
-    [dataset_cfg] = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
+    with open(args.config_path, 'r') as f:
+        dataset_cfg = yaml.safe_load(f)
 
     LOGGER.info("Downloading raw input data")
 
@@ -39,8 +37,8 @@ def main():
                           dataset_cfg.get('data_pipeline'))
 
     df = dataset.build(force_extract=args.extract)
-    df.to_csv(os.path.join(args.work_dir, 'features.csv'), header=True, index=False)
-    LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
+    df.to_csv(os.path.join(features_dir, 'features.csv'), header=True, index=False)
+    LOGGER.info(f"Features saved to {os.path.abspath(features_dir)}")
 
 
 if __name__ == "__main__":

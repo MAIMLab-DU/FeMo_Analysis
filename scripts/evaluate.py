@@ -1,6 +1,7 @@
 import os
-import json
+import joblib
 import yaml
+import json
 import pandas as pd
 import argparse
 from tqdm import tqdm
@@ -8,15 +9,21 @@ from pathlib import Path
 from femo.logger import LOGGER
 from femo.eval.metrics import FeMoMetrics
 from femo.data.pipeline import Pipeline
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
     parser.add_argument("--results-path", type=str, required=True, help="Directory containing prediction results")
+    parser.add_argument("--metadata-path", type=str, required=True, help="Directory containing prediction metadata")
+    parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"), help="Path to config file")
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
-    parser.add_argument("--outfile", type=str, default="performance.csv", help="Metrics output file")
+    parser.add_argument("--out-filename", type=str, default="performance.csv", help="Metrics output filename")
     args = parser.parse_args()
 
     return args
@@ -25,13 +32,14 @@ def parse_args():
 def main():
     args = parse_args()
 
-    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
-    config_files = ['dataset-cfg.yaml']
-    [dataset_cfg] = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
+    with open(args.config_path, 'r') as f:
+        dataset_cfg = yaml.safe_load(f)
 
-    with open(os.path.join(os.path.dirname(args.results_path), 'metadata.json'), 'r') as f:
-        metadata = json.load(f)
+
+    # with open(os.path.join(os.path.abspath(os.path.dirname(args.results_path)), 'metadata.json'), 'r') as f:
+    #     metadata = json.load(f)
     results_df = pd.read_csv(args.results_path, index_col=False)
+    metadata: dict = joblib.load(args.metadata_path)
 
     overall_tpd_pred = results_df.get('predictions').to_numpy()[0: metadata['num_tpd']]
     overall_fpd_pred = results_df.get('predictions').to_numpy()[metadata['num_tpd']:]
@@ -112,10 +120,14 @@ def main():
     }
     metrics_df = pd.DataFrame.from_dict(metrics_dict)
     filewise_df = pd.DataFrame.from_dict(filewise_tpfp)
-    outfile = os.path.join(args.work_dir, args.outfile)
-    metrics_df.to_csv(outfile, index=False)
-    filewise_df.to_csv(os.path.join(args.work_dir, 'filewise_performance.csv'))
-    LOGGER.info(f"Performance metrics saved as {os.path.abspath(outfile)}")
+
+    outfile_dir = os.path.join(args.work_dir, "performance")
+    os.makedirs(outfile_dir, exist_ok=True)
+
+    metrics_df.to_csv(os.path.join(outfile_dir, args.out_filename), index=False)
+    filewise_df.to_csv(os.path.join(outfile_dir, f'filewise_{args.out_filename}'))
+    
+    LOGGER.info(f"Performance metrics saved as {os.path.abspath(outfile_dir)}")
 
 
 if __name__ == "__main__":
