@@ -29,4 +29,4 @@ ADD scripts/train.py /opt/ml/code/train.py
 RUN pip install .
 
 # Define the entry point for SageMaker
-ENTRYPOINT ["python", "train.py"]
+ENTRYPOINT ["python", "train.py"]git sat
