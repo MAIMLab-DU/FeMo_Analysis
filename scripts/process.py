@@ -12,7 +12,7 @@ BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset-path", type=str, required=True, help="Path to 'dataset.csv' file")
+    parser.add_argument("--features-dir", type=str, required=True, help="Directory containing 'features.csv' file")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/preprocess-cfg.yaml"), help="Path to config file")
     args = parser.parse_args()
@@ -32,7 +32,7 @@ def main(args):
     with open(args.config_path, 'r') as f:
         preproc_cfg = yaml.safe_load(f)
     
-    features = pd.read_csv(os.path.join(args.dataset_path, "features.csv"))
+    features = pd.read_csv(os.path.join(args.features_dir, "features.csv"))
     X, y = features.to_numpy()[:, :-1], features.to_numpy()[:, -1]
 
     if os.path.exists(os.path.join(processor_dir, 'processor.joblib')):

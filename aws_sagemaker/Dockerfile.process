@@ -1,15 +1,23 @@
-FROM python:3.10-slim
+# Use a smaller base image
+FROM python:3.10-slim-bookworm
 
+# Set the working directory
 WORKDIR /code
 
+# Copy only requirements.txt first to leverage Docker's cache
 COPY requirements.txt /code/
-RUN pip install -r requirements.txt
 
-ADD femo/ /code/femo/
-ADD setup.py /code/setup.py
-ADD README.md /code/README.md
+# Install dependencies with no cache and cleanup after
+RUN pip install --no-cache-dir -r requirements.txt && \
+    rm -rf /root/.cache/pip
 
-RUN pip install .
+# Add project files
+COPY femo/ /code/femo/
+COPY setup.py /code/setup.py
+COPY README.md /code/README.md
 
-CMD [ "python3" ]
+# Install the current project
+RUN pip install . && rm -rf /root/.cache/pip /usr/local/lib/python3.10/site-packages/tests /usr/local/share/man
 
+# Use CMD to run the app
+CMD ["python3"]

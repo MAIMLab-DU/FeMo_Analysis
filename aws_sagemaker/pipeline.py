@@ -19,10 +19,12 @@ from sagemaker.processing import (
     ProcessingOutput,
     ScriptProcessor,
 )
+from sagemaker.workflow.functions import Join
 from sagemaker.workflow.parameters import (
     ParameterInteger,
     ParameterString,
 )
+from sagemaker.workflow.pipeline_context import LocalPipelineSession
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import (
     ProcessingStep
@@ -31,27 +33,42 @@ from sagemaker.workflow.steps import (
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 OUT_DIR = "/opt/ml/processing/"
 
-def get_session(region, default_bucket):
-    """Gets the sagemaker session based on the region.
+
+def get_session(region, default_bucket, local_mode=False):
+    """Gets the SageMaker session based on the region and mode.
 
     Args:
-        region: the aws region to start the session
-        default_bucket: the bucket to use for storing the artifacts
+        region: The AWS region to start the session.
+        default_bucket: The bucket to use for storing artifacts.
+        local_mode: Boolean flag to indicate whether to use local mode.
 
     Returns:
-        `sagemaker.session.Session instance
+        A `sagemaker.session.Session` instance or `sagemaker.local.LocalSession` if local_mode=True.
     """
 
     boto_session = boto3.Session(region_name=region)
 
-    sagemaker_client = boto_session.client("sagemaker")
-    runtime_client = boto_session.client("sagemaker-runtime")
-    return sagemaker.session.Session(
-        boto_session=boto_session,
-        sagemaker_client=sagemaker_client,
-        sagemaker_runtime_client=runtime_client,
-        default_bucket=default_bucket,
-    )
+    if local_mode:
+        # Create a LocalSession for running SageMaker jobs locally
+        sagemaker_session = LocalPipelineSession(
+            boto_session=boto_session,
+            default_bucket=default_bucket
+        )
+        # Set the default bucket in local mode (if needed)
+        # sagemaker_session.config = {'local': {'local_code': True}}
+    else:
+        # Create a regular SageMaker session
+        sagemaker_client = boto_session.client("sagemaker")
+        runtime_client = boto_session.client("sagemaker-runtime")
+        sagemaker_session = sagemaker.session.Session(
+            boto_session=boto_session,
+            sagemaker_client=sagemaker_client,
+            sagemaker_runtime_client=runtime_client,
+            default_bucket=default_bucket,
+        )
+
+    return sagemaker_session
+
 
 def get_pipeline(
     region,
@@ -60,6 +77,7 @@ def get_pipeline(
     model_package_group_name="FeMoModelPackageGroup",
     pipeline_name="FeMoPipeline",
     base_job_prefix="FeMo",
+    local_mode=False
 ):
     """Gets a SageMaker ML Pipeline instance working with on femo data.
 
@@ -71,7 +89,8 @@ def get_pipeline(
     Returns:
         an instance of a pipeline
     """
-    sagemaker_session = get_session(region, default_bucket)
+
+    sagemaker_session = get_session(region, default_bucket, local_mode)
     if role is None:
         role = sagemaker.session.get_execution_role(sagemaker_session)
 
@@ -96,7 +115,7 @@ def get_pipeline(
     manifest_path = os.path.join(OUT_DIR, "input", "dataManifest/dataManifest.json")
     feat_args = ["--data-manifest", manifest_path,
                  "--work-dir", os.path.join(OUT_DIR, "features"),
-                 "--config-dir", os.path.join(OUT_DIR, "input", "config")]
+                 "--config-path", os.path.join(OUT_DIR, "input", "config/dataset-cfg.yaml")]
     if os.getenv("FORCE_EXTRACT_FEATURES", False):
         feat_args.append("--extract")
 
@@ -112,7 +131,9 @@ def get_pipeline(
                             destination=os.path.join(OUT_DIR, "input", "dataManifest")),                
         ],
         outputs=[
-            ProcessingOutput(output_name="features", source=os.path.join(OUT_DIR, "features")),
+            ProcessingOutput(output_name="features", source=os.path.join(OUT_DIR, "features"),
+                             destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
+                                                              "local_run", "ExtractFeatures", "output"]) if local_mode else None),
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "extract.py"),
         job_arguments=feat_args,
@@ -131,9 +152,9 @@ def get_pipeline(
     )
 
     features_dir = os.path.join(OUT_DIR, "input", "features")
-    preproc_args = ["--dataset-path", os.path.join(features_dir, "features.csv"),
+    preproc_args = ["--features-dir", features_dir,
                     "--work-dir", os.path.join(OUT_DIR, "dataset"),
-                    "--config-dir", os.path.join(OUT_DIR, "input", "config")]
+                    "--config-path", os.path.join(OUT_DIR, "input", "config/preprocess-cfg.yaml")]
 
     step_preprocess = ProcessingStep(
         name="ProcessData",
@@ -149,8 +170,12 @@ def get_pipeline(
                             destination=os.path.join(OUT_DIR, "input", "config")),                
         ],
         outputs=[
-            ProcessingOutput(output_name="dataset", source=os.path.join(OUT_DIR, "dataset")),
-            ProcessingOutput(output_name="processor", source=os.path.join(OUT_DIR, "dataset/processor"))
+            ProcessingOutput(output_name="dataset", source=os.path.join(OUT_DIR, "dataset"),
+                             destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
+                                                              "local_run", "ProcessData", "output"]) if local_mode else None),
+            ProcessingOutput(output_name="processor", source=os.path.join(OUT_DIR, "dataset/processor"),
+                             destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
+                                                              "local_run", "ProcessData", "output"]) if local_mode else None)
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "process.py"),
         job_arguments=preproc_args,

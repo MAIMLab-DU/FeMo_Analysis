@@ -17,7 +17,8 @@ COPY requirements.txt /opt/ml/code/requirements.txt
 
 # Install python dependencies
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    rm -rf /root/.cache/pip
 
 # Copy the training script and other files
 ADD femo/ /opt/ml/code/femo/
@@ -26,7 +27,7 @@ ADD README.md /opt/ml/code/README.md
 ADD scripts/train.py /opt/ml/code/train.py
 
 # Install femo package
-RUN pip install .
+RUN pip install . && rm -rf /root/.cache/pip /usr/local/lib/python3.10/site-packages/tests /usr/local/share/man
 
 # Define the entry point for SageMaker
-ENTRYPOINT ["python", "train.py"]git sat
+ENTRYPOINT ["python", "train.py"]

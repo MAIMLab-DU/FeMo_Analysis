@@ -40,7 +40,8 @@ WORK_DIR=${WORK_DIR:-"./work_dir"}
 mkdir -p "$WORK_DIR"
 
 # Determine the next run directory
-LAST_RUN=$(ls -d "$WORK_DIR"/run* 2>/dev/null | grep -o 'run[0-9]\+' | sort -V | tail -n 1 | grep -o '[0-9]\+')
+LAST_RUN=$(ls -d "$WORK_DIR"/run* 2>/dev/null | grep -o 'run[0-9]\+' | sort -V | tail -n 1 | grep -o '[0-9]\+') || LAST_RUN=0
+
 NEXT_RUN=$((LAST_RUN + 1))
 
 # Set and create run directory
@@ -63,7 +64,7 @@ pip install -e .
 
 # Execute the scripts
 python "$SCRIPT_DIR/extract.py" --data-manifest "$DATA_MANIFEST" --work-dir "$RUN_DIR"
-python "$SCRIPT_DIR/process.py" --dataset-path "$RUN_DIR/features/" --work-dir "$RUN_DIR"
+python "$SCRIPT_DIR/process.py" --features-dir "$RUN_DIR" --work-dir "$RUN_DIR"
 python "$SCRIPT_DIR/train.py" --train "$RUN_DIR/dataset/" --model-dir "$RUN_DIR/model" --output-data-dir "$RUN_DIR/output" --ckpt-name "$CKPT_NAME" --tune
 python "$SCRIPT_DIR/evaluate.py" --data-manifest "$DATA_MANIFEST" --results-path "$RUN_DIR/output/results/results.csv" --metadata-path "$RUN_DIR/output/metadata/metadata.joblib" --work-dir "$RUN_DIR" --out-filename "$PERF_FILE"
 

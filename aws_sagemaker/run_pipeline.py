@@ -63,8 +63,10 @@ def main():
         parser.print_help()
         sys.exit(2)
     tags = convert_struct(args.tags)
+    args.kwargs = convert_struct(args.kwargs)
 
     try:
+        LOGGER.info(f"Local mode: {args.kwargs.get('local_mode', False)}")
         pipeline = get_pipeline_driver(args.module_name, args.kwargs)
         LOGGER.info("Creating/updating a SageMaker Pipeline with the following definition:")
         parsed = json.loads(pipeline.definition())
@@ -77,11 +79,11 @@ def main():
         LOGGER.info(upsert_response)
 
         execution = pipeline.start()
-        LOGGER.info(f"Execution started with PipelineExecutionArn: {execution.arn}")
-
-        LOGGER.info("Waiting for the execution to finish...")
-        execution.wait()
-        LOGGER.info("Execution completed. Execution step details:")
+        if not args.kwargs.get('local_mode', False):
+            LOGGER.info(f"Execution started with PipelineExecutionArn: {execution.arn}")
+            LOGGER.info("Waiting for the execution to finish...")
+            execution.wait()
+            LOGGER.info("Execution completed. Execution step details:")
 
         pipeline_steps = execution.list_steps()
         LOGGER.info(pipeline_steps)
