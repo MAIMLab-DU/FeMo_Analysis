@@ -27,12 +27,13 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 # Check required arguments
-if [ -z "$DATA_MANIFEST" ] || [ -z "$CKPT_NAME" ]; then
-    echo "Usage: $0 <data_manifest> <ckpt_name> [run_dir] [performance_filename]"
+if [ -z "$DATA_MANIFEST" ]; then
+    echo "Usage: $0 <data_manifest> [ckpt_name] [run_dir] [performance_filename]"
     exit 1
 fi
 
 # Set defaults for optional arguments
+CKPT_NAME=${CKPT_NAME:-null}
 PERF_FILE=${PERF_FILE:-"performance.csv"}
 WORK_DIR=${WORK_DIR:-"./work_dir"}
 

@@ -9,25 +9,20 @@ from femo.model import CLASSIFIER_MAP
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
-os.environ.setdefault('SM_CHANNEL_TRAIN', '')
-os.environ.setdefault('SM_MODEL_DIR', '')
-os.environ.setdefault('SM_OUTPUT_DATA_DIR', '')
-os.environ.setdefault('SM_TRAIN_CFG', os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml"))
-os.environ.setdefault('SM_CKPT_NAME', 'model.h5')
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
     
     # SageMaker-specific directories
-    parser.add_argument("--train", type=str, default=os.environ['SM_CHANNEL_TRAIN'], help="Path to dataset")
-    parser.add_argument("--model-dir", type=str, default=os.environ['SM_MODEL_DIR'], help="Model output directory")
-    parser.add_argument("--output-data-dir", type=str, default=os.environ['SM_OUTPUT_DATA_DIR'], help="Model output directory")
+    parser.add_argument("--train", type=str, default=os.getenv('SM_CHANNEL_TRAIN', ''), help="Path to dataset")
+    parser.add_argument("--model-dir", type=str, default=os.getenv('SM_MODEL_DIR', ''), help="Model output directory")
+    parser.add_argument("--output-data-dir", type=str, default=os.getenv('SM_OUTPUT_DATA_DIR', ''), help="Model output directory")
 
     # Additional arguments
-    parser.add_argument("--ckpt-name", type=str, default=os.environ['SM_CKPT_NAME'], help="Name of model checkpoint file")
+    parser.add_argument("--ckpt-name", type=str, default=os.getenv('SM_CKPT_NAME', None), help="Name of model checkpoint file")
     parser.add_argument("--tune", action='store_true', default=os.getenv('SM_TUNE', False), help="Tune hyperparameters before training")
-    parser.add_argument("--config-path", type=str, default=os.environ['SM_TRAIN_CFG'], help="Path to config file")
+    parser.add_argument("--config-path", type=str, default=os.getenv('SM_TRAIN_CFG', os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
+                        help="Path to config file")
 
     args = parser.parse_args()
     return args
@@ -93,6 +88,8 @@ def main(args):
         **train_params
     )
     
+    if args.ckpt_name is None or args.ckpt_name == 'null':
+        args.ckpt_name = "model.h5" if classifier_type == "neural-net" else "model.pkl"
     model_filename = os.path.join(args.model_dir, args.ckpt_name)
     try:
         classifier.save_model(
@@ -102,7 +99,7 @@ def main(args):
         LOGGER.info(f"Model checkpoint saved to {os.path.abspath(model_filename)}")
     except Exception as e:
         LOGGER.error(f"Failed to save model: {e}")
-        pass
+        sys.exit(1)
     
     LOGGER.info("Finished training")
 
