@@ -12,6 +12,7 @@ import os
 
 import boto3
 import sagemaker
+import sagemaker.local
 import sagemaker.session
 from sagemaker.inputs import (
     TrainingInput
@@ -26,7 +27,6 @@ from sagemaker.workflow.parameters import (
     ParameterInteger,
     ParameterString,
 )
-from sagemaker.workflow.pipeline_context import LocalPipelineSession
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import (
     ProcessingStep,
@@ -55,7 +55,7 @@ def get_session(region, default_bucket, local_mode=False):
 
     if local_mode:
         # Create a LocalSession for running SageMaker jobs locally
-        sagemaker_session = LocalPipelineSession(
+        sagemaker_session = sagemaker.local.LocalSession(
             boto_session=boto_session,
             default_bucket=default_bucket
         )
