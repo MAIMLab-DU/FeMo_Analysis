@@ -1,6 +1,7 @@
 """Provides utilities for SageMaker Pipeline CLI."""
 from __future__ import absolute_import
-
+import json
+import yaml
 import ast
 
 
@@ -30,3 +31,11 @@ def convert_struct(str_struct=None):
         result["local_mode"] = result["local_mode"].lower() == "true"
     
     return result
+
+def parse_yaml_to_json(yaml_file: str):
+    with open(yaml_file, 'r') as f:
+        data = yaml.safe_load(f)
+    with open(yaml_file.replace('.yaml', '.json'), 'w') as f:
+        json.dump(data, f, indent=2)
+    
+    return yaml_file.replace('.yaml', '.json')

@@ -13,7 +13,9 @@ import os
 import boto3
 import sagemaker
 import sagemaker.session
-
+from sagemaker.inputs import (
+    TrainingInput
+)
 from sagemaker.processing import (
     ProcessingInput,
     ProcessingOutput,
@@ -27,11 +29,14 @@ from sagemaker.workflow.parameters import (
 from sagemaker.workflow.pipeline_context import LocalPipelineSession
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import (
-    ProcessingStep
+    ProcessingStep,
+    TrainingStep
 )
+from sagemaker.estimator import Estimator
+from utils import parse_yaml_to_json
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-OUT_DIR = "/opt/ml/processing/"
+PROC_DIR = "/opt/ml/processing/"
 
 
 def get_session(region, default_bucket, local_mode=False):
@@ -99,10 +104,17 @@ def get_pipeline(
     processing_instance_type = ParameterString(
         name="ProcessingInstanceType", default_value="ml.m5.xlarge"
     )
+    training_instance_count = ParameterInteger(name="TrainingInstanceCount", default_value=1)
+    training_instance_type = ParameterString(
+        name="TrainingInstanceType", default_value="ml.m4.xlarge"
+    )
+    # model_approval_status = ParameterString(
+    #     name="ModelApprovalStatus", default_value="Approved"
+    # )
 
 
     # ===== Feature Extraction Step =====
-    feat_processor = ScriptProcessor(
+    script_extract = ScriptProcessor(
         image_uri=os.getenv("PROCESSING_IMAGE_URI"),
         command=["python3"],
         instance_type=processing_instance_type,
@@ -112,28 +124,28 @@ def get_pipeline(
         role=role,
     )
 
-    manifest_path = os.path.join(OUT_DIR, "input", "dataManifest/dataManifest.json")
+    manifest_path = os.path.join(PROC_DIR, "input", "dataManifest/dataManifest.json")
     feat_args = ["--data-manifest", manifest_path,
-                 "--work-dir", os.path.join(OUT_DIR, "features"),
-                 "--config-path", os.path.join(OUT_DIR, "input", "config/dataset-cfg.yaml")]
+                 "--work-dir", os.path.join(PROC_DIR, "output"),
+                 "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml")]
     if os.getenv("FORCE_EXTRACT_FEATURES", False):
         feat_args.append("--extract")
 
     step_extract = ProcessingStep(
         name="ExtractFeatures",
-        processor=feat_processor,
+        processor=script_extract,
         inputs=[
             ProcessingInput(input_name="config",
                             source=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"),
-                            destination=os.path.join(OUT_DIR, "input", "config")),
+                            destination=os.path.join(PROC_DIR, "input", "config")),
             ProcessingInput(input_name="dataManifest",
                             source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
-                            destination=os.path.join(OUT_DIR, "input", "dataManifest")),                
+                            destination=os.path.join(PROC_DIR, "input", "dataManifest")),                
         ],
         outputs=[
-            ProcessingOutput(output_name="features", source=os.path.join(OUT_DIR, "features"),
+            ProcessingOutput(output_name="features", source=os.path.join(PROC_DIR, "output"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ExtractFeatures", "output"]) if local_mode else None),
+                                                              "local_run", "ExtractFeatures", "output", "features"]) if local_mode else None)
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "extract.py"),
         job_arguments=feat_args,
@@ -141,7 +153,7 @@ def get_pipeline(
 
 
     # ===== Data Processing Step =====
-    data_processor = ScriptProcessor(
+    script_process = ScriptProcessor(
         image_uri=os.getenv("PROCESSING_IMAGE_URI"),
         command=["python3"],
         instance_type=processing_instance_type,
@@ -151,14 +163,14 @@ def get_pipeline(
         role=role,
     )
 
-    features_dir = os.path.join(OUT_DIR, "input", "features")
+    features_dir = os.path.join(PROC_DIR, "input", "features")
     preproc_args = ["--features-dir", features_dir,
-                    "--work-dir", os.path.join(OUT_DIR, "dataset"),
-                    "--config-path", os.path.join(OUT_DIR, "input", "config/preprocess-cfg.yaml")]
+                    "--work-dir", os.path.join(PROC_DIR, "output"),
+                    "--config-path", os.path.join(PROC_DIR, "input", "config/preprocess-cfg.yaml")]
 
-    step_preprocess = ProcessingStep(
+    step_process = ProcessingStep(
         name="ProcessData",
-        processor=data_processor,
+        processor=script_process,
         inputs=[
             ProcessingInput(input_name="features",
                             source=step_extract.properties.ProcessingOutputConfig.Outputs[
@@ -167,15 +179,21 @@ def get_pipeline(
                             destination=features_dir),
             ProcessingInput(input_name="config",
                             source=os.path.join(BASE_DIR, "..", "configs/preprocess-cfg.yaml"),
-                            destination=os.path.join(OUT_DIR, "input", "config")),                
+                            destination=os.path.join(PROC_DIR, "input", "config")),
+            ProcessingInput(input_name="train_config",
+                            source=parse_yaml_to_json(os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
+                            destination=os.path.join(PROC_DIR, "input", "train_config"))               
         ],
         outputs=[
-            ProcessingOutput(output_name="dataset", source=os.path.join(OUT_DIR, "dataset"),
+            ProcessingOutput(output_name="dataset", source=os.path.join(PROC_DIR, "output", "dataset"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output"]) if local_mode else None),
-            ProcessingOutput(output_name="processor", source=os.path.join(OUT_DIR, "dataset/processor"),
+                                                              "local_run", "ProcessData", "output", "dataset"]) if local_mode else None),
+            ProcessingOutput(output_name="processor", source=os.path.join(PROC_DIR, "output", "processor"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output"]) if local_mode else None)
+                                                              "local_run", "ProcessData", "output", "processor"]) if local_mode else None),
+            ProcessingOutput(output_name="train_config", source=os.path.join(PROC_DIR, "input", "train_config"),
+                             destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
+                                                              "local_run", "ProcessData", "output", "train_config"]) if local_mode else None),
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "process.py"),
         job_arguments=preproc_args,
@@ -183,28 +201,97 @@ def get_pipeline(
 
 
     # ===== Model Training Step =====
-    """
-    /opt/ml/model – Your algorithm should write all final model artifacts to this directory.
-    SageMaker copies this data as a single object in compressed tar format to the S3 location that you specified in the CreateTrainingJob request.
-    If multiple containers in a single training job write to this directory they should ensure no file/directory names clash.
-    SageMaker aggregates the result in a TAR file and uploads to S3 at the end of the training job.
+    model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/train"
+    if local_mode:
+        train_config_uri = f"file://{os.path.join(BASE_DIR, '..', 'config/train-cfg.yaml')}"
+    else:
+        train_config_uri = TrainingInput(
+            s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
+                "train_config"
+            ].S3Output.S3Uri,
+            content_type="application/json"
+        )
+    estimator = Estimator(
+        image_uri=os.getenv("TRAINING_IMAGE_URI"),
+        instance_type=training_instance_type,
+        instance_count=training_instance_count,
+        output_path=model_path,
+        base_job_name=f"{base_job_prefix}/train",
+        sagemaker_session=sagemaker_session,
+        role=role,
+        environment={
+            "SM_CHANNEL_TRAIN": "/opt/ml/input/data/train",  # Path within container for dataset
+            "SM_MODEL_DIR": "/opt/ml/model",  # Model output directory within container
+            "SM_OUTPUT_DATA_DIR": "/opt/ml/output/data",
+            "SM_TRAIN_CFG": "/opt/ml/input/data/config/train-cfg.yaml",
+            "SM_CKPT_NAME": os.getenv('SM_CKPT_NAME', "null"),  # Name of model checkpoint file within the container
+            "SM_TUNE": "true"
+        }
+    )
+    step_train = TrainingStep(
+        name="TrainModel",
+        estimator=estimator,
+        inputs={
+            "train": TrainingInput(
+                s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
+                    "dataset"
+                ].S3Output.S3Uri,
+                content_type="text/csv",
+            ),
+            "config": train_config_uri
+        }
+    )
 
-    /opt/ml/output/data – Your algorithm should write artifacts you want to store other than the final model to this directory.
-    SageMaker copies this data as a single object in compressed tar format to the S3 location that you specified in the CreateTrainingJob request.
-    If multiple containers in a single training job write to this directory they should ensure no file/directory names clash.
-    SageMaker aggregates the result in a TAR file and uploads to S3 at the end of the training job.
-    """
+    # # TODO: Complete implementation
+    # # ===== Model Evaluation Step =====
+    # script_eval = ScriptProcessor(
+    #     image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+    #     command=["python3"],
+    #     instance_type=processing_instance_type,
+    #     instance_count=processing_instance_count,
+    #     base_job_name=f"{base_job_prefix}/model-eval",
+    #     sagemaker_session=sagemaker_session,
+    #     role=role,
+    # )
+    # evaluation_report = PropertyFile(
+    #     name="EvaluationReport",
+    #     output_name="evaluation",
+    #     path="evaluation.json",
+    # )
+    # step_eval = ProcessingStep(
+    #     name="EvaluateModel",
+    #     processor=script_eval,
+    #     inputs=[
+    #         ProcessingInput(
+    #             source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+    #             destination="/opt/ml/processing/model",
+    #         ),
+    #         ProcessingInput(
+    #             source=step_process.properties.ProcessingOutputConfig.Outputs[
+    #                 "test"
+    #             ].S3Output.S3Uri,
+    #             destination="/opt/ml/processing/test",
+    #         ),
+    #     ],
+    #     outputs=[
+    #         ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
+    #     ],
+    #     code=os.path.join(BASE_DIR, "..", "scripts", "evaluate.py"),
+    #     property_files=[evaluation_report],
+    # )
 
-    
+
 
     # pipeline instance
     pipeline = Pipeline(
         name=pipeline_name,
         parameters=[
             processing_instance_type,
-            processing_instance_count
+            processing_instance_count,
+            training_instance_type,
+            training_instance_count
         ],
-        steps=[step_extract, step_preprocess],
+        steps=[step_extract, step_process, step_train],
         sagemaker_session=sagemaker_session,
     )
     return pipeline

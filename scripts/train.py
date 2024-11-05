@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import yaml
 import argparse
 import pandas as pd
@@ -37,7 +38,7 @@ def main(args):
     LOGGER.info(f"Output data directory: {args.output_data_dir}")
 
     with open(args.config_path, 'r') as f:
-        train_cfg = yaml.safe_load(f)
+        train_cfg = yaml.safe_load(f) if args.config_path.endswith('.yaml') else json.load(f)
 
     try:
         dataset = pd.read_csv(os.path.join(args.train, "dataset.csv"))
@@ -123,4 +124,6 @@ if __name__ == "__main__":
     if sys.argv[1] == 'train':
         sys.argv.pop(1)    
     args = parse_args()
+    if isinstance(args.tune, str):
+        args.tune = args.tune.lower() == 'true'
     main(args)

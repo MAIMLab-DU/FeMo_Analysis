@@ -86,11 +86,12 @@ def main():
             LOGGER.info("Execution completed. Execution step details:")
 
         pipeline_steps = execution.list_steps()
-        LOGGER.info(pipeline_steps)
+        LOGGER.info(f"{pipeline_steps = }")
 
-        model_package_name = get_model_package_name(pipeline_steps)
-        with open("pipelineExecution.json", "w") as f:
-            json.dump({"arn": model_package_name}, f, indent=2)
+        if not args.kwargs.get('local_mode', False):
+            model_package_name = get_model_package_name(pipeline_steps)
+            with open("pipelineExecution.json", "w") as f:
+                json.dump({"arn": model_package_name}, f, indent=2)
         # out_file = open("pipelineExecutionArn", "w")
         # out_file.write(model_package_name)
         # out_file.close()
