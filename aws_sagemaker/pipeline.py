@@ -9,7 +9,7 @@
 Implements a get_pipeline(**kwargs) method.
 """
 import os
-
+import yaml
 import boto3
 import sagemaker
 import sagemaker.local
@@ -168,6 +168,7 @@ def get_pipeline(
                     "--work-dir", os.path.join(PROC_DIR, "output"),
                     "--config-path", os.path.join(PROC_DIR, "input", "config/preprocess-cfg.yaml"),
                     "--train-config-path", os.path.join(PROC_DIR, "input", "train_config_in/train-cfg.json")]
+    train_cfg_path = os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")
 
     step_process = ProcessingStep(
         name="ProcessData",
@@ -182,7 +183,7 @@ def get_pipeline(
                             source=os.path.join(BASE_DIR, "..", "configs/preprocess-cfg.yaml"),
                             destination=os.path.join(PROC_DIR, "input", "config")),
             ProcessingInput(input_name="train_config_in",
-                            source=yaml2json(os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
+                            source=yaml2json(train_cfg_path),
                             destination=os.path.join(PROC_DIR, "input", "train_config_in"))
         ],
         outputs=[
@@ -211,6 +212,11 @@ def get_pipeline(
         base_job_name=f"{base_job_prefix}/train",
         sagemaker_session=sagemaker_session,
         role=role,
+        metric_definitions=[
+            {"Name": "train:avg-acc", "Regex": "- Average training accuracy: ([0-9\\.]+)"},
+            {"Name": "test:avg-acc", "Regex": "- Average testing accuracy: ([0-9\\.]+)"},
+            {"Name": "test:best-acc", "Regex": "- Best Test Accuracy: ([0-9\\.]+)"}
+        ],
         environment={
             "SM_CHANNEL_TRAIN": "/opt/ml/input/data/train",  # Path within container for dataset
             "SM_MODEL_DIR": "/opt/ml/model",  # Model output directory within container
@@ -220,6 +226,8 @@ def get_pipeline(
             "SM_TUNE": "true"
         }
     )
+    with open(train_cfg_path, 'r') as f:
+        estimator.set_hyperparameters(**yaml.safe_load(f)["config"]["hyperparams"])
     step_train = TrainingStep(
         name="TrainModel",
         estimator=estimator,
