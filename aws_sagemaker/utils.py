@@ -32,7 +32,7 @@ def convert_struct(str_struct=None):
     
     return result
 
-def parse_yaml_to_json(yaml_file: str):
+def yaml2json(yaml_file: str):
     with open(yaml_file, 'r') as f:
         data = yaml.safe_load(f)
     with open(yaml_file.replace('.yaml', '.json'), 'w') as f:

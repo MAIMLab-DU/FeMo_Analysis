@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument("--features-dir", type=str, required=True, help="Directory containing 'features.csv' file")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/preprocess-cfg.yaml"), help="Path to config file")
+    parser.add_argument("--train-config-path", type=str, default=None, help="Path to config file")
     args = parser.parse_args()
 
     return args
@@ -31,6 +32,15 @@ def main(args):
 
     with open(args.config_path, 'r') as f:
         preproc_cfg = yaml.safe_load(f)
+
+    # Sagemaker specific
+    if args.train_config_path is not None:
+        import shutil
+        dump_path = os.path.join(args.work_dir, "train_config", "train-cfg.json")
+        os.makedirs(os.path.dirname(dump_path), exist_ok=True)
+        shutil.move(args.train_config_path, dump_path)
+        LOGGER.info(f"Training configuration saved to {os.path.abspath(dump_path)}")
+
     
     features = pd.read_csv(os.path.join(args.features_dir, "features.csv"))
     X, y = features.to_numpy()[:, :-1], features.to_numpy()[:, -1]

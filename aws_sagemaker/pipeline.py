@@ -33,7 +33,7 @@ from sagemaker.workflow.steps import (
     TrainingStep
 )
 from sagemaker.estimator import Estimator
-from utils import parse_yaml_to_json
+from utils import yaml2json
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 PROC_DIR = "/opt/ml/processing/"
@@ -102,11 +102,11 @@ def get_pipeline(
     # parameters for pipeline execution
     processing_instance_count = ParameterInteger(name="ProcessingInstanceCount", default_value=1)
     processing_instance_type = ParameterString(
-        name="ProcessingInstanceType", default_value="ml.m5.xlarge"
+        name="ProcessingInstanceType", default_value="ml.m5.4xlarge"
     )
     training_instance_count = ParameterInteger(name="TrainingInstanceCount", default_value=1)
     training_instance_type = ParameterString(
-        name="TrainingInstanceType", default_value="ml.m4.xlarge"
+        name="TrainingInstanceType", default_value="ml.m5.4xlarge"
     )
     # model_approval_status = ParameterString(
     #     name="ModelApprovalStatus", default_value="Approved"
@@ -166,7 +166,8 @@ def get_pipeline(
     features_dir = os.path.join(PROC_DIR, "input", "features")
     preproc_args = ["--features-dir", features_dir,
                     "--work-dir", os.path.join(PROC_DIR, "output"),
-                    "--config-path", os.path.join(PROC_DIR, "input", "config/preprocess-cfg.yaml")]
+                    "--config-path", os.path.join(PROC_DIR, "input", "config/preprocess-cfg.yaml"),
+                    "--train-config-path", os.path.join(PROC_DIR, "input", "train_config_in/train-cfg.json")]
 
     step_process = ProcessingStep(
         name="ProcessData",
@@ -180,9 +181,9 @@ def get_pipeline(
             ProcessingInput(input_name="config",
                             source=os.path.join(BASE_DIR, "..", "configs/preprocess-cfg.yaml"),
                             destination=os.path.join(PROC_DIR, "input", "config")),
-            ProcessingInput(input_name="train_config",
-                            source=parse_yaml_to_json(os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
-                            destination=os.path.join(PROC_DIR, "input", "train_config"))               
+            ProcessingInput(input_name="train_config_in",
+                            source=yaml2json(os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
+                            destination=os.path.join(PROC_DIR, "input", "train_config_in"))
         ],
         outputs=[
             ProcessingOutput(output_name="dataset", source=os.path.join(PROC_DIR, "output", "dataset"),
@@ -191,7 +192,7 @@ def get_pipeline(
             ProcessingOutput(output_name="processor", source=os.path.join(PROC_DIR, "output", "processor"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
                                                               "local_run", "ProcessData", "output", "processor"]) if local_mode else None),
-            ProcessingOutput(output_name="train_config", source=os.path.join(PROC_DIR, "input", "train_config"),
+            ProcessingOutput(output_name="train_config", source=os.path.join(PROC_DIR, "output", "train_config"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
                                                               "local_run", "ProcessData", "output", "train_config"]) if local_mode else None),
         ],
@@ -202,15 +203,6 @@ def get_pipeline(
 
     # ===== Model Training Step =====
     model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/train"
-    if local_mode:
-        train_config_uri = f"file://{os.path.join(BASE_DIR, '..', 'config/train-cfg.yaml')}"
-    else:
-        train_config_uri = TrainingInput(
-            s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
-                "train_config"
-            ].S3Output.S3Uri,
-            content_type="application/json"
-        )
     estimator = Estimator(
         image_uri=os.getenv("TRAINING_IMAGE_URI"),
         instance_type=training_instance_type,
@@ -223,7 +215,7 @@ def get_pipeline(
             "SM_CHANNEL_TRAIN": "/opt/ml/input/data/train",  # Path within container for dataset
             "SM_MODEL_DIR": "/opt/ml/model",  # Model output directory within container
             "SM_OUTPUT_DATA_DIR": "/opt/ml/output/data",
-            "SM_TRAIN_CFG": "/opt/ml/input/data/config/train-cfg.yaml",
+            "SM_TRAIN_CFG": "/opt/ml/input/data/config/train-cfg.json",
             "SM_CKPT_NAME": os.getenv('SM_CKPT_NAME', "null"),  # Name of model checkpoint file within the container
             "SM_TUNE": "true"
         }
@@ -238,7 +230,12 @@ def get_pipeline(
                 ].S3Output.S3Uri,
                 content_type="text/csv",
             ),
-            "config": train_config_uri
+            "config": TrainingInput(
+                s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
+                    "train_config"
+                ].S3Output.S3Uri,
+                content_type="application/json"
+            )
         }
     )
 
