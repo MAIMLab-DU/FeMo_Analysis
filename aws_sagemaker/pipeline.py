@@ -28,6 +28,7 @@ from sagemaker.workflow.parameters import (
     ParameterString,
 )
 from sagemaker.workflow.pipeline import Pipeline
+from sagemaker.workflow.properties import PropertyFile
 from sagemaker.workflow.steps import (
     ProcessingStep,
     TrainingStep
@@ -209,6 +210,7 @@ def get_pipeline(
         instance_type=training_instance_type,
         instance_count=training_instance_count,
         output_path=model_path,
+        disable_output_compression=True,
         base_job_name=f"{base_job_prefix}/train",
         sagemaker_session=sagemaker_session,
         role=role,
@@ -247,43 +249,61 @@ def get_pipeline(
         }
     )
 
-    # # TODO: Complete implementation
-    # # ===== Model Evaluation Step =====
-    # script_eval = ScriptProcessor(
-    #     image_uri=os.getenv("PROCESSING_IMAGE_URI"),
-    #     command=["python3"],
-    #     instance_type=processing_instance_type,
-    #     instance_count=processing_instance_count,
-    #     base_job_name=f"{base_job_prefix}/model-eval",
-    #     sagemaker_session=sagemaker_session,
-    #     role=role,
-    # )
-    # evaluation_report = PropertyFile(
-    #     name="EvaluationReport",
-    #     output_name="evaluation",
-    #     path="evaluation.json",
-    # )
-    # step_eval = ProcessingStep(
-    #     name="EvaluateModel",
-    #     processor=script_eval,
-    #     inputs=[
-    #         ProcessingInput(
-    #             source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
-    #             destination="/opt/ml/processing/model",
-    #         ),
-    #         ProcessingInput(
-    #             source=step_process.properties.ProcessingOutputConfig.Outputs[
-    #                 "test"
-    #             ].S3Output.S3Uri,
-    #             destination="/opt/ml/processing/test",
-    #         ),
-    #     ],
-    #     outputs=[
-    #         ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
-    #     ],
-    #     code=os.path.join(BASE_DIR, "..", "scripts", "evaluate.py"),
-    #     property_files=[evaluation_report],
-    # )
+
+    # TODO: Complete implementation
+    # ===== Model Evaluation Step =====    
+    script_eval = ScriptProcessor(
+        image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+        command=["python3"],
+        instance_type=processing_instance_type,
+        instance_count=processing_instance_count,
+        base_job_name=f"{base_job_prefix}/model-eval",
+        sagemaker_session=sagemaker_session,
+        role=role,
+    )
+
+    eval_args = ["--data-manifest", manifest_path,
+                 "--results-path", os.path.join(PROC_DIR, "input", "results", "output/data/results/results.csv"),
+                 "--metadata-path", os.path.join(PROC_DIR, "input", "results", "output/data/metadata/metadata.joblib"),
+                 "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml"),
+                 "--work-dir", PROC_DIR,
+                 "--sagemaker"]
+
+    evaluation_report = PropertyFile(
+        name="EvaluationReport",
+        output_name="evaluation",
+        path="evaluation.json",
+    )
+    step_eval = ProcessingStep(
+        name="EvaluateModel",
+        processor=script_eval,
+        inputs=[
+            ProcessingInput(
+                input_name="config",
+                source=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"),
+                destination=os.path.join(PROC_DIR, "input", "config")
+            ),
+            ProcessingInput(
+                input_name="dataManifest",
+                source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
+                destination=os.path.join(PROC_DIR, "input", "dataManifest")
+            ),
+            ProcessingInput(
+                input_name="results",
+                source=..., # TODO: figure it out
+                destination=os.path.join(PROC_DIR, "inputs", "results"),
+            )
+        ],
+        outputs=[
+            ProcessingOutput(
+                output_name="evaluation",
+                source=os.path.join(PROC_DIR, "performance")
+            )
+        ],
+        code=os.path.join(BASE_DIR, "..", "scripts", "evaluate.py"),
+        job_arguments=eval_args,
+        property_files=[evaluation_report],
+    )
 
 
 
@@ -296,7 +316,7 @@ def get_pipeline(
             training_instance_type,
             training_instance_count
         ],
-        steps=[step_extract, step_process, step_train],
+        steps=[step_extract, step_process, step_train, step_eval],
         sagemaker_session=sagemaker_session,
     )
     return pipeline

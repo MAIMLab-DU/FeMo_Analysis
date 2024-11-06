@@ -16,12 +16,13 @@ BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
-    parser.add_argument("--results-path", type=str, required=True, help="Directory containing prediction results")
-    parser.add_argument("--metadata-path", type=str, required=True, help="Directory containing prediction metadata")
+    parser.add_argument("--results-path", type=str, required=True, help="Path to file containing prediction results")
+    parser.add_argument("--metadata-path", type=str, required=True, help="Path to file containing prediction metadata")
     parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"), help="Path to config file")
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--out-filename", type=str, default="performance.csv", help="Metrics output filename")
+    parser.add_argument("--sagemaker", action='store_true', default=False, help="Whether evaluation job is run on Sagemaker")
     args = parser.parse_args()
 
     return args
@@ -32,7 +33,6 @@ def main(args):
 
     with open(args.config_path, 'r') as f:
         dataset_cfg = yaml.safe_load(f)
-
 
     # with open(os.path.join(os.path.abspath(os.path.dirname(args.results_path)), 'metadata.json'), 'r') as f:
     #     metadata = json.load(f)
@@ -122,8 +122,12 @@ def main(args):
     outfile_dir = os.path.join(args.work_dir, "performance")
     os.makedirs(outfile_dir, exist_ok=True)
 
-    metrics_df.to_csv(os.path.join(outfile_dir, args.out_filename), index=False)
-    filewise_df.to_csv(os.path.join(outfile_dir, f'filewise_{args.out_filename}'))
+    if args.sagemaker:
+        with open(os.path.join(outfile_dir, "evaluation.json"), 'w') as f:
+            f.write(json.dumps(metrics_dict, indent=2))    
+    else:
+        metrics_df.to_csv(os.path.join(outfile_dir, args.out_filename), index=False)
+        filewise_df.to_csv(os.path.join(outfile_dir, f'filewise_{args.out_filename}'))
     
     LOGGER.info(f"Performance metrics saved as {os.path.abspath(outfile_dir)}")
 
