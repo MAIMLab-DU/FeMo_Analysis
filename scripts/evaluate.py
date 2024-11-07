@@ -33,8 +33,6 @@ def main(args):
     with open(args.config_path, 'r') as f:
         dataset_cfg = yaml.safe_load(f)
 
-    # with open(os.path.join(os.path.abspath(os.path.dirname(args.results_path)), 'metadata.json'), 'r') as f:
-    #     metadata = json.load(f)
     results_df = pd.read_csv(args.results_path, index_col=False)
     metadata: dict = joblib.load(args.metadata_path)
 
@@ -51,7 +49,15 @@ def main(args):
         pipeline_cfg=dataset_cfg.get('data_pipeline'),
         inference=False,
     )
-    metrics_calculator = FeMoMetrics()
+    
+    metrics_cfg = {
+        key: dataset_cfg.get('data_pipeline')['segment'][key] for key in [
+            'sensor_freq', 'sensation_freq', 'sensor_selection',
+            'maternal_dilation_forward', 'maternal_dilation_backward',
+            'fm_dilation'
+        ]
+    }
+    metrics_calculator = FeMoMetrics(**metrics_cfg)
     overall_tpfp = {
         'true_positive': 0,
         'false_positive': 0,
@@ -121,6 +127,7 @@ def main(args):
     
     outfile_dir = os.path.join(args.work_dir, "performance")
     os.makedirs(outfile_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.work_dir, 'metrics'), exist_ok=True)
 
     metrics_dict = metrics_calculator.calc_metrics(
         overall_tpfp
@@ -145,8 +152,9 @@ def main(args):
         with open(os.path.join(outfile_dir, "evaluation.json"), 'w') as f:
             f.write(json.dumps(metrics_dict, indent=2))
 
-    
+    joblib.dump(metrics_calculator, os.path.join(args.work_dir, 'metrics/metrics.joblib'), compress=False)
     LOGGER.info(f"Performance metrics saved as {os.path.abspath(outfile_dir)}")
+    LOGGER.info(f"Metrics saved as {os.path.abspath(os.path.join(args.work_dir, 'metrics'))}")
 
 
 if __name__ == "__main__":

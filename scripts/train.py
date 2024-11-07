@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import yaml
+import joblib
 import argparse
 import pandas as pd
 from femo.logger import LOGGER
@@ -20,9 +21,8 @@ def parse_args():
     parser.add_argument("--output-data-dir", type=str, default=os.getenv('SM_OUTPUT_DATA_DIR', ''), help="Model output directory")
 
     # Additional arguments
-    parser.add_argument("--ckpt-name", type=str, default=os.getenv('SM_CKPT_NAME', None), help="Name of model checkpoint file")
     parser.add_argument("--tune", action='store_true', default=os.getenv('SM_TUNE', False), help="Tune hyperparameters before training")
-    parser.add_argument("--config-path", type=str, default=os.getenv('SM_TRAIN_CFG', os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
+    parser.add_argument("--config-path", type=str, default=os.getenv('SM_CHANNEL_CONFIG', os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
                         help="Path to config file")
 
     args = parser.parse_args()
@@ -89,15 +89,9 @@ def main(args):
         **train_params
     )
     
-    if args.ckpt_name is None or args.ckpt_name == 'null':
-        args.ckpt_name = "model.h5" if classifier_type == "neural-net" else "model.pkl"
-    model_filename = os.path.join(args.model_dir, args.ckpt_name)
     try:
-        classifier.save_model(
-            model_filename=model_filename,
-            model_framework='keras' if classifier_type == 'neural-net' else 'sklearn'
-        )
-        LOGGER.info(f"Model checkpoint saved to {os.path.abspath(model_filename)}")
+        joblib.dump(classifier, os.path.join(args.model_dir, 'model.joblib'), compress=False)
+        LOGGER.info(f"Model saved to: {os.path.abspath(os.path.join(args.model_dir, 'model.joblib'))}")
     except Exception as e:
         LOGGER.error(f"Failed to save model: {e}")
         sys.exit(1)

@@ -144,9 +144,12 @@ def get_pipeline(
                             destination=os.path.join(PROC_DIR, "input", "dataManifest")),                
         ],
         outputs=[
-            ProcessingOutput(output_name="features", source=os.path.join(PROC_DIR, "output"),
+            ProcessingOutput(output_name="features", source=os.path.join(PROC_DIR, "output", "features"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ExtractFeatures", "output", "features"]) if local_mode else None)
+                                                              "local_run", "ExtractFeatures", "output", "features"]) if local_mode else None),
+            ProcessingOutput(output_name="pipeline", source=os.path.join(PROC_DIR, "output", "pipeline"),
+                             destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
+                                                              "local_run", "ExtractFeatures", "output", "pipeline"]) if local_mode else None)
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "extract.py"),
         job_arguments=feat_args,
@@ -224,8 +227,7 @@ def get_pipeline(
             "SM_CHANNEL_TRAIN": "/opt/ml/input/data/train",  # Path within container for dataset
             "SM_MODEL_DIR": "/opt/ml/model",  # Model output directory within container
             "SM_OUTPUT_DATA_DIR": "/opt/ml/output/data",
-            "SM_TRAIN_CFG": "/opt/ml/input/data/config/train-cfg.json",
-            "SM_CKPT_NAME": os.getenv('SM_CKPT_NAME', "null"),  # Name of model checkpoint file within the container
+            "SM_CHANNEL_CONFIG": "/opt/ml/input/data/config/train-cfg.json",
             "SM_TUNE": "true"
         }
     )
@@ -308,6 +310,12 @@ def get_pipeline(
                 source=os.path.join(PROC_DIR, "performance"),
                 destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
                                                 "local_run", "EvaluateModel", "output", "performance"]) if local_mode else None
+            ),
+            ProcessingOutput(
+                output_name="metrics",
+                source=os.path.join(PROC_DIR, "metrics"),
+                destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
+                                                "local_run", "EvaluateModel", "output", "metrics"]) if local_mode else None
             )
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "evaluate.py"),

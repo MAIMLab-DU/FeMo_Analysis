@@ -1,5 +1,6 @@
 import os
 import yaml
+import joblib
 import argparse
 from femo.logger import LOGGER
 from femo.data.dataset import FeMoDataset
@@ -22,7 +23,8 @@ def parse_args():
 def main(args):
     LOGGER.info("Starting feature extraction...")
 
-    os.makedirs(args.work_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.work_dir, "features"), exist_ok=True)
+    os.makedirs(os.path.join(args.work_dir, "pipeline"), exist_ok=True)
 
     with open(args.config_path, 'r') as f:
         dataset_cfg = yaml.safe_load(f)
@@ -35,8 +37,10 @@ def main(args):
                           dataset_cfg.get('data_pipeline'))
 
     df = dataset.build(force_extract=args.extract)
-    df.to_csv(os.path.join(args.work_dir, 'features.csv'), header=True, index=False)
+    df.to_csv(os.path.join(args.work_dir, "features/features.csv"), header=True, index=False)
     LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
+    joblib.dump(dataset.pipeline, os.path.join(args.work_dir, "pipeline/pipeline.joblib"), compress=False)
+    LOGGER.info(f"Pipeline saved to {os.path.abspath(os.path.join(args.work_dir, 'pipeline'))}")
 
 
 if __name__ == "__main__":
