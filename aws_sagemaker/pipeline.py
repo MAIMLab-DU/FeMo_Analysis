@@ -196,7 +196,7 @@ def get_pipeline(
                                                               "local_run", "ProcessData", "output", "processor"]) if local_mode else None),
             ProcessingOutput(output_name="train_config", source=os.path.join(PROC_DIR, "output", "train_config"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output", "train_config"]) if local_mode else None),
+                                                              "local_run", "ProcessData", "output", "train_config"]) if local_mode else None)
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "process.py"),
         job_arguments=preproc_args,
@@ -213,6 +213,7 @@ def get_pipeline(
         disable_output_compression=True,
         base_job_name=f"{base_job_prefix}/train",
         sagemaker_session=sagemaker_session,
+        enable_sagemaker_metrics=True,
         role=role,
         metric_definitions=[
             {"Name": "train:avg-acc", "Regex": "- Average training accuracy: ([0-9\\.]+)"},
@@ -250,7 +251,6 @@ def get_pipeline(
     )
 
 
-    # TODO: Complete implementation
     # ===== Model Evaluation Step =====    
     script_eval = ScriptProcessor(
         image_uri=os.getenv("PROCESSING_IMAGE_URI"),
@@ -263,11 +263,11 @@ def get_pipeline(
     )
 
     eval_args = ["--data-manifest", manifest_path,
-                 "--results-path", os.path.join(PROC_DIR, "input", "results", "output/data/results/results.csv"),
-                 "--metadata-path", os.path.join(PROC_DIR, "input", "results", "output/data/metadata/metadata.joblib"),
+                 "--results-path", os.path.join(PROC_DIR, "input", "results", "data/results/results.csv"),
+                 "--metadata-path", os.path.join(PROC_DIR, "input", "results", "data/metadata/metadata.joblib"),
                  "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml"),
                  "--work-dir", PROC_DIR,
-                 "--sagemaker"]
+                 "--sagemaker", os.path.join(PROC_DIR, "input", "results")]
 
     evaluation_report = PropertyFile(
         name="EvaluationReport",
@@ -290,14 +290,24 @@ def get_pipeline(
             ),
             ProcessingInput(
                 input_name="results",
-                source=..., # TODO: figure it out
-                destination=os.path.join(PROC_DIR, "inputs", "results"),
+                source=Join(
+                    on='/',
+                    values=[
+                        step_train.properties.OutputDataConfig.S3OutputPath,
+                        step_train.properties.TrainingJobName,
+                        'output',
+                        'output.tar.gz'
+                    ]
+                ),
+                destination=os.path.join(PROC_DIR, "input", "results"),
             )
         ],
         outputs=[
             ProcessingOutput(
                 output_name="evaluation",
-                source=os.path.join(PROC_DIR, "performance")
+                source=os.path.join(PROC_DIR, "performance"),
+                destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
+                                                "local_run", "EvaluateModel", "output", "performance"]) if local_mode else None
             )
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "evaluate.py"),

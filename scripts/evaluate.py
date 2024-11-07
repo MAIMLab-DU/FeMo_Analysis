@@ -5,10 +5,9 @@ import json
 import pandas as pd
 import argparse
 from tqdm import tqdm
-from pathlib import Path
 from femo.logger import LOGGER
 from femo.eval.metrics import FeMoMetrics
-from femo.data.pipeline import Pipeline
+from femo.data.dataset import FeMoDataset
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -22,7 +21,7 @@ def parse_args():
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--out-filename", type=str, default="performance.csv", help="Metrics output filename")
-    parser.add_argument("--sagemaker", action='store_true', default=False, help="Whether evaluation job is run on Sagemaker")
+    parser.add_argument("--sagemaker", type=str, default=None, help="Sagemaker directory for results")
     args = parser.parse_args()
 
     return args
@@ -44,11 +43,14 @@ def main(args):
     matching_index_tpd = 0
     matching_index_fpd = 0
     LOGGER.info(f"Loaded results from {args.results_path}")
+    LOGGER.info(f"Loaded metadata from {args.metadata_path}")
 
-    pipeline = Pipeline(
-            inference=False,
-            cfg=dataset_cfg.get('data_pipeline')
-        )
+    dataset = FeMoDataset(
+        base_dir=args.data_dir,
+        data_manifest=args.data_manifest,
+        pipeline_cfg=dataset_cfg.get('data_pipeline'),
+        inference=False,
+    )
     metrics_calculator = FeMoMetrics()
     overall_tpfp = {
         'true_positive': 0,
@@ -70,14 +72,21 @@ def main(args):
         'num_fpd': []
     }
 
-    data_manifest = json.load(Path(args.data_manifest).open())
-    for item in tqdm(data_manifest['items'], desc="Processing items", unit="item"):
+    for item in tqdm(dataset.data_manifest['items'], desc="Processing items", unit="item"):
+
         data_file_key = item.get('datFileKey', None)
-        if data_file_key is None:
-            LOGGER.warning(f"{data_file_key = }")
+        bucket=item.get('bucketName', None)
+        data_filename = os.path.join(dataset.base_dir, data_file_key)
+        data_success = dataset._download_from_s3(
+            filename=data_filename,
+            bucket=bucket,
+            key=data_file_key
+        )
+        if not data_success:
+            LOGGER.warning(f"Failed to download {data_filename} from {bucket = }, {data_file_key =}")
             continue
 
-        pipeline_output = pipeline.process(
+        pipeline_output = dataset.pipeline.process(
             filename=os.path.join(args.data_dir, data_file_key),
             outputs=['preprocessed_data', 'imu_map', 'sensation_map', 'scheme_dict']
 
@@ -122,7 +131,7 @@ def main(args):
     outfile_dir = os.path.join(args.work_dir, "performance")
     os.makedirs(outfile_dir, exist_ok=True)
 
-    if args.sagemaker:
+    if args.sagemaker is not None:
         with open(os.path.join(outfile_dir, "evaluation.json"), 'w') as f:
             f.write(json.dumps(metrics_dict, indent=2))    
     else:
@@ -134,4 +143,26 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
+    if args.sagemaker is not None:
+        import tarfile
+        def is_within_directory(directory, target):         
+            abs_directory = os.path.abspath(directory)
+            abs_target = os.path.abspath(target)
+
+            prefix = os.path.commonprefix([abs_directory, abs_target])
+            
+            return prefix == abs_directory
+        def safe_extract(tar_filepath, path="."):
+            with tarfile.open(tar_filepath) as tar:
+                for member in tar.getmembers():
+                    member_path = os.path.join(path, member.name)
+                    if not is_within_directory(path, member_path):
+                        raise Exception("Attempted Path Traversal in Tar File")
+                tar.extractall(path)
+        try:
+            safe_extract(os.path.join(args.sagemaker, "output.tar.gz"),
+                        path=args.sagemaker)
+        except Exception:
+            raise FileNotFoundError(f"No 'output.tar.gz' in {args.sagemaker}")
+
     main(args)
