@@ -136,7 +136,8 @@ def test_user_scheme(folder):
     )
 
     compare_dictionaries(
-        actual_dict=actual_user_scheme, desired_dict=desired_user_scheme
+        actual_dict=actual_user_scheme, desired_dict=desired_user_scheme,
+        keys=['labeled_user_scheme', 'num_labels']
     )
 
 

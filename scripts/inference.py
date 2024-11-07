@@ -8,8 +8,10 @@ import argparse
 from tqdm import tqdm
 from femo.logger import LOGGER
 from femo.data.pipeline import Pipeline
+from femo.data.transforms import SensorFusion
 from femo.data.utils import normalize_features
 from femo.eval.metrics import FeMoMetrics
+from femo.plot.plotter import FeMoPlotter
 from femo.model import CLASSIFIER_MAP
 from femo.model.base import FeMoBaseClassifier
 
@@ -87,7 +89,7 @@ def main():
 
         y_pred_labels = classifier.predict(X_norm_ranked)
 
-        metainfo_dict = metrics_calculator.calc_meta_info(
+        metainfo_dict, ml_map = metrics_calculator.calc_meta_info(
             filename=data_filename,
             y_pred=y_pred_labels,
             preprocessed_data=pipeline_output['preprocessed_data'],
@@ -106,12 +108,50 @@ def main():
             df_combined = pd.DataFrame(metainfo_dict)
 
         # Write the combined DataFrame to the Excel file
-        df_combined.to_excel(args.outfile, index=False)
+        df_combined.to_excel(os.path.join(args.work_dir, args.outfile), index=False)
 
-        LOGGER.info(f"Meta info saved to {args.outfile}")
+        LOGGER.info(f"Meta info saved to {os.path.join(args.work_dir, args.outfile)}")
 
-        # TODO: plot results
-    
+        LOGGER.info("Plotting the results. It may take some time....")
+        plt_cfg = inf_cfg.get('plot')
+        plotter = FeMoPlotter()
+        plotter.create_figure(
+            figsize=plt_cfg['figsize']
+        )
+        i = 0
+        for sensor_type in plotter.sensor_map.keys():
+            for j in range(len(plotter.sensor_map[sensor_type])):
+                sensor_name = f"{sensor_type}_{j+1}"
+                plotter.plot_sensor_data(
+                    axis_idx=i,
+                    data=pipeline_output['preprocessed_data'][plotter.sensor_map[sensor_type][j]],
+                    sensor_name=sensor_name,
+                    x_unit=plt_cfg.get('x_unit', 'min')
+                )
+                i += 1
+
+        # TODO: might be better to have this more configurable
+        fusion_stage: SensorFusion = pipeline.stages[3]
+        desired_scheme = fusion_stage.desired_scheme
+
+        plotter.plot_detections(
+            axis_idx=i,
+            detection_map=pipeline_output['scheme_dict']['user_scheme'],
+            det_type=f"At least {desired_scheme[1]} {desired_scheme[0]} Sensor Events",
+            ylabel='Detection',
+            xlabel='',
+            x_unit=plt_cfg.get('x_unit', 'min')
+        )
+        plotter.plot_detections(
+            axis_idx=i+1,
+            detection_map=ml_map,
+            det_type='Fetal movement',
+            ylabel='Detection',
+            xlabel=f"Time ({plt_cfg.get('x_unit', 'min')})",
+            x_unit=plt_cfg.get('x_unit', 'min')
+        )
+        plotter.save_figure(os.path.join(args.work_dir, os.path.basename(data_filename).replace('.dat', '.png')))
+        
 
 if __name__ == "__main__":
     main()
