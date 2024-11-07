@@ -65,8 +65,8 @@ pip install -e .
 
 # Execute the scripts
 python "$SCRIPT_DIR/extract.py" --data-manifest "$DATA_MANIFEST" --work-dir "$RUN_DIR"
-python "$SCRIPT_DIR/process.py" --features-dir "$RUN_DIR" --work-dir "$RUN_DIR"
-python "$SCRIPT_DIR/train.py" --train "$RUN_DIR/dataset/" --model-dir "$RUN_DIR/model" --output-data-dir "$RUN_DIR/output" --ckpt-name "$CKPT_NAME" --tune
+python "$SCRIPT_DIR/process.py" --features-dir "$RUN_DIR/features/" --work-dir "$RUN_DIR"
+python "$SCRIPT_DIR/train.py" --train "$RUN_DIR/dataset/" --model-dir "$RUN_DIR/model" --output-data-dir "$RUN_DIR/output" --tune
 python "$SCRIPT_DIR/evaluate.py" --data-manifest "$DATA_MANIFEST" --results-path "$RUN_DIR/output/results/results.csv" --metadata-path "$RUN_DIR/output/metadata/metadata.joblib" --work-dir "$RUN_DIR" --out-filename "$PERF_FILE"
 
 # Calculate and display the total running time

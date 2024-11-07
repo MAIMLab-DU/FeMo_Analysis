@@ -1,4 +1,7 @@
+import os
 import yaml
+import joblib
+import tarfile
 import time
 from ..logger import LOGGER
 from collections import defaultdict
@@ -152,3 +155,16 @@ class Pipeline(object):
             'extracted_detections': extracted_detections if 'extracted_detections' in outputs else None,
             'extracted_features': extracted_features if 'extracted_features' in outputs else None
         }
+
+    def save(self, file_path):
+        """Save the pipeline to a joblib file
+
+        Args:
+            file_path (str): Path to directory for saving the pipeline
+        """
+        
+        joblib.dump(self, os.path.join(file_path, "pipeline.joblib"))
+        tar = tarfile.open(os.path.join(file_path, "pipeline.tar.gz"), "w:gz")
+        tar.add(os.path.join(file_path, "pipeline.joblib"), arcname="pipeline.joblib")
+        tar.close()
+        self.logger.debug(f"Pipeline saved to {file_path}")

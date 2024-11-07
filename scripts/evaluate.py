@@ -152,7 +152,7 @@ def main(args):
         with open(os.path.join(outfile_dir, "evaluation.json"), 'w') as f:
             f.write(json.dumps(metrics_dict, indent=2))
 
-    joblib.dump(metrics_calculator, os.path.join(args.work_dir, 'metrics/metrics.joblib'), compress=False)
+    metrics_calculator.save(os.path.join(args.work_dir, 'metrics'))
     LOGGER.info(f"Performance metrics saved as {os.path.abspath(outfile_dir)}")
     LOGGER.info(f"Metrics saved as {os.path.abspath(os.path.join(args.work_dir, 'metrics'))}")
 

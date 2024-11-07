@@ -1,6 +1,5 @@
 import os
 import yaml
-import joblib
 import argparse
 from femo.logger import LOGGER
 from femo.data.dataset import FeMoDataset
@@ -39,7 +38,7 @@ def main(args):
     df = dataset.build(force_extract=args.extract)
     df.to_csv(os.path.join(args.work_dir, "features/features.csv"), header=True, index=False)
     LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
-    joblib.dump(dataset.pipeline, os.path.join(args.work_dir, "pipeline/pipeline.joblib"), compress=False)
+    dataset.pipeline.save(os.path.join(args.work_dir, 'pipeline'))
     LOGGER.info(f"Pipeline saved to {os.path.abspath(os.path.join(args.work_dir, 'pipeline'))}")
 
 

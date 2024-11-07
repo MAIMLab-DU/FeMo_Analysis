@@ -107,7 +107,7 @@ class Processor(BaseEstimator):
         """
         
         joblib.dump(self, os.path.join(file_path, "processor.joblib"))
-        tar = tarfile.open(os.path.join(file_path, "process.tar.gz"), "w:gz")
+        tar = tarfile.open(os.path.join(file_path, "processor.tar.gz"), "w:gz")
         tar.add(os.path.join(file_path, "processor.joblib"), arcname="processor.joblib")
         tar.close()
         self.logger.debug(f"Processor saved to {file_path}")
