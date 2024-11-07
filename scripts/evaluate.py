@@ -118,25 +118,33 @@ def main(args):
 
         matching_index_tpd = tpfp_dict['matching_index_tpd']
         matching_index_fpd = tpfp_dict['matching_index_fpd']
-        
-    metrics_dict = metrics_calculator.calc_metrics(
-        overall_tpfp
-    )
-    metrics_dict = {
-        key: [val] for key, val in metrics_dict.items()
-    }
-    metrics_df = pd.DataFrame.from_dict(metrics_dict)
-    filewise_df = pd.DataFrame.from_dict(filewise_tpfp)
-
+    
     outfile_dir = os.path.join(args.work_dir, "performance")
     os.makedirs(outfile_dir, exist_ok=True)
 
-    if args.sagemaker is not None:
-        with open(os.path.join(outfile_dir, "evaluation.json"), 'w') as f:
-            f.write(json.dumps(metrics_dict, indent=2))    
-    else:
+    metrics_dict = metrics_calculator.calc_metrics(
+        overall_tpfp
+    )
+
+    if args.sagemaker is None:
+        metrics_dict = {
+            key: [val] for key, val in metrics_dict.items()
+        }
+        metrics_df = pd.DataFrame.from_dict(metrics_dict)
+        filewise_df = pd.DataFrame.from_dict(filewise_tpfp)
+
         metrics_df.to_csv(os.path.join(outfile_dir, args.out_filename), index=False)
         filewise_df.to_csv(os.path.join(outfile_dir, f'filewise_{args.out_filename}'))
+
+    else:
+        metrics_dict = {
+            "classification_metrics": {
+                key: {"value": val} for key, val in metrics_dict.items()
+            }
+        }
+        with open(os.path.join(outfile_dir, "evaluation.json"), 'w') as f:
+            f.write(json.dumps(metrics_dict, indent=2))
+
     
     LOGGER.info(f"Performance metrics saved as {os.path.abspath(outfile_dir)}")
 
