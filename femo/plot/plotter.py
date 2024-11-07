@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from logger import LOGGER
+from ..logger import LOGGER
 from typing import Union, List, Literal
 
 
