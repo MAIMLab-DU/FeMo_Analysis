@@ -1,4 +1,6 @@
 import os
+import joblib
+import tarfile
 import numpy as np
 from ..logger import LOGGER
 from skimage.measure import label
@@ -328,4 +330,17 @@ class FeMoMetrics(object):
         }
 
         return data, ml_map
+    
+    def save(self, file_path):
+        """Save the metrics to a joblib file
+
+        Args:
+            file_path (str): Path to directory for saving the metrics
+        """
+        
+        joblib.dump(self, os.path.join(file_path, "metrics.joblib"))
+        tar = tarfile.open(os.path.join(file_path, "metrics.tar.gz"), "w:gz")
+        tar.add(os.path.join(file_path, "metrics.joblib"), arcname="metrics.joblib")
+        tar.close()
+        self.logger.debug(f"Metrics saved to {file_path}")
     
