@@ -213,7 +213,6 @@ def get_pipeline(
         instance_type=training_instance_type,
         instance_count=training_instance_count,
         output_path=model_path,
-        disable_output_compression=True,
         base_job_name=f"{base_job_prefix}/train",
         sagemaker_session=sagemaker_session,
         enable_sagemaker_metrics=True,
@@ -265,11 +264,11 @@ def get_pipeline(
     )
 
     eval_args = ["--data-manifest", manifest_path,
-                 "--results-path", os.path.join(PROC_DIR, "input", "results", "data/results/results.csv"),
-                 "--metadata-path", os.path.join(PROC_DIR, "input", "results", "data/metadata/metadata.joblib"),
+                 "--results-path", os.path.join(PROC_DIR, "input", "trainjob", "results/results.csv"),
+                 "--metadata-path", os.path.join(PROC_DIR, "input", "trainjob", "metadata/metadata.joblib"),
                  "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml"),
                  "--work-dir", PROC_DIR,
-                 "--sagemaker", os.path.join(PROC_DIR, "input", "results")]
+                 "--sagemaker", os.path.join(PROC_DIR, "input", "trainjob")]
 
     evaluation_report = PropertyFile(
         name="EvaluationReport",
@@ -291,7 +290,7 @@ def get_pipeline(
                 destination=os.path.join(PROC_DIR, "input", "dataManifest")
             ),
             ProcessingInput(
-                input_name="results",
+                input_name="trainjob",
                 source=Join(
                     on='/',
                     values=[
@@ -301,7 +300,7 @@ def get_pipeline(
                         'output.tar.gz'
                     ]
                 ),
-                destination=os.path.join(PROC_DIR, "input", "results"),
+                destination=os.path.join(PROC_DIR, "input", "trainjob"),
             )
         ],
         outputs=[

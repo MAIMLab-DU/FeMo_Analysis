@@ -57,7 +57,7 @@ def main(args):
             'fm_dilation'
         ]
     }
-    metrics_calculator = FeMoMetrics(**metrics_cfg)
+    metrics = FeMoMetrics(**metrics_cfg)
     overall_tpfp = {
         'true_positive': 0,
         'false_positive': 0,
@@ -97,7 +97,7 @@ def main(args):
             outputs=['preprocessed_data', 'imu_map', 'sensation_map', 'scheme_dict']
 
         )
-        tpfp_dict = metrics_calculator.calc_tpfp(
+        tpfp_dict = metrics.calc_tpfp(
             preprocessed_data=pipeline_output['preprocessed_data'],
             imu_map=pipeline_output['imu_map'],
             sensation_map=pipeline_output['sensation_map'],
@@ -129,32 +129,32 @@ def main(args):
     os.makedirs(outfile_dir, exist_ok=True)
     os.makedirs(os.path.join(args.work_dir, 'metrics'), exist_ok=True)
 
-    metrics_dict = metrics_calculator.calc_metrics(
+    perf_dict = metrics.calc_metrics(
         overall_tpfp
     )
 
     if args.sagemaker is None:
-        metrics_dict = {
-            key: [val] for key, val in metrics_dict.items()
+        perf_dict = {
+            key: [val] for key, val in perf_dict.items()
         }
-        metrics_df = pd.DataFrame.from_dict(metrics_dict)
+        perf_df = pd.DataFrame.from_dict(perf_dict)
         filewise_df = pd.DataFrame.from_dict(filewise_tpfp)
 
-        metrics_df.to_csv(os.path.join(outfile_dir, args.out_filename), index=False)
+        perf_df.to_csv(os.path.join(outfile_dir, args.out_filename), index=False)
         filewise_df.to_csv(os.path.join(outfile_dir, f'filewise_{args.out_filename}'))
 
     else:
-        metrics_dict = {
+        perf_dict = {
             "classification_metrics": {
-                key: {"value": val} for key, val in metrics_dict.items()
+                key: {"value": val} for key, val in perf_dict.items()
             }
         }
         with open(os.path.join(outfile_dir, "evaluation.json"), 'w') as f:
-            f.write(json.dumps(metrics_dict, indent=2))
+            f.write(json.dumps(perf_dict, indent=2))
 
-    metrics_calculator.save(os.path.join(args.work_dir, 'metrics'))
-    LOGGER.info(f"Performance metrics saved as {os.path.abspath(outfile_dir)}")
-    LOGGER.info(f"Metrics saved as {os.path.abspath(os.path.join(args.work_dir, 'metrics'))}")
+    metrics.save(os.path.join(args.work_dir, 'metrics'))
+    LOGGER.info(f"Performance file saved as {os.path.abspath(outfile_dir)}")
+    LOGGER.info(f"Metrics object saved as {os.path.abspath(os.path.join(args.work_dir, 'metrics'))}")
 
 
 if __name__ == "__main__":
