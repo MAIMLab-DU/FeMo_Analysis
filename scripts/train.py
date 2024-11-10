@@ -16,13 +16,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
     
     # SageMaker-specific directories
-    parser.add_argument("--train", type=str, default=os.getenv('SM_CHANNEL_TRAIN', ''), help="Path to dataset")
-    parser.add_argument("--model-dir", type=str, default=os.getenv('SM_MODEL_DIR', ''), help="Model output directory")
-    parser.add_argument("--output-data-dir", type=str, default=os.getenv('SM_OUTPUT_DATA_DIR', ''), help="Model output directory")
+    parser.add_argument("--train", type=str, required=True, help="Path to dataset")
+    parser.add_argument("--model-dir", type=str, required=True, help="Model output directory")
+    parser.add_argument("--output-data-dir", type=str, required=True, help="Model output directory")
 
     # Additional arguments
-    parser.add_argument("--tune", action='store_true', default=os.getenv('SM_TUNE', False), help="Tune hyperparameters before training")
-    parser.add_argument("--config-path", type=str, default=os.getenv('SM_CHANNEL_CONFIG', os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
+    parser.add_argument("--tune", action='store_true', default=False, help="Tune hyperparameters before training")
+    parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml"),
                         help="Path to config file")
 
     args = parser.parse_args()

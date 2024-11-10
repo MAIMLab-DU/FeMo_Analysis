@@ -44,6 +44,7 @@ def main(args):
 
     try:
         pipeline: Pipeline = joblib.load(args.pipeline)
+        pipeline.inference = True
         processor: Processor = joblib.load(args.processor)
         classifier: type[FeMoBaseClassifier] = joblib.load(args.model)
         metrics: FeMoMetrics = joblib.load(args.metrics)

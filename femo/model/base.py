@@ -123,12 +123,12 @@ class FeMoBaseClassifier(ABC):
         self._config = config
         self.search_space: dict = config.get('search_space', {})
         self.hyperparams: dict = config.get('hyperparams', {})
-        self.classifier = None
+        self.model = None
 
         self.result = Result()
     
     def __repr__(self) -> str:
-        return f"{type(self)} hyperparameters: {self.hyperparams}\nsearch_space: {self.search_space}\nmodel: {self.classifier}"
+        return f"{type(self)} hyperparameters: {self.hyperparams}\nsearch_space: {self.search_space}\nmodel: {self.model}"
 
     @staticmethod
     def _update_class_weight(y: np.ndarray, params: dict|None = None):
@@ -184,14 +184,14 @@ class FeMoBaseClassifier(ABC):
     def save_model(self,
                    model_filename: str,
                    model_framework: Literal['sklearn', 'keras']):
-        if self.classifier is not None:
+        if self.model is not None:
             try:
                 if model_framework == 'sklearn':
                     assert model_filename.endswith('.pkl'), "Must be a pickle filename"
-                    joblib.dump(self.classifier, model_filename)
+                    joblib.dump(self.model, model_filename)
                 if model_framework == 'keras':
                     assert model_filename.endswith('.h5'), "Must be a h5 filename"
-                    self.classifier.save(model_filename)
+                    self.model.save(model_filename)
             except Exception as e:
                 self.logger.error(f"Error saving model: {e}")
                 raise Exception
@@ -204,10 +204,10 @@ class FeMoBaseClassifier(ABC):
         try:
             if model_framework == 'sklearn':
                 assert model_filename.endswith('.pkl'), "Must be a pickle filename"
-                self.classifier = joblib.load(model_filename)
+                self.model = joblib.load(model_filename)
             if model_framework == 'keras':
                 assert model_filename.endswith('.h5'), "Must be a h5 filename"
-                self.classifier = load_model(model_filename)
+                self.model = load_model(model_filename)
         except Exception as e:
             self.logger.error(f"Error loading model: {e}")
             raise Exception

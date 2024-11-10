@@ -148,7 +148,7 @@ class FeMoSVClassifier(FeMoBaseClassifier):
         self.logger.info(f"Average training accuracy: {np.mean(accuracy_scores['train_accuracy'])}")
         self.logger.info(f"Average testing accuracy: {np.mean(accuracy_scores['test_accuracy'])}")
         
-        self.classifier = best_model
+        self.model = best_model
         self.result.accuracy_scores = accuracy_scores
         self.result.preds = predictions
         self.result.pred_scores = prediction_scores
@@ -157,8 +157,8 @@ class FeMoSVClassifier(FeMoBaseClassifier):
 
     def predict(self, X):
         
-        assert self.classifier is not None, "Error loading classifier"
+        assert self.model is not None, "Error loading model"
 
-        pred_labels = self.classifier.predict(X)
+        pred_labels = self.model.predict(X)
 
         return pred_labels

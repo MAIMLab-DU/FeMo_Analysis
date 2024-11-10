@@ -288,7 +288,7 @@ class FeMoMetrics(object):
         self.fm_dilation = 3 # Detections within this s will be considered as the same detection  
 
         #Now get the reduced detection_map
-        reduced_detection_map = ml_map * fm_dict['fm_segmented']  # Reduced, because of the new dilation length
+        reduced_detection_map = ml_map * fm_dict['fm_map']  # Reduced, because of the new dilation length
         reduced_detection_map_labeled = label(reduced_detection_map)
 
         n_movements = np.max(reduced_detection_map_labeled)

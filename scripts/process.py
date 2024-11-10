@@ -43,7 +43,8 @@ def main(args):
 
     
     features = pd.read_csv(os.path.join(args.features_dir, "features.csv"))
-    X, y = features.to_numpy()[:, :-1], features.to_numpy()[:, -1]
+    X, y = features.to_numpy()[:, :-3], features.to_numpy()[:, -1]
+    filename_hash, det_indices = features.to_numpy()[:, -3], features.to_numpy()[:, -2]  # metadata columns
 
     if os.path.exists(os.path.join(processor_dir, 'processor.joblib')):
         data_processor: Processor = joblib.load(os.path.join(args.work_dir, 'processor', 'processor.joblib'))
@@ -53,7 +54,8 @@ def main(args):
         X_pre = data_processor.fit(X, y).predict(X)
 
     dataset = data_processor.convert_to_df(
-        np.concatenate([X_pre, y[:, np.newaxis]], axis=1),
+        np.concatenate([X_pre, filename_hash[:, np.newaxis],
+                        det_indices[:, np.newaxis], y[:, np.newaxis]], axis=1),
         columns=features.columns
     )
     data_processor.save(processor_dir)
