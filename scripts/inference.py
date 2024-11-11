@@ -1,16 +1,11 @@
 import os
 import sys
-import joblib
+import numpy as np
 import pandas as pd
 import argparse
 from tqdm import tqdm
 from femo.logger import LOGGER
-from femo.data.pipeline import Pipeline
-from femo.data.transforms import SensorFusion
-from femo.eval.metrics import FeMoMetrics
-from femo.plot.plotter import FeMoPlotter
-from femo.data.process import Processor
-from femo.model.base import FeMoBaseClassifier
+from femo.inference import PredictionService
 
 
 def parse_args():
@@ -30,6 +25,8 @@ def parse_args():
 def main(args):
     LOGGER.info("Starting inference...")
 
+    os.makedirs(args.work_dir, exist_ok=True)
+
     if args.data_file.endswith('.dat'):
         # If it's a .dat file, store it in a list
         filenames = [args.data_file]
@@ -43,33 +40,35 @@ def main(args):
     LOGGER.info(f"Filenames: {filenames}")
 
     try:
-        pipeline: Pipeline = joblib.load(args.pipeline)
-        pipeline.inference = True
-        processor: Processor = joblib.load(args.processor)
-        classifier: type[FeMoBaseClassifier] = joblib.load(args.model)
-        metrics: FeMoMetrics = joblib.load(args.metrics)
+        inf_service = PredictionService(
+            args.model,
+            args.pipeline,
+            args.processor,
+            args.metrics
+        )
+        _ = all([
+            inf_service.get_model() is not None,
+            inf_service.get_pipeline() is not None,
+            inf_service.get_processor() is not None,
+            inf_service.get_metrics() is not None
+        ])
     except Exception as e:
         LOGGER.error(f"Error loading fitted objects: {e}")
         sys.exit(1)
         
     for data_filename in tqdm(filenames, desc=f"Peforming inference on {len(filenames)} files..."):
-        pipeline_output = pipeline.process(
-                filename=data_filename
-            )
-        
-        X_extracted = pipeline_output['extracted_features']['features']
-
-        X_norm_ranked = processor.predict(X_extracted)
-
-        y_pred_labels = classifier.predict(X_norm_ranked)
-
-        metainfo_dict, ml_map = metrics.calc_meta_info(
-            filename=data_filename,
-            y_pred=y_pred_labels,
-            preprocessed_data=pipeline_output['preprocessed_data'],
-            fm_dict=pipeline_output['fm_dict'],
-            scheme_dict=pipeline_output['scheme_dict']
+        data, pipeline_output, ml_map = inf_service.predict(
+            data_filename
         )
+
+        mean_FM_duration = data.totalFMDuration*60/data.numKicks if data.numKicks > 0 else 0
+        metainfo_dict = {
+            "File Name": [data.fileName],
+            "Number of bouts per hour": [(data.numKicks*60) / (data.totalFMDuration+data.totalNonFMDuration)],
+            "Mean duration of fetal movement (seconds)": [mean_FM_duration],
+            "Median onset interval (seconds)": [np.median(data.onsetInterval)],
+            "Active time of fetal movement (%)": [(data.totalFMDuration/(data.totalFMDuration+data.totalNonFMDuration))*100]
+        }
 
         # Check if the file exists
         if os.path.exists(args.outfile):
@@ -87,48 +86,12 @@ def main(args):
         LOGGER.info(f"Meta info saved to {os.path.join(args.work_dir, args.outfile)}")
 
         LOGGER.info("Plotting the results. It may take some time....")
-        # Probably make this configurable
-        plt_cfg = {
-            'figsize': [16, 15],
-            'x_unit': 'min'
-        }
-        plotter = FeMoPlotter()
-        plotter.create_figure(
-            figsize=plt_cfg['figsize']
+        
+        inf_service.save_pred_plots(
+            pipeline_output,
+            ml_map,
+            os.path.join(args.work_dir, os.path.basename(data_filename).replace('.dat', '.png'))
         )
-        i = 0
-        for sensor_type in plotter.sensor_map.keys():
-            for j in range(len(plotter.sensor_map[sensor_type])):
-                sensor_name = f"{sensor_type}_{j+1}"
-                plotter.plot_sensor_data(
-                    axis_idx=i,
-                    data=pipeline_output['preprocessed_data'][plotter.sensor_map[sensor_type][j]],
-                    sensor_name=sensor_name,
-                    x_unit=plt_cfg.get('x_unit', 'min')
-                )
-                i += 1
-
-        # TODO: might be better to have this more configurable
-        fusion_stage: SensorFusion = pipeline.stages[3]
-        desired_scheme = fusion_stage.desired_scheme
-
-        plotter.plot_detections(
-            axis_idx=i,
-            detection_map=pipeline_output['scheme_dict']['user_scheme'],
-            det_type=f"At least {desired_scheme[1]} {desired_scheme[0]} Sensor Events",
-            ylabel='Detection',
-            xlabel='',
-            x_unit=plt_cfg.get('x_unit', 'min')
-        )
-        plotter.plot_detections(
-            axis_idx=i+1,
-            detection_map=ml_map,
-            det_type='Fetal movement',
-            ylabel='Detection',
-            xlabel=f"Time ({plt_cfg.get('x_unit', 'min')})",
-            x_unit=plt_cfg.get('x_unit', 'min')
-        )
-        plotter.save_figure(os.path.join(args.work_dir, os.path.basename(data_filename).replace('.dat', '.png')))
         
 
 if __name__ == "__main__":
