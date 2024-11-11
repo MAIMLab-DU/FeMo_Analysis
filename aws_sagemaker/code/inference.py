@@ -88,7 +88,8 @@ async def get_result(job_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
     
     if "Item" in response:
-        return {"message": "Job completed", "result": response['Item']['result']}
+        LOGGER.info(f"Result found for job_id: {job_id}")
+        return {"message": "Job completed", "fileName": response['Item']['fileName'], "result": response['Item']['result']}
     else:
         LOGGER.warning(f"No item found for job_id: {job_id}")
         raise HTTPException(status_code=404, detail="Result not found for job_id: {}".format(job_id))

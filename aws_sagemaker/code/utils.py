@@ -28,12 +28,11 @@ def extract_s3_details(s3_path: str):
     """Extracts the bucket name and filename from an S3 path."""
     # Parse the S3 path
     parsed_url = urlparse(s3_path)
+    bucket_name = parsed_url.netloc
+    filename = parsed_url.path.lstrip('/')
 
     # Extract the bucket name and the filename
-    if parsed_url.scheme == 's3':
-        path_parts = parsed_url.path.lstrip('/').split('/', 1)
-        bucket_name = path_parts[0]
-        filename = path_parts[1] if len(path_parts) > 1 else ''
-        return bucket_name, filename
-    else:
+    if bucket_name == '':
         raise ValueError(f"Invalid S3 path: {s3_path}")
+    
+    return bucket_name, filename
