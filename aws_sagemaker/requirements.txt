@@ -1,2 +1,6 @@
--e ..
+-r ../requirements.txt
 sagemaker==2.232.0
+fastapi
+uvicorn
+gevent
+gunicorn

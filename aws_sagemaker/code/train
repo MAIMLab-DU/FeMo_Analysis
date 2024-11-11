@@ -1,0 +1,124 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import json
+import joblib
+import traceback
+import pandas as pd
+from femo.logger import LOGGER
+from femo.model.base import FeMoBaseClassifier
+from femo.model import CLASSIFIER_MAP
+
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
+prefix = '/opt/ml/'
+input_path = prefix + 'input/data'
+train_channel_name = 'train'
+
+output_path = os.path.join(prefix, 'output')
+model_path = os.path.join(prefix, 'model')
+model_file_name = 'model.joblib'
+train_path = os.path.join(input_path, train_channel_name)
+output_data_path = os.path.join(output_path, 'data')
+
+config_path = os.path.join(input_path, 'config/train-cfg.json')
+
+
+def train():
+    LOGGER.info("Starting training...")
+
+    os.makedirs(model_path, exist_ok=True)
+    os.makedirs(output_path, exist_ok=True)
+    os.makedirs(output_data_path, exist_ok=True)
+    LOGGER.info(f"Model directory: {model_path}")
+    LOGGER.info(f"Output data directory: {output_data_path}")
+
+    with open(config_path, 'r') as f:
+        train_cfg = json.load(f)
+
+    try:
+        dataset = pd.read_csv(os.path.join(train_path, "dataset.csv"))
+    except Exception:
+        raise ValueError(
+            (
+                "Preprocessed dataset not in {}.\n"
+                + "This usually indicates that the channel ({}) was incorrectly specified,\n"
+                + "the data specification in S3 was incorrectly specified or the role specified\n"
+                + "does not have permission to access the data."
+            ).format(train_path)
+        )
+
+    LOGGER.info(f"Loaded dataset from: {os.path.abspath(train_path)}")
+    
+    try:
+        classifier_type = train_cfg.get('type')
+        tune_params = train_cfg.get('tune_params', {})
+        train_params = train_cfg.get('train_params', {})
+        
+        classifier: type[FeMoBaseClassifier] = CLASSIFIER_MAP[classifier_type]
+        classifier_cfg = train_cfg.get('config', None)
+        if classifier_cfg is None:
+            classifier = classifier()
+        else:
+            classifier = classifier(config=classifier_cfg)
+    except KeyError:
+        raise KeyError(
+            f"Invalid classifier specified: {train_cfg.get('classifier')}"
+        )
+
+    split_cfg = train_cfg.get('split_config', {'strategy': 'kfold', 'num_folds': 5})
+    LOGGER.info(f"Splitting dataset with config: {split_cfg}")
+    train_data, test_data, metadata = classifier.split_data(
+        dataset.to_numpy(),
+        **split_cfg
+    )
+
+    LOGGER.info(f"Training started with {classifier}")
+    classifier.tune(
+        train_data,
+        test_data,
+        **tune_params
+    )
+    classifier.fit(
+        train_data,
+        test_data,
+        **train_params
+    )
+    
+    try:
+        joblib.dump(classifier, os.path.join(model_path, model_file_name), compress=False)
+        LOGGER.info(f"Model saved to: {os.path.abspath(model_path)}")
+    except Exception:
+        raise RuntimeError(
+            'Failed to save classifier'
+        )
+    
+    LOGGER.info("Finished training")
+
+    results_path = os.path.join(output_data_path, 'results')
+    metadata_path = os.path.join(output_data_path, 'metadata')
+    os.makedirs(results_path, exist_ok=True)
+    os.makedirs(metadata_path, exist_ok=True)
+    
+    classifier.result.compile_results(
+        metadata=metadata,
+        results_path=results_path,
+        metadata_path=metadata_path
+    )
+
+    LOGGER.info(f"Predictions saved to {os.path.abspath(results_path)}")
+    LOGGER.info(f"Metadata saved to {os.path.abspath(metadata_path)}")
+
+
+if __name__ == "__main__":
+    try:
+        train()
+    except Exception as e:
+        trc = traceback.format_exc()
+        with open(os.path.join(output_path, 'failure'), 'w') as s:
+            s.write('Exception during training: ' + str(e) + '\n' + trc)
+        LOGGER.error(f"Error during training: {e}")
+        sys.exit(255)
+
+    sys.exit(0)

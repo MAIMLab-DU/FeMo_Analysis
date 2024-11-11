@@ -221,14 +221,7 @@ def get_pipeline(
             {"Name": "train:avg-acc", "Regex": "- Average training accuracy: ([0-9\\.]+)"},
             {"Name": "test:avg-acc", "Regex": "- Average testing accuracy: ([0-9\\.]+)"},
             {"Name": "test:best-acc", "Regex": "- Best Test Accuracy: ([0-9\\.]+)"}
-        ],
-        environment={
-            "SM_CHANNEL_TRAIN": "/opt/ml/input/data/train",  # Path within container for dataset
-            "SM_MODEL_DIR": "/opt/ml/model",  # Model output directory within container
-            "SM_OUTPUT_DATA_DIR": "/opt/ml/output/data",
-            "SM_CHANNEL_CONFIG": "/opt/ml/input/data/config/train-cfg.json",
-            "SM_TUNE": "true"
-        }
+        ]
     )
     with open(train_cfg_path, 'r') as f:
         estimator.set_hyperparameters(**yaml.safe_load(f)["config"]["hyperparams"])
@@ -252,7 +245,7 @@ def get_pipeline(
     )
 
 
-    # ===== Model Evaluation Step =====    
+    # ===== Model Evaluation Step =====  
     script_eval = ScriptProcessor(
         image_uri=os.getenv("PROCESSING_IMAGE_URI"),
         command=["python3"],
@@ -264,8 +257,8 @@ def get_pipeline(
     )
 
     eval_args = ["--data-manifest", manifest_path,
-                 "--results-path", os.path.join(PROC_DIR, "input", "trainjob", "results/results.csv"),
-                 "--metadata-path", os.path.join(PROC_DIR, "input", "trainjob", "metadata/metadata.joblib"),
+                 "--results-path", os.path.join(PROC_DIR, "input", "trainjob", "data/results/results.csv"),
+                 "--metadata-path", os.path.join(PROC_DIR, "input", "trainjob", "data/metadata/metadata.joblib"),
                  "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml"),
                  "--work-dir", PROC_DIR,
                  "--sagemaker", os.path.join(PROC_DIR, "input", "trainjob")]
@@ -323,6 +316,66 @@ def get_pipeline(
     )
 
 
+    # ===== Model Repack Step =====
+    script_repack = ScriptProcessor(
+        image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+        command=["python3"],
+        instance_type=processing_instance_type,
+        instance_count=processing_instance_count,
+        base_job_name=f"{base_job_prefix}/model-eval",
+        sagemaker_session=sagemaker_session,
+        role=role,
+    )
+    repack_args = [
+        "--model", os.path.join(PROC_DIR, "input", "model", "model.tar.gz"),
+        "--pipeline", os.path.join(PROC_DIR, "input", "pipeline", "pipeline.tar.gz"),
+        "--processor", os.path.join(PROC_DIR, "input", "processor", "processor.tar.gz"),
+        "--metrics", os.path.join(PROC_DIR, "input", "metrics", "metrics.tar.gz"),
+        "--work-dir", os.path.join(PROC_DIR, "output")
+    ]
+    step_repack = ProcessingStep(
+        name="RepackModel",
+        processor=script_repack,
+        inputs=[            
+            ProcessingInput(
+                input_name="model",
+                source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+                destination=os.path.join(PROC_DIR, "input", "model"),
+            ),
+            ProcessingInput(
+                input_name="pipeline",
+                source=step_extract.properties.ProcessingOutputConfig.Outputs[
+                                "pipeline"
+                            ].S3Output.S3Uri,
+                destination=os.path.join(PROC_DIR, "input", "pipeline")
+            ),
+            ProcessingInput(
+                input_name="processor",
+                source=step_process.properties.ProcessingOutputConfig.Outputs[
+                                "processor"
+                            ].S3Output.S3Uri,
+                destination=os.path.join(PROC_DIR, "input", "processor")
+            ),
+            ProcessingInput(
+                input_name="metrics",
+                source=step_eval.properties.ProcessingOutputConfig.Outputs[
+                                "metrics"
+                            ].S3Output.S3Uri,
+                destination=os.path.join(PROC_DIR, "input", "metrics")
+            )
+        ],
+        outputs=[
+            ProcessingOutput(
+                output_name="repacked-model",
+                source=os.path.join(PROC_DIR, "output", "repack"),
+                destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
+                                                "local_run", "RepackModel", "output", "repacked-model"]) if local_mode else None
+            )
+        ],
+        code=os.path.join(BASE_DIR, "..", "scripts", "repack.py"),
+        job_arguments=repack_args,
+    )
+
 
     # pipeline instance
     pipeline = Pipeline(
@@ -333,7 +386,7 @@ def get_pipeline(
             training_instance_type,
             training_instance_count
         ],
-        steps=[step_extract, step_process, step_train, step_eval],
+        steps=[step_extract, step_process, step_train, step_eval, step_repack],
         sagemaker_session=sagemaker_session,
     )
     return pipeline
