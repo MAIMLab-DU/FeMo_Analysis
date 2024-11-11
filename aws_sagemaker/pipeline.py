@@ -22,6 +22,8 @@ from sagemaker.processing import (
     ProcessingOutput,
     ScriptProcessor,
 )
+from sagemaker.model import Model
+from sagemaker.predictor import Predictor
 from sagemaker.workflow.functions import Join
 from sagemaker.workflow.parameters import (
     ParameterInteger,
@@ -34,6 +36,17 @@ from sagemaker.workflow.steps import (
     TrainingStep
 )
 from sagemaker.estimator import Estimator
+from sagemaker.model_metrics import (
+    MetricsSource,
+    ModelMetrics,
+)
+from sagemaker.workflow.conditions import ConditionGreaterThanOrEqualTo
+from sagemaker.workflow.condition_step import (
+    ConditionStep,
+    JsonGet
+)
+
+from sagemaker.workflow.step_collections import RegisterModel
 from utils import yaml2json
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -109,14 +122,14 @@ def get_pipeline(
     training_instance_type = ParameterString(
         name="TrainingInstanceType", default_value="ml.m5.4xlarge"
     )
-    # model_approval_status = ParameterString(
-    #     name="ModelApprovalStatus", default_value="Approved"
-    # )
+    model_approval_status = ParameterString(
+        name="ModelApprovalStatus", default_value="Approved"
+    )
 
 
     # ===== Feature Extraction Step =====
     script_extract = ScriptProcessor(
-        image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+        image_uri=os.getenv("IMAGE_URI"),
         command=["python3"],
         instance_type=processing_instance_type,
         instance_count=processing_instance_count,
@@ -158,7 +171,7 @@ def get_pipeline(
 
     # ===== Data Processing Step =====
     script_process = ScriptProcessor(
-        image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+        image_uri=os.getenv("IMAGE_URI"),
         command=["python3"],
         instance_type=processing_instance_type,
         instance_count=processing_instance_count,
@@ -247,7 +260,7 @@ def get_pipeline(
 
     # ===== Model Evaluation Step =====  
     script_eval = ScriptProcessor(
-        image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+        image_uri=os.getenv("IMAGE_URI"),
         command=["python3"],
         instance_type=processing_instance_type,
         instance_count=processing_instance_count,
@@ -318,7 +331,7 @@ def get_pipeline(
 
     # ===== Model Repack Step =====
     script_repack = ScriptProcessor(
-        image_uri=os.getenv("PROCESSING_IMAGE_URI"),
+        image_uri=os.getenv("IMAGE_URI"),
         command=["python3"],
         instance_type=processing_instance_type,
         instance_count=processing_instance_count,
@@ -377,6 +390,58 @@ def get_pipeline(
     )
 
 
+    # ===== Model Repack Step (Conditionally Executed) =====
+    model_metrics = ModelMetrics(
+        model_statistics=MetricsSource(
+            s3_uri=step_eval.properties.ProcessingOutputConfig.Outputs[
+                                "evaluation"
+                            ].S3Output.S3Uri,
+            content_type="application/json",
+        )
+    )
+    inference_model = Model(
+        image_uri=os.getenv("IMAGE_URI"),
+        model_data=step_repack.properties.ProcessingOutputConfig.Outputs[
+                                "repacked-model"
+                            ].S3Output.S3Uri,
+        role=role,
+        name="InferenceModel",
+        sagemaker_session=sagemaker_session,
+        predictor_cls=Predictor,
+        env={
+            "MODEL_SERVER_TIMEOUT": 120
+        }
+    )
+
+    step_register_inference_model = RegisterModel(
+        name="RegisterModel",
+        estimator=estimator,
+        content_types=["text/csv"],
+        response_types=["application/x-zip-compressed"],
+        inference_instances=["ml.c5.xlarge", "ml.c5.2xlarge"],
+        model_package_group_name=model_package_group_name,
+        approval_status=model_approval_status,
+        model_metrics=model_metrics,
+        model=inference_model
+    )
+
+    # condition step for evaluating model quality and branching execution
+    cond_gte = ConditionGreaterThanOrEqualTo(
+        left=JsonGet(
+            step=step_eval,
+            property_file=evaluation_report,
+            json_path="classification_metrics.f1-score.value",
+        ),
+        right=0.55,
+    )
+    step_cond = ConditionStep(
+        name="CheckFScoreEvaluation",
+        conditions=[cond_gte],
+        if_steps=[step_repack, step_register_inference_model] if not local_mode else [step_repack],
+        else_steps=[],
+    )
+
+
     # pipeline instance
     pipeline = Pipeline(
         name=pipeline_name,
@@ -386,7 +451,7 @@ def get_pipeline(
             training_instance_type,
             training_instance_count
         ],
-        steps=[step_extract, step_process, step_train, step_eval, step_repack],
+        steps=[step_extract, step_process, step_train, step_eval, step_cond],
         sagemaker_session=sagemaker_session,
     )
     return pipeline

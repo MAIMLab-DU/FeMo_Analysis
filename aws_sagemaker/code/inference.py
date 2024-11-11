@@ -1,11 +1,8 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-import io
 import boto3
 import tempfile
 import joblib
-import zipfile
 import numpy as np
 import pandas as pd
 from femo.model.base import FeMoBaseClassifier
@@ -186,30 +183,5 @@ async def transformation(data: RequestData):
     LOGGER.info(f'Performing prediction on {input_s3_path}')
     prediction, pipeline_output, ml_map = PredictionService.predict(input_s3_path)
 
-    # Save the prediction as CSV in a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, mode='w', newline='', suffix='.csv') as csv_tempfile:
-        prediction.to_csv(csv_tempfile, index=False)
-        csv_tempfile_path = csv_tempfile.name
-
-    # Generate the image and save it as a temporary file
-    image_output = PredictionService.plot_predictions(pipeline_output, ml_map)
-    with tempfile.NamedTemporaryFile(delete=False, mode='wb', suffix='.png') as image_tempfile:
-        image_output.savefig(image_tempfile, format='PNG')
-        image_tempfile_path = image_tempfile.name
-
-    # Create a zip file containing the CSV and image files
-    zip_io = io.BytesIO()
-    with zipfile.ZipFile(zip_io, mode='w', compression=zipfile.ZIP_DEFLATED) as temp_zip:
-        # Add the CSV and image file
-        temp_zip.write(csv_tempfile_path, 'prediction.csv') 
-        temp_zip.write(image_tempfile_path, 'plot.png')
-
-    zip_io.seek(0)  # Go back to the start of the BytesIO object
-
-    # Clean up the temporary files
-    os.remove(csv_tempfile_path)
-    os.remove(image_tempfile_path)
-
     # Return the zip file as a StreamingResponse
-    return StreamingResponse(zip_io, media_type="application/x-zip-compressed", status_code=200,
-                             headers={"Content-Disposition": "attachment; filename=predictions.zip"})
+    return {"prediction": prediction.to_dict(orient='records')}
