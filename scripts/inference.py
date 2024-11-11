@@ -40,32 +40,31 @@ def main(args):
     LOGGER.info(f"Filenames: {filenames}")
 
     try:
-        inf_service = PredictionService(
+        pred_service = PredictionService(
             args.model,
             args.pipeline,
             args.processor,
             args.metrics
         )
         _ = all([
-            inf_service.get_model() is not None,
-            inf_service.get_pipeline() is not None,
-            inf_service.get_processor() is not None,
-            inf_service.get_metrics() is not None
+            pred_service.get_model() is not None,
+            pred_service.get_pipeline() is not None,
+            pred_service.get_processor() is not None,
+            pred_service.get_metrics() is not None
         ])
     except Exception as e:
         LOGGER.error(f"Error loading fitted objects: {e}")
         sys.exit(1)
         
     for data_filename in tqdm(filenames, desc=f"Peforming inference on {len(filenames)} files..."):
-        data, pipeline_output, ml_map = inf_service.predict(
+        data, pipeline_output, ml_map = pred_service.predict(
             data_filename
         )
 
-        mean_FM_duration = data.totalFMDuration*60/data.numKicks if data.numKicks > 0 else 0
         metainfo_dict = {
             "File Name": [data.fileName],
             "Number of bouts per hour": [(data.numKicks*60) / (data.totalFMDuration+data.totalNonFMDuration)],
-            "Mean duration of fetal movement (seconds)": [mean_FM_duration],
+            "Mean duration of fetal movement (seconds)": [data.totalFMDuration*60/data.numKicks if data.numKicks > 0 else 0],
             "Median onset interval (seconds)": [np.median(data.onsetInterval)],
             "Active time of fetal movement (%)": [(data.totalFMDuration/(data.totalFMDuration+data.totalNonFMDuration))*100]
         }
@@ -87,7 +86,7 @@ def main(args):
 
         LOGGER.info("Plotting the results. It may take some time....")
         
-        inf_service.save_pred_plots(
+        pred_service.save_pred_plots(
             pipeline_output,
             ml_map,
             os.path.join(args.work_dir, os.path.basename(data_filename).replace('.dat', '.png'))

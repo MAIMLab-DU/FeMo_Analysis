@@ -1,6 +1,6 @@
 -r ../requirements.txt
 sagemaker==2.232.0
-fastapi
-uvicorn
-gevent
-gunicorn
+fastapi==0.103.2
+uvicorn==0.32.0
+gevent==24.10.3
+gunicorn==23.0.0
