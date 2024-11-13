@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from ..logger import LOGGER
+from matplotlib.figure import Figure
 from typing import Union, List, Literal
 
 
@@ -42,15 +43,17 @@ class FeMoPlotter(object):
                       figsize: tuple = (16, 15)):
         
         # Plot num_sensors and 2 more rows (detections) of subplots
-        self.fig, self.ax = plt.subplots(self.num_sensors + 2, 1,
-                                         figsize=figsize, sharex=True)
+        fig, axes = plt.subplots(self.num_sensors + 2, 1,
+                               figsize=figsize, sharex=True)
+        return fig, axes
     
     def plot_sensor_data(self,
+                         axes: np.ndarray,
                          axis_idx: int,
                          data: Union[List, np.ndarray],
                          sensor_name: str,
                          x_unit: Literal['min', 'sec'] = 'min'):
-        if self.ax is None:
+        if axes is None:
             raise ValueError('ax must be specified')
         
         self.logger.info(f"Plotting sensor data for '{sensor_name}'")
@@ -61,19 +64,22 @@ class FeMoPlotter(object):
         if x_unit == 'min':
             time_data = time_data / self._sensor_freq / 60
         
-        self.ax[axis_idx].plot(time_data, data, label=sensor_name)
-        self.ax[axis_idx].set_ylabel("Signal")
-        self.ax[axis_idx].set_xlabel("")
-        self.ax[axis_idx].legend()
+        axes[axis_idx].plot(time_data, data, label=sensor_name)
+        axes[axis_idx].set_ylabel("Signal")
+        axes[axis_idx].set_xlabel("")
+        axes[axis_idx].legend()
+
+        return axes
 
     def plot_detections(self,
+                        axes: np.ndarray,
                         axis_idx: int,
                         detection_map: Union[List, np.ndarray],
                         det_type: str,
                         xlabel: str,
                         ylabel: str,
                         x_unit: Literal['min', 'sec'] = 'min'):
-        if self.ax is None:
+        if axes is None:
             raise ValueError('ax must be specified')
         
         self.logger.info(f"Plotting detections for '{det_type}'")
@@ -84,15 +90,18 @@ class FeMoPlotter(object):
         if x_unit == 'min':
             time_data = time_data / self._sensor_freq / 60
         
-        self.ax[axis_idx].plot(time_data, detection_map, label=det_type)
-        self.ax[axis_idx].set_ylabel(ylabel)
-        self.ax[axis_idx].set_xlabel(xlabel)
-        self.ax[axis_idx].legend()
+        axes[axis_idx].plot(time_data, detection_map, label=det_type)
+        axes[axis_idx].set_ylabel(ylabel)
+        axes[axis_idx].set_xlabel(xlabel)
+        axes[axis_idx].legend()
 
-    def save_figure(self, filename: str) -> None:
+        return axes
+
+    def save_figure(self, fig: Figure, filename: str) -> None:
+        assert fig is not None, "fig is not specified"
         plt.tight_layout()
-        self.fig.savefig(filename)
-        plt.close(self.fig)
+        fig.savefig(filename)
+        plt.close(fig)
         self.logger.info(f"Saved figure to {filename}")
 
     

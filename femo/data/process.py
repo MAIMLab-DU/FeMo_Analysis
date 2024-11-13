@@ -35,14 +35,11 @@ class Processor(BaseEstimator):
         """Fit the processor by calculating normalization parameters and ranking features.
 
         Args:
-            X (array-like of shape (n_samples, n_features + 3)): Input samples with n_features + ['filename_hash', 'det_indices', 'labels']
+            X (array-like of shape (n_samples, n_features)): Input samples with n_features
             y (array-like, optional): Target values for feature ranking. Defaults to None.
         """
         
         self.logger.debug("Fitting Processor and calculating normalization parameters...")
-
-        # Separate additional metadata columns and store normalization parameters
-        X = X[:, :-2]  # Exclude metadata columns for feature normalization
 
         # Normalize features and store parameters
         X_norm, mu, dev = normalize_features(X, self.mu, self.dev)
@@ -60,7 +57,7 @@ class Processor(BaseEstimator):
         """Process the input data by applying normalization and feature selection, based on fitted parameters.
 
         Args:
-            X (array-like of shape (n_samples, n_features + 2)): Input samples with n_features + ['filename_hash', 'det_indices']
+            X (array-like of shape (n_samples, n_features)): Input samples with n_features
 
         Returns:
             np.ndarray: Transformed data with selected features and metadata columns.
@@ -70,22 +67,13 @@ class Processor(BaseEstimator):
         if not self.is_fitted_:
             raise RuntimeError("Processor must be fitted before calling predict.")
 
-        det_indices = X[:, -1]
-        filename_hash = X[:, -2]
-        X = X[:, :-2]  # Exclude metadata columns for feature normalization
-
         # Apply normalization using stored parameters
         X_norm, _, _ = normalize_features(X, self.mu, self.dev)
 
         # Select top-ranked features
         X_norm = X_norm[:, self.top_feat_indices]
 
-        # Concatenate metadata columns and return
-        processed_data = np.concatenate(
-            [X_norm, filename_hash[:, np.newaxis], det_indices[:, np.newaxis]],
-            axis=1
-        )
-        return processed_data
+        return X_norm
 
     def convert_to_df(self, data: np.ndarray, columns: pd.DataFrame.columns):
         """Convert the input data to pandas Dataframe

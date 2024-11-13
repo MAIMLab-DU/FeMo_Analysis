@@ -3,8 +3,22 @@ import joblib
 import tarfile
 import numpy as np
 from ..logger import LOGGER
+from dataclasses import dataclass
 from skimage.measure import label
 from sklearn.metrics import accuracy_score
+
+
+@dataclass
+class InferenceMetaInfo:
+    """
+    Holds the data for inference.
+    """
+    fileName: str
+    numKicks: int
+    totalFMDuration: float
+    totalNonFMDuration: float
+    onsetInterval: list
+
 
 
 class FeMoMetrics(object):
@@ -288,7 +302,7 @@ class FeMoMetrics(object):
         self.fm_dilation = 3 # Detections within this s will be considered as the same detection  
 
         #Now get the reduced detection_map
-        reduced_detection_map = ml_map * fm_dict['fm_segmented']  # Reduced, because of the new dilation length
+        reduced_detection_map = ml_map * fm_dict['fm_map']  # Reduced, because of the new dilation length
         reduced_detection_map_labeled = label(reduced_detection_map)
 
         n_movements = np.max(reduced_detection_map_labeled)
@@ -298,36 +312,22 @@ class FeMoMetrics(object):
         # Dilation length on sides of each detection is removed and converted to minutes
         total_FM_duration = (len(detection_only) / self._sensor_freq - n_movements * self.fm_dilation / 2) / 60
 
-        #If there are no detection
-        if n_movements != 0:
-            # mean duration in s
-            mean_FM_duration = total_FM_duration * 60 / n_movements
-        #If no movement then make mean zero
-        else:
-            mean_FM_duration =  total_FM_duration * 0
-
         onset_interval = []
         for j in range(1, n_movements):
             onset1 = np.where(reduced_detection_map_labeled == j)[0][0]  # Sample no. corresponding to start of the label
             onset2 = np.where(reduced_detection_map_labeled == j + 1)[0][0]  # Sample no. corresponding to start of the next label
             onset_interval.append( (onset2 - onset1) / self._sensor_freq ) # onset to onset interval in seconds
 
-        # Median onset interval in s
-        median_onset_interval = np.median(onset_interval)
-
         duration_trimmed_data_files = len(preprocessed_data['sensor_1']) / 1024 / 60 # in minutes
         # Time fetus was not moving
-        total_nonFM_duration = np.array(duration_trimmed_data_files) - np.array(total_FM_duration)
-        active_time = (total_FM_duration / (total_FM_duration + total_nonFM_duration)) *100
-        detection_per_hr = (np.array(n_movements) *60)  /  (total_FM_duration + total_nonFM_duration)
-
-        data = {
-            "File Name": [os.path.basename(filename)],
-            "Number of bouts per hour": [detection_per_hr],
-            "Mean duration of fetal movement (seconds)": [mean_FM_duration],
-            "Median onset interval (seconds)": [median_onset_interval],
-            "Active time of fetal movement (%)": [active_time]
-        }
+        total_nonFM_duration = duration_trimmed_data_files - total_FM_duration
+        data = InferenceMetaInfo(
+            fileName=os.path.basename(filename),
+            numKicks=n_movements,
+            totalFMDuration=total_FM_duration,
+            totalNonFMDuration=total_nonFM_duration,
+            onsetInterval=onset_interval
+        )
 
         return data, ml_map
     
