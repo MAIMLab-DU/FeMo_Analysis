@@ -1,5 +1,4 @@
 import os
-import json
 import joblib
 import numpy as np
 import pandas as pd
@@ -85,7 +84,8 @@ class Result:
     
     def compile_results(self,
                         metadata: dict,
-                        filename: str|None = None):
+                        results_path: str|None = None,
+                        metadata_path: str|None = None):
         self._assert_no_none_fields()
 
         preds = self.process_attributes(self.preds, metadata, preds=True)
@@ -98,13 +98,13 @@ class Result:
         self.det_indices = det_indices.astype(int)
         self.filename_hash = filename_hash.astype(int)
 
-        if filename is not None:
-            self.save(filename)
-            for key, val in metadata.items():
-                if isinstance(val, np.ndarray):
-                    metadata[key] = val.tolist()
-            with open(os.path.join(os.path.dirname(filename), 'metadata.json'), 'w') as f:
-                json.dump(metadata, f, indent=2)
+        if results_path is not None:
+            results_path = os.path.join(results_path, "results.csv")
+            self.save(results_path)
+        
+        if metadata_path is not None:
+            metadata_path = os.path.join(metadata_path, "metadata.joblib")
+            joblib.dump(metadata, metadata_path, compress=True)
 
 
 class FeMoBaseClassifier(ABC):

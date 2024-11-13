@@ -1,26 +1,25 @@
 import os
 import sys
-import yaml
 import joblib
-import numpy as np
 import pandas as pd
 import argparse
 from tqdm import tqdm
 from femo.logger import LOGGER
 from femo.data.pipeline import Pipeline
 from femo.data.transforms import SensorFusion
-from femo.data.utils import normalize_features
 from femo.eval.metrics import FeMoMetrics
 from femo.plot.plotter import FeMoPlotter
-from femo.model import CLASSIFIER_MAP
+from femo.data.process import Processor
 from femo.model.base import FeMoBaseClassifier
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-file", type=str, required=True, help="Path to data file")
-    parser.add_argument("--ckpt-file", type=str, required=True, help="Path to model checkpoint file")
-    parser.add_argument("--params-file", type=str, required=True, help="Path to params file")
+    parser.add_argument("--model", type=str, required=True, help="Path to trained classifier file (.joblib)")
+    parser.add_argument("--pipeline", type=str, required=True, help="Path to data pipeline object (.joblib)")
+    parser.add_argument("--processor", type=str, required=True, help="Path to data processor object (.joblib)")
+    parser.add_argument("--metrics", type=str, required=True, help="Path to evaluation metrics object (.joblib)")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--outfile", type=str, default="meta_info.xlsx", help="Metrics output file")
     args = parser.parse_args()
@@ -28,9 +27,8 @@ def parse_args():
     return args
 
 
-def main():
+def main(args):
     LOGGER.info("Starting inference...")
-    args = parse_args()
 
     if args.data_file.endswith('.dat'):
         # If it's a .dat file, store it in a list
@@ -44,32 +42,14 @@ def main():
         raise ValueError("Unsupported file format. Please provide a .dat or .txt file.")
     LOGGER.info(f"Filenames: {filenames}")
 
-    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
-    config_files = ['inference-cfg.yaml', 'dataproc-cfg.yaml']
-    inf_cfg, dataproc_cfg = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
-
     try:
-        params_dict = joblib.load(args.params_file)
-    except FileNotFoundError:
-        LOGGER.error(f"Parameters file not found: {args.params_file}")
+        pipeline: Pipeline = joblib.load(args.pipeline)
+        processor: Processor = joblib.load(args.processor)
+        classifier: type[FeMoBaseClassifier] = joblib.load(args.model)
+        metrics: FeMoMetrics = joblib.load(args.metrics)
+    except Exception as e:
+        LOGGER.error(f"Error loading fitted objects: {e}")
         sys.exit(1)
-    
-    try:
-        classifier_type = inf_cfg.get('type')        
-        classifier: type[FeMoBaseClassifier] = CLASSIFIER_MAP[classifier_type]()
-        classifier.load_model(
-            model_filename=args.ckpt_file,
-            model_framework='keras' if classifier_type == 'neural-net' else 'sklearn'
-        )
-    except KeyError:
-        LOGGER.error(f"Invalid classifier specified: {inf_cfg.get('classifier')}")
-        sys.exit(1)
-
-    metrics_calculator = FeMoMetrics()
-    pipeline = Pipeline(
-            inference=True,
-            cfg=dataproc_cfg.get('data_pipeline')
-        )
         
     for data_filename in tqdm(filenames, desc=f"Peforming inference on {len(filenames)} files..."):
         pipeline_output = pipeline.process(
@@ -78,18 +58,11 @@ def main():
         
         X_extracted = pipeline_output['extracted_features']['features']
 
-        # Skip IMU features if desired
-        if inf_cfg.get('skip_imu_features'):
-            X_extracted = X_extracted[:, :319]
-            mask = np.all(np.isin(X_extracted, [0, 1]), axis=0)
-            X_extracted = X_extracted[:, ~mask]
-
-        X_norm, _, _ = normalize_features(X_extracted, params_dict['mu'], params_dict['dev'])
-        X_norm_ranked = X_norm[:, params_dict['top_feat_indices']]
+        X_norm_ranked = processor.predict(X_extracted)
 
         y_pred_labels = classifier.predict(X_norm_ranked)
 
-        metainfo_dict, ml_map = metrics_calculator.calc_meta_info(
+        metainfo_dict, ml_map = metrics.calc_meta_info(
             filename=data_filename,
             y_pred=y_pred_labels,
             preprocessed_data=pipeline_output['preprocessed_data'],
@@ -113,7 +86,11 @@ def main():
         LOGGER.info(f"Meta info saved to {os.path.join(args.work_dir, args.outfile)}")
 
         LOGGER.info("Plotting the results. It may take some time....")
-        plt_cfg = inf_cfg.get('plot')
+        # Probably make this configurable
+        plt_cfg = {
+            'figsize': [16, 15],
+            'x_unit': 'min'
+        }
         plotter = FeMoPlotter()
         plotter.create_figure(
             figsize=plt_cfg['figsize']
@@ -154,4 +131,5 @@ def main():
         
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)

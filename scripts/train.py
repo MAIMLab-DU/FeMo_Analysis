@@ -1,39 +1,58 @@
 import os
 import sys
+import json
 import yaml
+import joblib
 import argparse
 import pandas as pd
 from femo.logger import LOGGER
 from femo.model.base import FeMoBaseClassifier
 from femo.model import CLASSIFIER_MAP
 
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset-path", type=str, required=True, help="Path to dataset csv file")
-    parser.add_argument("--ckpt-name", type=str, required=True, help="Name of model checkpoint file")
-    parser.add_argument("--tune", action='store_true', help="Tune hyperparameters before training")
-    parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
-    args = parser.parse_args()
+    
+    # SageMaker-specific directories
+    parser.add_argument("--train", type=str, default=os.getenv('SM_CHANNEL_TRAIN', ''), help="Path to dataset")
+    parser.add_argument("--model-dir", type=str, default=os.getenv('SM_MODEL_DIR', ''), help="Model output directory")
+    parser.add_argument("--output-data-dir", type=str, default=os.getenv('SM_OUTPUT_DATA_DIR', ''), help="Model output directory")
 
+    # Additional arguments
+    parser.add_argument("--tune", action='store_true', default=os.getenv('SM_TUNE', False), help="Tune hyperparameters before training")
+    parser.add_argument("--config-path", type=str, default=os.getenv('SM_CHANNEL_CONFIG', os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")),
+                        help="Path to config file")
+
+    args = parser.parse_args()
     return args
 
 
-def main():
+def main(args):
     LOGGER.info("Starting training...")
-    args = parse_args()
 
-    os.makedirs(args.work_dir, exist_ok=True)
-    LOGGER.info(f"Working directory {args.work_dir}")
+    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(args.output_data_dir, exist_ok=True)
+    LOGGER.info(f"Model directory: {args.model_dir}")
+    LOGGER.info(f"Output data directory: {args.output_data_dir}")
 
-    config_dir = os.path.join(os.path.dirname(__file__), '..', 'configs')
-    config_files = ['train-cfg.yaml']
-    [train_cfg] = [yaml.safe_load(open(os.path.join(config_dir, cfg), 'r')) for cfg in config_files]
+    with open(args.config_path, 'r') as f:
+        train_cfg = yaml.safe_load(f) if args.config_path.endswith('.yaml') else json.load(f)
 
-    dataset = pd.read_csv(args.dataset_path)
+    try:
+        dataset = pd.read_csv(os.path.join(args.train, "dataset.csv"))
+    except Exception:
+        raise ValueError(
+            (
+                "Preprocessed dataset not in {}.\n"
+                + "This usually indicates that the channel ({}) was incorrectly specified,\n"
+                + "the data specification in S3 was incorrectly specified or the role specified\n"
+                + "does not have permission to access the data."
+            ).format(args.train, "train")
+        )
 
-    LOGGER.info(f"Loaded train: {os.path.abspath(args.dataset_path)} " +
-                f"test: {os.path.abspath(args.dataset_path)}")
+    LOGGER.info(f"Loaded dataset from: {os.path.abspath(args.train)}")
     
     try:
         classifier_type = train_cfg.get('type')
@@ -51,7 +70,7 @@ def main():
         sys.exit(1)
 
     split_cfg = train_cfg.get('split_config', {'strategy': 'kfold', 'num_folds': 5})
-    LOGGER.info(f"Splitting dataset with {split_cfg}")
+    LOGGER.info(f"Splitting dataset with config: {split_cfg}")
     train_data, test_data, metadata = classifier.split_data(
         dataset.to_numpy(),
         **split_cfg
@@ -69,23 +88,36 @@ def main():
         test_data,
         **train_params
     )
+    
     try:
-        classifier.save_model(
-            model_filename=os.path.join(args.work_dir, args.ckpt_name),
-            model_framework='keras' if classifier_type == 'neural-net' else 'sklearn'
-        )
-        LOGGER.info(f"Model checkpoint saved to {os.path.join(args.work_dir, args.ckpt_name)}")
-    except Exception:
-        LOGGER.error("Failed to save model to")
-        pass
+        joblib.dump(classifier, os.path.join(args.model_dir, 'model.joblib'), compress=False)
+        LOGGER.info(f"Model saved to: {os.path.abspath(os.path.join(args.model_dir, 'model.joblib'))}")
+    except Exception as e:
+        LOGGER.error(f"Failed to save model: {e}")
+        sys.exit(1)
+    
     LOGGER.info("Finished training")
-    results_path = os.path.join(args.work_dir, 'results.csv')
+
+    results_path = os.path.join(args.output_data_dir, 'results')
+    metadata_path = os.path.join(args.output_data_dir, 'metadata')
+    os.makedirs(results_path, exist_ok=True)
+    os.makedirs(metadata_path, exist_ok=True)
+    
     classifier.result.compile_results(
         metadata=metadata,
-        filename=results_path
+        results_path=results_path,
+        metadata_path=metadata_path
     )
-    LOGGER.info(f"Results saved to {results_path}")
+
+    LOGGER.info(f"Predictions saved to {os.path.abspath(results_path)}")
+    LOGGER.info(f"Metadata saved to {os.path.abspath(metadata_path)}")
+
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1] == 'train':
+        sys.argv.pop(1)    
+    args = parse_args()
+    if isinstance(args.tune, str):
+        args.tune = args.tune.lower() == 'true'
+    main(args)

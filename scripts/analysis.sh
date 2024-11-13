@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
+# Record the start time
 start_time="$(date +%s)"
 SCRIPT_DIR="scripts"
 
-# Process the positional arguments
+# Process positional arguments (data_manifest, ckpt_name, run_dir, perf_file)
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         *)
-            # Store the positional arguments (data_manifest, output_file, run_dir, ckpt_name)
             if [ -z "$DATA_MANIFEST" ]; then
                 DATA_MANIFEST="$1"
             elif [ -z "$CKPT_NAME" ]; then
@@ -21,65 +21,55 @@ while [[ "$#" -gt 0 ]]; do
                 echo "Unknown option or too many arguments: $1"
                 exit 1
             fi
-            shift # Remove the argument from the list
+            shift
             ;;
     esac
 done
 
-# Check if the required positional arguments are provided
-if [ -z "$DATA_MANIFEST" ] || [ -z "$CKPT_NAME" ]; then
-    echo "Usage: $0 <data_manifest> <ckpt_name> [run_dir] [performance_filename] [params_filename]"
+# Check required arguments
+if [ -z "$DATA_MANIFEST" ]; then
+    echo "Usage: $0 <data_manifest> [ckpt_name] [run_dir] [performance_filename]"
     exit 1
 fi
 
-# Set defaults for optional arguments if not provided
+# Set defaults for optional arguments
+CKPT_NAME=${CKPT_NAME:-null}
 PERF_FILE=${PERF_FILE:-"performance.csv"}
 WORK_DIR=${WORK_DIR:-"./work_dir"}
 
-# Create the $WORK_DIR directory if it doesn't exist
+# Create the work directory if it doesn't exist
 mkdir -p "$WORK_DIR"
 
-# Find the highest numbered run directory (run1, run2, etc.)
-LAST_RUN=$(ls -d "$WORK_DIR"/run* 2>/dev/null | grep -o 'run[0-9]\+' | sort -V | tail -n 1 | grep -o '[0-9]\+')
+# Determine the next run directory
+LAST_RUN=$(ls -d "$WORK_DIR"/run* 2>/dev/null | grep -o 'run[0-9]\+' | sort -V | tail -n 1 | grep -o '[0-9]\+') || LAST_RUN=0
 
-# If no previous runs, start with 1, otherwise increment the last run number
 NEXT_RUN=$((LAST_RUN + 1))
 
-# Create the next run directory
-if [ -z "$RUN_DIR" ]; then
-    RUN_DIR="$WORK_DIR/run$NEXT_RUN"
-fi
+# Set and create run directory
+RUN_DIR=${RUN_DIR:-"$WORK_DIR/run$NEXT_RUN"}
 mkdir -p "$RUN_DIR"
 
-# Output the created run directory and the DATA_MANIFEST and CKPT_NAME
+# Output the initial configuration
 echo "Created run directory: $RUN_DIR"
 echo "Data manifest: $DATA_MANIFEST"
 echo "Performance file: $PERF_FILE"
 echo "Checkpoint name: $CKPT_NAME"
 
+# Set up the virtual environment
 VIRTUAL_ENV=.venv
-# Set up virtual env
 virtualenv -p python3.10 $VIRTUAL_ENV
-. $VIRTUAL_ENV/bin/activate
+source $VIRTUAL_ENV/bin/activate
 
-# Install requirements
+# Install dependencies
 pip install -e .
 
-# Run extract.py
-python "./$SCRIPT_DIR/extract.py" --data-manifest "$DATA_MANIFEST" --work-dir "$RUN_DIR"
+# Execute the scripts
+python "$SCRIPT_DIR/extract.py" --data-manifest "$DATA_MANIFEST" --work-dir "$RUN_DIR"
+python "$SCRIPT_DIR/process.py" --features-dir "$RUN_DIR/features/" --work-dir "$RUN_DIR"
+python "$SCRIPT_DIR/train.py" --train "$RUN_DIR/dataset/" --model-dir "$RUN_DIR/model" --output-data-dir "$RUN_DIR/output" --tune
+python "$SCRIPT_DIR/evaluate.py" --data-manifest "$DATA_MANIFEST" --results-path "$RUN_DIR/output/results/results.csv" --metadata-path "$RUN_DIR/output/metadata/metadata.joblib" --work-dir "$RUN_DIR" --out-filename "$PERF_FILE"
 
-# Run preprocess.py
-python "./$SCRIPT_DIR/process.py" --dataset-path "$RUN_DIR/dataset.csv" --work-dir "$RUN_DIR"
-
-# Run train.py
-python "./$SCRIPT_DIR/train.py" --dataset-path "$RUN_DIR/preprocessed_dataset.csv" --ckpt-name "$CKPT_NAME" --work-dir "$RUN_DIR" --tune
-
-# Run evaluate.py
-python "./$SCRIPT_DIR/evaluate.py" --data-manifest "$DATA_MANIFEST" --results-path "$RUN_DIR/results.csv" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
-
-# Record the end time
+# Calculate and display the total running time
 end_time="$(date +%s)"
-# Calculate the running time in seconds
 running_time=$((end_time - start_time))
-# Print the running time with "seconds" appended
 echo "Total time taken: ${running_time} seconds"

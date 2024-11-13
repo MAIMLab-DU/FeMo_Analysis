@@ -1,4 +1,7 @@
+import os
 import yaml
+import joblib
+import tarfile
 import time
 from ..logger import LOGGER
 from collections import defaultdict
@@ -62,15 +65,15 @@ class Pipeline(object):
         self.logger.debug("Preprocessing data...")
         preprocessed_data = self.stages[1](loaded_data=loaded_data)
 
+        imu_map = fm_dict = sensation_map = scheme_dict = extracted_detections = extracted_features = None
+
         # Step-2: Get imu_map, fm_dict (fm sensors), and sensation_dict (button)
-        imu_map = None
         if 'imu_map' in outputs:
             self.logger.debug("Creating IMU accelerometer map...")
             imu_map = self.stages[2](
                 map_name='imu',
                 preprocessed_data=preprocessed_data
             )
-        fm_dict = None
         if 'fm_dict' or 'scheme_dict' in outputs:
             self.logger.debug("Creating FeMo sensors map...")
             fm_dict = self.stages[2](
@@ -78,7 +81,6 @@ class Pipeline(object):
                 preprocessed_data=preprocessed_data,
                 imu_map=imu_map
             )
-        sensation_map = None
         if 'sensation_map' in outputs:
             self.logger.debug("Creating maternal sensation map...")
             sensation_map = None
@@ -90,25 +92,51 @@ class Pipeline(object):
                 )
 
         # Step-3: Sensor fusion
-        scheme_dict = None
         if 'scheme_dict' in outputs:
             self.logger.debug(f"Combining {self.stages[3].num_sensors} sensors map...")
             scheme_dict = self.stages[3](fm_dict=fm_dict)
 
         # Step-4: Extract detections (event and non-event) from segmented data
-        extracted_detections = None
-        if 'extracted_detections' in outputs:
-            self.logger.debug("Extracting detections...")
-            extracted_detections = self.stages[4](
+        def extract_detections(fm_dict, scheme_dict, sensation_map):
+            if fm_dict is None:
+               fm_dict = self.stages[2](
+                map_name='fm_sensor',
+                preprocessed_data=preprocessed_data,
+                imu_map=imu_map
+            )
+            if scheme_dict is None:
+                scheme_dict = self.stages[3](fm_dict=fm_dict)
+            if sensation_map is None:
+                sensation_map = self.stages[2](
+                    map_name='sensation',
+                    preprocessed_data=preprocessed_data,
+                    imu_map=imu_map
+                )
+            out =  self.stages[4](
                 inference=self.inference,
                 preprocessed_data=preprocessed_data,
                 scheme_dict=scheme_dict,
                 sensation_map=sensation_map
             )
+
+            return out 
+
+        if 'extracted_detections' in outputs:
+            self.logger.debug("Extracting detections...")
+            extracted_detections = extract_detections(
+                fm_dict=fm_dict,
+                scheme_dict=scheme_dict,
+                sensation_map=sensation_map
+            )
         # Step-5: Extract features of each detection
-        extracted_features = None
         if 'extracted_features' in outputs:
             self.logger.debug("Extracting features...")
+            if extracted_detections is None:
+                extracted_detections = extract_detections(
+                    fm_dict=fm_dict,
+                    scheme_dict=scheme_dict,
+                    sensation_map=sensation_map
+                )
             extracted_features = self.stages[5](
                 inference=self.inference,
                 fm_dict=fm_dict,
@@ -118,12 +146,25 @@ class Pipeline(object):
         self.logger.info(f"Pipeline process completed in {time.time() - start: 0.3f} seconds.")
 
         return {
-            'imu_map': imu_map,
-            'fm_dict': fm_dict,
-            'scheme_dict': scheme_dict,
-            'sensation_map': sensation_map,
-            'extracted_detections': extracted_detections,
-            'extracted_features': extracted_features,
+            'loaded_data': loaded_data if 'loaded_data' in outputs else None,
             'preprocessed_data': preprocessed_data if 'preprocessed_data' in outputs else None,
-            'loaded_data': loaded_data if 'loaded_data' in outputs else None
+            'imu_map': imu_map if 'imu_map' in outputs else None,
+            'fm_dict': fm_dict if 'fm_dict' in outputs else None,
+            'scheme_dict': scheme_dict if 'scheme_dict' in outputs else None,
+            'sensation_map': sensation_map if 'sensation_map' in outputs else None,
+            'extracted_detections': extracted_detections if 'extracted_detections' in outputs else None,
+            'extracted_features': extracted_features if 'extracted_features' in outputs else None
         }
+
+    def save(self, file_path):
+        """Save the pipeline to a joblib file
+
+        Args:
+            file_path (str): Path to directory for saving the pipeline
+        """
+        
+        joblib.dump(self, os.path.join(file_path, "pipeline.joblib"))
+        tar = tarfile.open(os.path.join(file_path, "pipeline.tar.gz"), "w:gz")
+        tar.add(os.path.join(file_path, "pipeline.joblib"), arcname="pipeline.joblib")
+        tar.close()
+        self.logger.debug(f"Pipeline saved to {file_path}")

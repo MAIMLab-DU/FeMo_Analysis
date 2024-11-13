@@ -47,7 +47,7 @@ class FeMoDataset:
     
     def __init__(self,
                  base_dir: Union[Path, str],
-                 data_manifest_path: Union[Path, str],
+                 data_manifest: Union[str, dict],
                  inference: bool,
                  pipeline_cfg: dict,
                 ) -> None:
@@ -57,8 +57,14 @@ class FeMoDataset:
             inference=inference,
             cfg=pipeline_cfg
         )
-        self._data_manifest_path = Path(data_manifest_path)
-        self._data_manifest = None
+        if isinstance(data_manifest, str):
+            self._data_manifest_path = Path(data_manifest)
+            self._data_manifest = None
+        elif isinstance(data_manifest, dict):
+            self._data_manifest = data_manifest
+        else:
+            raise ValueError("data_manifest must be either a JSON path or a dict")
+        
         self.inference = inference
         self.features_df = pd.DataFrame([])
         self.map = defaultdict()
