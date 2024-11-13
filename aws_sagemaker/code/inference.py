@@ -4,6 +4,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from femo.logger import LOGGER
+from typing import Optional
 from femo.inference import PredictionService
 from utils import (
     convert_floats_to_decimal,
@@ -19,6 +20,7 @@ app = FastAPI()
 # Define the input data structure for the request body
 class RequestData(BaseModel):
     s3_path: str
+    job_id: Optional[str] = None
 
 
 # A singleton for holding the model. This simply loads the model and holds it.
@@ -45,10 +47,10 @@ def run_inference_job(job_id: str, timestamp: str, s3_path: str):
     data, _, _ = pred_service.predict(filename, bucket_name)
 
     prediction = {
-        "numBoutsPerHour": (data.numKicks*60) / (data.totalFMDuration+data.totalNonFMDuration),
+        "numBoutsPerHour": (data.numKicks*60) / (data.totalFMDuration+data.totalNonFMDuration) if data.numKicks > 0 else 0,
         "meanDurationFM_s": data.totalFMDuration*60/data.numKicks if data.numKicks > 0 else 0,
-        "medianOnsetInterval_s": np.median(data.onsetInterval),
-        "activeTimeFM_%": (data.totalFMDuration/(data.totalFMDuration+data.totalNonFMDuration))*100
+        "medianOnsetInterval_s": np.median(data.onsetInterval) if data.numKicks > 0 else 0,
+        "activeTimeFM_%": (data.totalFMDuration/(data.totalFMDuration+data.totalNonFMDuration))*100 if data.numKicks > 0 else 0,
     }
 
     prediction = convert_floats_to_decimal(prediction)
@@ -73,40 +75,36 @@ async def ping():
     return {"status": status}
 
 
-@app.get("/results/{job_id}")
-async def get_result(job_id: str):
-    print(f"Received request for job_id: {job_id}")
-    
-    dynamodb = boto3.resource('dynamodb', region_name='eu-north-1')
-    table = dynamodb.Table(os.getenv('DYNAMODB_TABLE'))
-    
-    try:
-        response = table.get_item(Key={'job_id': job_id}, ConsistentRead=True)
-        LOGGER.debug(f"Response from DynamoDB: {response}")
-    except Exception as e:
-        LOGGER.error(f"Error fetching from DynamoDB: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-    
-    if "Item" in response:
-        LOGGER.info(f"Result found for job_id: {job_id}")
-        return {"message": "Job completed", "fileName": response['Item']['fileName'], "result": response['Item']['result']}
-    else:
-        LOGGER.warning(f"No item found for job_id: {job_id}")
-        raise HTTPException(status_code=404, detail="Result not found for job_id: {}".format(job_id))
-
-
 @app.post("/invocations")
 async def transformation(data: RequestData, background_tasks: BackgroundTasks):
-    # Generate a unique job ID
-    job_id, timestamp = generate_uuid_and_timestamp()
+    # Validate and extract S3 path
+    if not data.s3_path:
+        raise HTTPException(status_code=400, detail="S3 path to .dat file must be provided")
+
+    dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_DEFAULT_REGION', 'eu-north-1'))
+    table = dynamodb.Table(os.getenv('DYNAMODB_TABLE'))
+
+    # Case 1: No job_id provided - initiate a new job
+    if data.job_id is None:
+        job_id, timestamp = generate_uuid_and_timestamp()
+        background_tasks.add_task(run_inference_job, job_id, timestamp, data.s3_path)
+        LOGGER.info(f"Started new job with job_id: {job_id}")
+        return {"message": "Job started, completion in ~120 seconds", "job_id": job_id}
+
+    # Case 2: job_id provided - fetch the result from DynamoDB
+    try:
+        response = table.get_item(Key={'job_id': data.job_id}, ConsistentRead=True)
+        LOGGER.debug(f"DynamoDB response for job_id {data.job_id}: {response}")
+    except Exception as e:
+        LOGGER.error(f"Error fetching from DynamoDB for job_id {data.job_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+    # Check if item exists in the response
+    if 'Item' in response:
+        LOGGER.info(f"Result found for job_id: {data.job_id}")
+        item = response['Item']
+        return {"message": "Job completed", "job_id": data.job_id, "fileName": item.get('fileName'), "result": item.get('result')}
     
-    # Extract the input data
-    input_s3_path = data.s3_path
-    if not input_s3_path:
-        raise HTTPException(status_code=400, detail="S3 path to .dat file should be provided")
-
-    # Schedule the background task
-    background_tasks.add_task(run_inference_job, job_id, timestamp, input_s3_path)
-
-    # Immediately return job ID to the client
-    return {"message": "Job started", "job_id": job_id}
+    # If no item found, return 404
+    LOGGER.warning(f"No result found for job_id: {data.job_id}")
+    raise HTTPException(status_code=404, detail=f"Result not found for job_id: {data.job_id}")

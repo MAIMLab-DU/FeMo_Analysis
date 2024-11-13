@@ -122,9 +122,6 @@ def get_pipeline(
     training_instance_type = ParameterString(
         name="TrainingInstanceType", default_value="ml.m5.4xlarge"
     )
-    model_approval_status = ParameterString(
-        name="ModelApprovalStatus", default_value="Approved"
-    )
 
 
     # ===== Feature Extraction Step =====
@@ -222,7 +219,7 @@ def get_pipeline(
     # ===== Model Training Step =====
     model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/train"
     estimator = Estimator(
-        image_uri=os.getenv("TRAINING_IMAGE_URI"),
+        image_uri=os.getenv("IMAGE_URI"),
         instance_type=training_instance_type,
         instance_count=training_instance_count,
         output_path=model_path,
@@ -268,10 +265,10 @@ def get_pipeline(
         sagemaker_session=sagemaker_session,
         role=role,
     )
-
+    EVAL_DIR = os.path.join(PROC_DIR, "input", "trainjob/data") if local_mode else os.path.join(PROC_DIR, "input", "trainjob")
     eval_args = ["--data-manifest", manifest_path,
-                 "--results-path", os.path.join(PROC_DIR, "input", "trainjob", "data/results/results.csv"),
-                 "--metadata-path", os.path.join(PROC_DIR, "input", "trainjob", "data/metadata/metadata.joblib"),
+                 "--results-path", os.path.join(EVAL_DIR, "results/results.csv"),
+                 "--metadata-path", os.path.join(EVAL_DIR, "metadata/metadata.joblib"),
                  "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml"),
                  "--work-dir", PROC_DIR,
                  "--sagemaker", os.path.join(PROC_DIR, "input", "trainjob")]
@@ -393,34 +390,48 @@ def get_pipeline(
     # ===== Model Repack Step (Conditionally Executed) =====
     model_metrics = ModelMetrics(
         model_statistics=MetricsSource(
-            s3_uri=step_eval.properties.ProcessingOutputConfig.Outputs[
+            s3_uri=Join(
+                on="/",
+                values=[
+                    step_eval.properties.ProcessingOutputConfig.Outputs[
                                 "evaluation"
                             ].S3Output.S3Uri,
+                    "evaluation.json"
+                ]
+            ),
             content_type="application/json",
         )
     )
     inference_model = Model(
         image_uri=os.getenv("IMAGE_URI"),
-        model_data=step_repack.properties.ProcessingOutputConfig.Outputs[
+        model_data=Join(
+            on="/",
+            values=[
+                step_repack.properties.ProcessingOutputConfig.Outputs[
                                 "repacked-model"
                             ].S3Output.S3Uri,
+                "model.tar.gz"
+            ]
+        ),
         role=role,
-        name="InferenceModel",
+        name=f"{pipeline_name}-InferenceModel",
         sagemaker_session=sagemaker_session,
         predictor_cls=Predictor,
         env={
-            "MODEL_SERVER_TIMEOUT": 120
+            "MODEL_SERVER_TIMEOUT": "300",
+            "DYNAMODB_TABLE": os.getenv("DYNAMODB_TABLE"),
+            "AWS_DEFAULT_REGION": os.getenv("AWS_DEFAULT_REGION", "eu-north-1")
         }
     )
 
     step_register_inference_model = RegisterModel(
         name="RegisterModel",
         estimator=estimator,
-        content_types=["text/csv"],
-        response_types=["application/x-zip-compressed"],
+        content_types=["application/json"],
+        response_types=["application/json"],
         inference_instances=["ml.c5.xlarge", "ml.c5.2xlarge"],
         model_package_group_name=model_package_group_name,
-        approval_status=model_approval_status,
+        approval_status="Approved",
         model_metrics=model_metrics,
         model=inference_model
     )
