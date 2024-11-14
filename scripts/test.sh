@@ -3,6 +3,7 @@
 set -e
 
 VIRTUAL_ENV=.venv
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="tests"
 DATA_FILES_DIR="$TEST_DIR/datafiles"
 TEST_REPORT_PATH=reports/reports.xml
@@ -15,7 +16,7 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 . $VIRTUAL_ENV/bin/activate
 
 # Install requirements
-pip install -r tests/requirements.txt
+pip install $SCRIPT_DIR/../.[dev] -q
 
 # Run Ruff for linting
 echo "Running ruff to check for linting issues"
@@ -46,7 +47,6 @@ fi
 
 # Run tests
 echo "Running tests"
-export PYTHONPATH=./src
 pytest --tb=short --junitxml=$TEST_REPORT_PATH ./$TEST_DIR
 
 # Deactivate virtual env
