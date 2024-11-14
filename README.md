@@ -32,6 +32,7 @@
 - [🚀 Getting Started](#-getting-started)
   - [🔖 Prerequisites](#-prerequisites)
   - [📦 Installation](#-installation)
+      - [Optional](#optional)
   - [🤖 Usage](#-usage)
     - [Feature Extraction](#feature-extraction)
     - [Data Preprocessing](#data-preprocessing)
@@ -41,6 +42,7 @@
   - [🧪 Tests](#-tests)
 - [📌 Project Roadmap](#-project-roadmap)
 - [🤝 Contributing](#-contributing)
+  - [⚠️ **Caution**](#️-caution)
 
 </details>
 <hr>
@@ -202,7 +204,16 @@ For cloning using SSH, make sure to create and store SSH key on your device. The
 
 3. Install the repo as a package:
 ```sh
-❯ pip install -e .
+❯ pip install .
+```
+##### Optional
+a. To install the package for development:
+```sh
+❯ pip install .[dev]
+```
+b. To install the package for integration with AWS Sagemaker:
+```sh
+❯ pip install .[sagemaker]
 ```
 
 ### 🤖 Usage
