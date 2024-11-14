@@ -9,24 +9,20 @@ RUN apt-get -y update && apt-get install -y --no-install-recommends \
          nginx \
          ca-certificates
 
-COPY requirements.txt /opt/program/requirements.txt
-COPY aws_sagemaker/requirements.txt /opt/program/aws_sagemaker/requirements.txt
+# Copy the pyproject.toml and femo package files
+COPY pyproject.toml /opt/program/pyproject.toml
+COPY femo/ /opt/program/femo/
 
-# Install python dependencies
+# Install python dependencies using pip (via pyproject.toml)
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r aws_sagemaker/requirements.txt
+RUN pip install .[sagemaker]
 
+# Set environment variables for Python
 ENV PYTHONUNBUFFERED=TRUE
 ENV PYTHONDONTWRITEBYTECODE=TRUE
 ENV PATH="/opt/program:${PATH}"
 
-# Copy the training script and other files
-ADD femo/ /opt/program/femo/
-ADD setup.py /opt/program/setup.py
 ADD README.md /opt/program/README.md
-
-# Set up the program in the image
-RUN pip install .
 COPY aws_sagemaker/code /opt/program/
 
 # Make scripts executable

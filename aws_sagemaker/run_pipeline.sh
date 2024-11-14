@@ -20,9 +20,7 @@ echo "Local mode: $LOCAL_MODE"
 # Create/Update the SageMaker Pipeline and wait for the execution to be completed
 
 VIRTUAL_ENV=.venv
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "The script is located in: $SCRIPT_DIR"
 
 # Set up virtual env
 virtualenv -p python3 $VIRTUAL_ENV
