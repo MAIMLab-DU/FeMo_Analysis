@@ -4,12 +4,10 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from femo.logger import LOGGER
-from typing import Optional
 from femo.inference import PredictionService
 from utils import (
     convert_floats_to_decimal,
     extract_s3_details,
-    generate_uuid_and_timestamp
 )
 
 prefix = '/opt/ml/'
@@ -19,8 +17,9 @@ app = FastAPI()
 
 # Define the input data structure for the request body
 class RequestData(BaseModel):
-    s3_path: str
-    job_id: Optional[str] = None
+    s3Key: str
+    jobId: str
+    timeStamp: str
 
 
 # A singleton for holding the model. This simply loads the model and holds it.
@@ -32,32 +31,73 @@ pred_service = PredictionService(
     os.path.join(model_path, 'metrics.joblib')
 )
 
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_DEFAULT_REGION', 'eu-north-1'))
+table = dynamodb.Table(os.getenv('DYNAMODB_TABLE'))
 
 
+def update_item_in_dynamodb(table, s3_key, time_stamp, update_data):
+    """
+    Update an item in a DynamoDB table with specific s3Key and timeStamp.
 
-def run_inference_job(job_id: str, timestamp: str, s3_path: str):
+    Args:
+        table_name (str): The name of the DynamoDB table.
+        s3_key (str): The s3Key value to identify the item.
+        time_stamp (str): The timeStamp value to identify the item.
+        update_data (dict): The attributes and their new values to update.
+
+    Returns:
+        dict: Response from the update_item operation.
+    """
+
+    # Build the update expression
+    update_expression = "SET " + ", ".join(f"#{k} = :{k}" for k in update_data.keys())
+    expression_attribute_names = {f"#{k}": k for k in update_data.keys()}
+    expression_attribute_values = {f":{k}": v for k, v in update_data.items()}
+
+    try:
+        # Update the item
+        response = table.update_item(
+            Key={
+                "s3Key": s3_key,
+                "timeStamp": time_stamp
+            },
+            UpdateExpression=update_expression,
+            ExpressionAttributeNames=expression_attribute_names,
+            ExpressionAttributeValues=expression_attribute_values,
+            ReturnValues="UPDATED_NEW"
+        )
+        return response
+    except Exception as e:
+        LOGGER.error(f"Error updating item: {e}")
+        raise
+
+
+def run_inference_job(job_id: str, time_stamp: str, s3_path: str):
     """_summary_
 
     Args:
         job_id (str): Unique inference job id
         s3_path (str): S3 path to .dat file
     """
-    bucket_name, filename = extract_s3_details(s3_path)
+    bucket_name, file_name = extract_s3_details(s3_path)
 
-    data, _, _ = pred_service.predict(filename, bucket_name)
-
-    prediction = {
-        "numBoutsPerHour": (data.numKicks*60) / (data.totalFMDuration+data.totalNonFMDuration) if data.numKicks > 0 else 0,
-        "meanDurationFM_s": data.totalFMDuration*60/data.numKicks if data.numKicks > 0 else 0,
-        "medianOnsetInterval_s": np.median(data.onsetInterval) if data.numKicks > 0 else 0,
-        "activeTimeFM_%": (data.totalFMDuration/(data.totalFMDuration+data.totalNonFMDuration))*100 if data.numKicks > 0 else 0,
-    }
-
-    prediction = convert_floats_to_decimal(prediction)
-    dynamodb = boto3.resource('dynamodb', region_name='eu-north-1')
-    table = dynamodb.Table(os.getenv('DYNAMODB_TABLE')) 
+    try:
+        data, _, _ = pred_service.predict(file_name, bucket_name)
+        result = {
+            "numKicks": int(data.numKicks),
+            "totalFMDuration": float(data.totalFMDuration),
+            "totalNonFMDuration": float(data.totalNonFMDuration),
+            "medianOnsetInterval_s": float(np.median(data.onsetInterval) if data.numKicks > 0 else 0),
+        }
+        result = convert_floats_to_decimal(result)
+    
+    except Exception as e:
+        LOGGER.error(f"Error running inference job: {e}")
+        update_item_in_dynamodb(table, s3_path, time_stamp, {"status": "Failed", "result": str(e)})
+        return
+    
     # Store the result in DynamoDB or S3 after completion
-    table.put_item(Item={"job_id": job_id, "fileName": filename, "timeStamp": timestamp, "result": prediction})
+    update_item_in_dynamodb(table, s3_path, time_stamp, {"status": "Completed", "result": result})
     LOGGER.info(f"DB insertion success for {job_id = }")
 
 
@@ -78,33 +118,11 @@ async def ping():
 @app.post("/invocations")
 async def transformation(data: RequestData, background_tasks: BackgroundTasks):
     # Validate and extract S3 path
-    if not data.s3_path:
+    if not data.s3Key:
         raise HTTPException(status_code=400, detail="S3 path to .dat file must be provided")
-
-    dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_DEFAULT_REGION', 'eu-north-1'))
-    table = dynamodb.Table(os.getenv('DYNAMODB_TABLE'))
-
-    # Case 1: No job_id provided - initiate a new job
-    if data.job_id is None:
-        job_id, timestamp = generate_uuid_and_timestamp()
-        background_tasks.add_task(run_inference_job, job_id, timestamp, data.s3_path)
-        LOGGER.info(f"Started new job with job_id: {job_id}")
-        return {"message": "Job started, completion in ~120 seconds", "job_id": job_id}
-
-    # Case 2: job_id provided - fetch the result from DynamoDB
-    try:
-        response = table.get_item(Key={'job_id': data.job_id}, ConsistentRead=True)
-        LOGGER.debug(f"DynamoDB response for job_id {data.job_id}: {response}")
-    except Exception as e:
-        LOGGER.error(f"Error fetching from DynamoDB for job_id {data.job_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-    # Check if item exists in the response
-    if 'Item' in response:
-        LOGGER.info(f"Result found for job_id: {data.job_id}")
-        item = response['Item']
-        return {"message": "Job completed", "job_id": data.job_id, "fileName": item.get('fileName'), "result": item.get('result')}
     
-    # If no item found, return 404
-    LOGGER.warning(f"No result found for job_id: {data.job_id}")
-    raise HTTPException(status_code=404, detail=f"Result not found for job_id: {data.job_id}")
+    table.put_item(Item={"s3Key": data.s3Key, "timeStamp": data.timeStamp, "jobId": data.jobId, "status": "InProgress"})
+    background_tasks.add_task(run_inference_job, data.jobId, data.timeStamp, data.s3Key)
+    LOGGER.info(f"Started new job with job_id: {data.jobId}")
+    return {"message": "Job started, completion in ~120 seconds",
+            "s3Key":data.s3Key, "timeStamp": data.timeStamp, "jobId": data.jobId}

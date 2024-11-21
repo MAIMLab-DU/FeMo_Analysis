@@ -31,7 +31,7 @@ pip install $SCRIPT_DIR/../.[sagemaker] -q
 
 echo "Starting Pipeline Execution"
 export PYTHONUNBUFFERED=TRUE
-python run_pipeline.py --module-name pipeline \
+python $SCRIPT_DIR/run_pipeline.py --module-name pipeline \
         --role-arn $SAGEMAKER_PIPELINE_ROLE_ARN \
         --tags "[{\"Key\":\"sagemaker:project-name\", \"Value\":\"${SAGEMAKER_PROJECT_NAME}\"}]" \
         --kwargs "{\"region\":\"${AWS_DEFAULT_REGION}\",\"role\":\"${SAGEMAKER_PIPELINE_ROLE_ARN}\",\"default_bucket\":\"${SAGEMAKER_ARTIFACT_BUCKET}\",\"pipeline_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"model_package_group_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"base_job_prefix\":\"${SAGEMAKER_PROJECT_NAME}\",\"local_mode\":\"${LOCAL_MODE}\"}"

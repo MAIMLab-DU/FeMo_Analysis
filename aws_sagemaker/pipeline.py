@@ -418,9 +418,7 @@ def get_pipeline(
         sagemaker_session=sagemaker_session,
         predictor_cls=Predictor,
         env={
-            "MODEL_SERVER_TIMEOUT": "300",
-            "DYNAMODB_TABLE": os.getenv("DYNAMODB_TABLE"),
-            "AWS_DEFAULT_REGION": os.getenv("AWS_DEFAULT_REGION", "eu-north-1")
+            "MODEL_SERVER_TIMEOUT": "300"
         }
     )
 

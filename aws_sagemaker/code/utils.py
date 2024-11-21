@@ -1,17 +1,5 @@
-import uuid
 from urllib.parse import urlparse
 from decimal import Decimal
-from datetime import datetime
-
-
-def generate_uuid_and_timestamp():
-    # Generate a UUID
-    generated_uuid = str(uuid.uuid4())
-
-    # Get the current timestamp in ISO format
-    current_timestamp = datetime.now().isoformat()
-
-    return generated_uuid, current_timestamp
 
 
 def convert_floats_to_decimal(data):

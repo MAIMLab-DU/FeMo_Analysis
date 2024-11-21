@@ -82,7 +82,10 @@ def main():
         if not args.kwargs.get('local_mode', False):
             LOGGER.info(f"Execution started with PipelineExecutionArn: {execution.arn}")
             LOGGER.info("Waiting for the execution to finish...")
-            execution.wait()
+            execution.wait(
+                delay=600,
+                max_attempts=72
+            )
             LOGGER.info("Execution completed. Execution step details:")
 
         pipeline_steps = execution.list_steps()
