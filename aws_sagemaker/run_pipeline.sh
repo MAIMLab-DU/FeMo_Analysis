@@ -6,16 +6,16 @@ VIRTUAL_ENV=.venv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 local_mode=false
-belt_type="A"
+manifest_file=""
 
 # Function to display help
 function show_help {
-  echo "Usage: $0 [-l|--local-mode] -b <belt_type> [-h|--help]"
+  echo "Usage: $0 [-l|--local-mode] -m <manifest_file> [-h|--help]"
   echo
   echo "Options:"
   echo "  -l, --local-mode           Upload the configuration file to S3 before downloading it."
-  echo "  -b <belt_type>, --belt-type <belt_type>"
-  echo "                             Data used for specific belt type (A, B, or C) (defaults to 'A')."
+  echo "  -m <manifest_file>, --manifest-file <belt_type>"
+  echo "                             Path to the dataManifest file."
   echo "  -h, --help             Show this help message and exit."
   echo
 }
@@ -27,8 +27,8 @@ while [[ $# -gt 0 ]]; do
       local_mode=true  # Set the upload flag to true
       shift
       ;;
-    -b|--belt-type)
-      belt_type="$2"  # Set CONFIG_S3_PATH to the next argument
+    -m|--manifest-file)
+      manifest_file="$2"  # Set CONFIG_S3_PATH to the next argument
       shift
       shift
       ;;
@@ -45,6 +45,13 @@ done
 
 echo "Local mode: $local_mode"
 # Create/Update the SageMaker Pipeline and wait for the execution to be completed
+if [[ -z "${manifest_file}" ]]; then
+  echo "Data manifest file path is required."
+  exit 1
+fi
+
+belt_type=$(jq -r '.beltType // "A"' "${manifest_file}")
+echo "Belt type: $belt_type"
 
 # Set up virtual env
 virtualenv -p python3 $VIRTUAL_ENV
@@ -56,7 +63,7 @@ pip install $SCRIPT_DIR/../.[sagemaker] -q
 echo "Starting Pipeline Execution"
 export PYTHONUNBUFFERED=TRUE
 
-python $SCRIPT_DIR/run_pipeline.py --module-name pipeline --belt-type $belt_type \
+python $SCRIPT_DIR/run_pipeline.py --module-name pipeline --manifest-file $manifest_file --belt-type $belt_type \
         --role-arn $SAGEMAKER_PIPELINE_ROLE_ARN \
         --tags "[{\"Key\":\"sagemaker:project-name\", \"Value\":\"${SAGEMAKER_PROJECT_NAME}\"}, {\"Key\":\"femo:belt-type\", \"Value\":\"$belt_type\"}]" \
         --kwargs "{\"region\":\"${AWS_DEFAULT_REGION}\",\"role\":\"${SAGEMAKER_PIPELINE_ROLE_ARN}\",\"default_bucket\":\"${SAGEMAKER_ARTIFACT_BUCKET}\",\"pipeline_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"model_package_group_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"base_job_prefix\":\"${SAGEMAKER_PROJECT_NAME}\",\"local_mode\":\"${local_mode}\"}"
