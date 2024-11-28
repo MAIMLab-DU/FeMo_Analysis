@@ -17,7 +17,7 @@ def parse_args():
     parser.add_argument("--data-manifest", type=str, required=True, help="Path to data manifest json file")
     parser.add_argument("--results-path", type=str, required=True, help="Path to file containing prediction results")
     parser.add_argument("--metadata-path", type=str, required=True, help="Path to file containing prediction metadata")
-    parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"), help="Path to config file")
+    parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/dataset-cfg_beltA.yaml"), help="Path to config file")
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--out-filename", type=str, default="performance.csv", help="Metrics output filename")

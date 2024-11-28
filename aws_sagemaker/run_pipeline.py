@@ -29,6 +29,15 @@ def main():
         help="The module name of the pipeline to import.",
     )
     parser.add_argument(
+        "-b",
+        "--belt-type",
+        dest="belt_type",
+        type=str,
+        choices=["A", "B", "C"],
+        default="A",
+        help="Data used for specific belt type (A, B, or C).",
+    )
+    parser.add_argument(
         "-kwargs",
         "--kwargs",
         dest="kwargs",
@@ -93,11 +102,9 @@ def main():
 
         if not args.kwargs.get('local_mode', False):
             model_package_name = get_model_package_name(pipeline_steps)
-            with open("pipelineExecution.json", "w") as f:
+            json_filename = f"piplineExecution_belt{args.belt_type}.json"
+            with open(json_filename, "w") as f:
                 json.dump({"arn": model_package_name}, f, indent=2)
-        # out_file = open("pipelineExecutionArn", "w")
-        # out_file.write(model_package_name)
-        # out_file.close()
                 
     except Exception as e:
         LOGGER.exception(e)

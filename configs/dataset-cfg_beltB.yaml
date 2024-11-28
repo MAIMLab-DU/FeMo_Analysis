@@ -1,11 +1,12 @@
 data_pipeline:
   base: &base
+    belt_type: 'B'
     sensor_freq: 1024
     sensation_freq: 1024
     sensor_selection:
       - 'accelerometer'
       - 'piezoelectric_small'
-      - 'piezoelectric_large'
+      - 'acoustic'
   load:
     <<: *base   # Merge base dictionary
   preprocess:

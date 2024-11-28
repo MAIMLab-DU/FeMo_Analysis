@@ -2,19 +2,17 @@ import os
 from ...logger import LOGGER
 import struct
 import pandas as pd
+from femo import BeltTypes
+from typing import Literal
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 
 class BaseTransform(ABC):
 
     @property
     def sensor_map(self):
-        return {
-            'accelerometer': ['sensor_1', 'sensor_2'],
-            'piezoelectric_large': ['sensor_3', 'sensor_6'],
-            'piezoelectric_small': ['sensor_4', 'sensor_5']
-        }
+        return asdict(BeltTypes[self._belt_type].value, dict_factory=lambda x: {k: v for (k, v) in x if v is not None})
     
     @property
     def scheme_map(self):
@@ -61,11 +59,13 @@ class BaseTransform(ABC):
     def __init__(self,
                  sensor_freq: int = 1024,
                  sensation_freq: int = 1024,
+                 belt_type: Literal['A', 'B', 'C'] = 'A',
                  sensor_selection: list = ['accelerometer', 
                                            'piezoelectric_small', 
                                            'piezoelectric_large']) -> None:
         super().__init__()
 
+        self._belt_type = belt_type
         self._sensor_selection = sensor_selection
         self._sensor_freq = sensor_freq
         self._sensation_freq = sensation_freq
