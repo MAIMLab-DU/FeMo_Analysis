@@ -58,4 +58,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ env.version }}" --title "v${{ env.version }}" --notes "Automated release for version v${{ env.version }}"
+          gh release create "v${{ env.version }}" --title "v${{ env.version }}" --generate-notes
