@@ -32,11 +32,12 @@ jobs:
           version=$(grep '^__version__' femo/__init__.py | cut -d '"' -f 2)
           echo "Version found: $version"
           echo "version=$version" >> $GITHUB_ENV
-      
+
       - name: Check and increment pre-release tag
         id: check_prerelease
         run: |
-          # Get the latest pre-release tags
+          # Get the latest pre-release tags from the remote
+          git fetch --tags
           latest_rc=$(git tag -l "${{ env.version }}rc*" | sort -V | tail -n 1)
           if [ -z "$latest_rc" ]; then
             n=1
@@ -51,7 +52,9 @@ jobs:
       - name: Check for existing tag
         id: check_tag
         run: |
-          if git tag -l | grep "v${{ env.version }}"; then
+          # Fetch remote tags before checking
+          git fetch --tags
+          if git tag -l | grep -q "v${{ env.version }}"; then
             echo "Tag v${{ env.version }} already exists."
             echo "tag_exists=true" >> $GITHUB_ENV
           else
