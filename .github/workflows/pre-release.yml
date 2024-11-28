@@ -55,6 +55,7 @@ jobs:
             echo "Tag v${{ env.version }} already exists."
             echo "tag_exists=true" >> $GITHUB_ENV
           else
+            echo "Tag v${{ env.version }} does not exist"
             echo "tag_exists=false" >> $GITHUB_ENV
           fi
 
