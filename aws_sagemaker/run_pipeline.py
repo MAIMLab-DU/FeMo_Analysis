@@ -34,6 +34,7 @@ def main():
         dest="belt_type",
         type=str,
         choices=["A", "B", "C"],
+        default="A",
         help="Data used for specific belt type (A, B, or C).",
     )
     parser.add_argument(
@@ -72,10 +73,6 @@ def main():
         sys.exit(2)
     tags = convert_struct(args.tags)
     args.kwargs = convert_struct(args.kwargs)
-    if args.belt_type and 'pipeline_name' in args.kwargs:
-        args.kwargs['pipeline_name'] = args.kwargs['pipeline_name'] + '_belt' + args.belt_type
-    
-    LOGGER.info(f"{args.kwargs['pipeline_name'] = }")
 
     try:
         LOGGER.info(f"Local mode: {args.kwargs.get('local_mode', False)}")
@@ -105,7 +102,7 @@ def main():
 
         if not args.kwargs.get('local_mode', False):
             model_package_name = get_model_package_name(pipeline_steps)
-            json_filename = f"piplineExecution_belt{args.belt_type}.json" if args.belt_type else "piplineExecution.json"
+            json_filename = f"piplineExecution_belt{args.belt_type}.json"
             with open(json_filename, "w") as f:
                 json.dump({"arn": model_package_name}, f, indent=2)
                 
