@@ -139,7 +139,7 @@ def get_pipeline(
         role=role,
     )
 
-    manifest_path = os.path.join(PROC_DIR, "input", "dataManifest/dataManifest.json")
+    manifest_path = os.path.join(PROC_DIR, "input", f"dataManifest/dataManifest_belt{belt_type}.json")
     feat_args = ["--data-manifest", manifest_path,
                  "--work-dir", os.path.join(PROC_DIR, "output"),
                  "--config-path", os.path.join(PROC_DIR, "input", f"config/dataset-cfg_belt{belt_type}.yaml")]
@@ -154,7 +154,7 @@ def get_pipeline(
                             source=os.path.join(BASE_DIR, "..", f"configs/dataset-cfg_belt{belt_type}.yaml"),
                             destination=os.path.join(PROC_DIR, "input", "config")),
             ProcessingInput(input_name="dataManifest",
-                            source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
+                            source=os.path.join(BASE_DIR, "..", f"configs/dataManifest_belt{belt_type}.json"),
                             destination=os.path.join(PROC_DIR, "input", "dataManifest")),                
         ],
         outputs=[
@@ -189,7 +189,7 @@ def get_pipeline(
     train_cfg_path = os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")
 
     step_process = ProcessingStep(
-        name="ProcessData",
+        name="ProcessFeatures",
         processor=script_process,
         inputs=[
             ProcessingInput(input_name="features",
@@ -207,13 +207,13 @@ def get_pipeline(
         outputs=[
             ProcessingOutput(output_name="dataset", source=os.path.join(PROC_DIR, "output", "dataset"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output", "dataset"]) if local_mode else None),
+                                                              "local_run", "ProcessFeatures", "output", "dataset"]) if local_mode else None),
             ProcessingOutput(output_name="processor", source=os.path.join(PROC_DIR, "output", "processor"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output", "processor"]) if local_mode else None),
+                                                              "local_run", "ProcessFeatures", "output", "processor"]) if local_mode else None),
             ProcessingOutput(output_name="train_config", source=os.path.join(PROC_DIR, "output", "train_config"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output", "train_config"]) if local_mode else None)
+                                                              "local_run", "ProcessFeatures", "output", "train_config"]) if local_mode else None)
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "process.py"),
         job_arguments=preproc_args,
@@ -293,7 +293,7 @@ def get_pipeline(
             ),
             ProcessingInput(
                 input_name="dataManifest",
-                source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
+                source=os.path.join(BASE_DIR, "..", f"configs/dataManifest_belt{belt_type}.json"),
                 destination=os.path.join(PROC_DIR, "input", "dataManifest")
             ),
             ProcessingInput(
