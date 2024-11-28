@@ -139,7 +139,7 @@ def get_pipeline(
         role=role,
     )
 
-    manifest_path = os.path.join(PROC_DIR, "input", "dataManifest/dataManifest.json")
+    manifest_path = os.path.join(PROC_DIR, "input", f"dataManifest/dataManifest_belt{belt_type}.json")
     feat_args = ["--data-manifest", manifest_path,
                  "--work-dir", os.path.join(PROC_DIR, "output"),
                  "--config-path", os.path.join(PROC_DIR, "input", f"config/dataset-cfg_belt{belt_type}.yaml")]
@@ -154,7 +154,7 @@ def get_pipeline(
                             source=os.path.join(BASE_DIR, "..", f"configs/dataset-cfg_belt{belt_type}.yaml"),
                             destination=os.path.join(PROC_DIR, "input", "config")),
             ProcessingInput(input_name="dataManifest",
-                            source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
+                            source=os.path.join(BASE_DIR, "..", f"configs/dataManifest_belt{belt_type}.json"),
                             destination=os.path.join(PROC_DIR, "input", "dataManifest")),                
         ],
         outputs=[
@@ -293,7 +293,7 @@ def get_pipeline(
             ),
             ProcessingInput(
                 input_name="dataManifest",
-                source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
+                source=os.path.join(BASE_DIR, "..", f"configs/dataManifest_belt{belt_type}.json"),
                 destination=os.path.join(PROC_DIR, "input", "dataManifest")
             ),
             ProcessingInput(
