@@ -29,6 +29,14 @@ def main():
         help="The module name of the pipeline to import.",
     )
     parser.add_argument(
+        "-m",
+        "--manifest-file",
+        dest="manifest_file",
+        type=str,
+        required=True,
+        help="Path to data manifest file (json)",
+    )
+    parser.add_argument(
         "-b",
         "--belt-type",
         dest="belt_type",
@@ -68,11 +76,13 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.module_name is None or args.role_arn is None:
+    if args.module_name is None or args.role_arn is None or args.manifest_file is None:
         parser.print_help()
         sys.exit(2)
     tags = convert_struct(args.tags)
     args.kwargs = convert_struct(args.kwargs)
+    args.kwargs['belt_type'] = args.belt_type
+    args.kwargs['manifest_file'] = args.manifest_file
 
     try:
         LOGGER.info(f"Local mode: {args.kwargs.get('local_mode', False)}")

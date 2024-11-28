@@ -38,7 +38,7 @@ jobs:
         run: |
           # Get the latest pre-release tags from the remote
           git fetch --tags
-          latest_rc=$(git tag -l "${{ env.version }}rc*" | sort -V | tail -n 1)
+          latest_rc=$(git tag -l "v${{ env.version }}rc*" | sort -V | tail -n 1)
           if [ -z "$latest_rc" ]; then
             n=1
           else

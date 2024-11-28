@@ -92,6 +92,7 @@ def get_session(region, default_bucket, local_mode=False):
 
 def get_pipeline(
     region,
+    manifest_file: str,
     role=None,
     default_bucket=None,
     belt_type: Literal["A", "B", "C"] = "A",
@@ -112,6 +113,7 @@ def get_pipeline(
     """
 
     pipeline_name = pipeline_name + "_belt" + belt_type
+    assert manifest_file.endswith('.json'), "Must be a path to manifest.json file"
 
     sagemaker_session = get_session(region, default_bucket, local_mode)
     if role is None:
@@ -139,7 +141,7 @@ def get_pipeline(
         role=role,
     )
 
-    manifest_path = os.path.join(PROC_DIR, "input", f"dataManifest/dataManifest_belt{belt_type}.json")
+    manifest_path = os.path.join(PROC_DIR, "input", "dataManifest", os.path.basename(manifest_file))
     feat_args = ["--data-manifest", manifest_path,
                  "--work-dir", os.path.join(PROC_DIR, "output"),
                  "--config-path", os.path.join(PROC_DIR, "input", f"config/dataset-cfg_belt{belt_type}.yaml")]
@@ -154,7 +156,7 @@ def get_pipeline(
                             source=os.path.join(BASE_DIR, "..", f"configs/dataset-cfg_belt{belt_type}.yaml"),
                             destination=os.path.join(PROC_DIR, "input", "config")),
             ProcessingInput(input_name="dataManifest",
-                            source=os.path.join(BASE_DIR, "..", f"configs/dataManifest_belt{belt_type}.json"),
+                            source=manifest_file,
                             destination=os.path.join(PROC_DIR, "input", "dataManifest")),                
         ],
         outputs=[
@@ -293,7 +295,7 @@ def get_pipeline(
             ),
             ProcessingInput(
                 input_name="dataManifest",
-                source=os.path.join(BASE_DIR, "..", f"configs/dataManifest_belt{belt_type}.json"),
+                source=manifest_file,
                 destination=os.path.join(PROC_DIR, "input", "dataManifest")
             ),
             ProcessingInput(
