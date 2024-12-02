@@ -1,6 +1,6 @@
 """A CLI to create or update and run pipelines."""
 from __future__ import absolute_import
-
+import os
 import argparse
 import json
 import sys
@@ -27,6 +27,14 @@ def main():
         dest="module_name",
         type=str,
         help="The module name of the pipeline to import.",
+    )
+    parser.add_argument(
+        "-w",
+        "--work-dir",
+        dest="work_dir",
+        type=str,
+        default="./",
+        help="The directory to save the pipelineExecution json file.",
     )
     parser.add_argument(
         "-m",
@@ -112,7 +120,7 @@ def main():
 
         if not args.kwargs.get('local_mode', False):
             model_package_name = get_model_package_name(pipeline_steps)
-            json_filename = f"piplineExecution_belt{args.belt_type}.json"
+            json_filename = os.path.join(args.work_dir, f"piplineExecution_belt{args.belt_type}.json")
             with open(json_filename, "w") as f:
                 json.dump({"arn": model_package_name}, f, indent=2)
                 
