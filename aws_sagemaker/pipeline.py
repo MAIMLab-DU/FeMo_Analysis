@@ -113,6 +113,7 @@ def get_pipeline(
     """
 
     pipeline_name = pipeline_name + "-belt" + belt_type
+    model_package_group_name = model_package_group_name + '-belt' + belt_type
     assert manifest_file.endswith('.json'), "Must be a path to manifest.json file"
 
     sagemaker_session = get_session(region, default_bucket, local_mode)
