@@ -34,6 +34,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       show_help  # Display help and exit
+      exit
       ;;
     *)
       echo "Invalid option: $1" >&2
@@ -52,6 +53,13 @@ fi
 
 belt_type=$(jq -r '.beltType // "A"' "${manifest_file}")
 echo "Belt type: $belt_type"
+items_count=$(jq '.items | length' "$manifest_file")
+if [[ "$items_count" -le 0 ]]; then
+    echo "Items array is empty, skipping pipeline run for Belt Type: $belt_type"
+    output_file="$SCRIPT_DIR/pipelineExecution_belt$belt_type.json"
+    echo '{"arn": "NotTrained"}' > "$output_file"
+    exit 0
+fi
 
 # Set up virtual env
 virtualenv -p python3 $VIRTUAL_ENV
