@@ -110,8 +110,8 @@ def main():
             LOGGER.info(f"Execution started with PipelineExecutionArn: {execution.arn}")
             LOGGER.info("Waiting for the execution to finish...")
             execution.wait(
-                delay=600,
-                max_attempts=72
+                delay=300,
+                max_attempts=132
             )
             LOGGER.info("Execution completed. Execution step details:")
 
