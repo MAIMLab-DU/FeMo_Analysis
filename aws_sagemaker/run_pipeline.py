@@ -120,7 +120,7 @@ def main():
 
         if not args.kwargs.get('local_mode', False):
             model_package_name = get_model_package_name(pipeline_steps)
-            json_filename = os.path.join(args.work_dir, f"piplineExecution_belt{args.belt_type}.json")
+            json_filename = os.path.join(args.work_dir, f"pipelineExecution_belt{args.belt_type}.json")
             with open(json_filename, "w") as f:
                 json.dump({"arn": model_package_name}, f, indent=2)
                 
