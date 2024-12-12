@@ -21,7 +21,7 @@ data_pipeline:
     fm_dilation: 3.0
     fm_min_sn: 40
     fm_signal_cutoff: 0.0001
-  fuse:
+  fusion:
     <<: *base   # Merge base dictionary
     desired_scheme: 1
   extract_det:
