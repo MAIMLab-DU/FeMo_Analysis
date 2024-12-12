@@ -10,6 +10,7 @@ class BeltConfig:
     piezoelectric_large: Optional[list] = None
     piezoelectric_small: Optional[list] = None
     acoustic: Optional[list] = None
+    other: Optional[list] = None
 
 class BeltTypes(Enum):
     A = BeltConfig(
@@ -26,6 +27,11 @@ class BeltTypes(Enum):
         accelerometer=['sensor_1', 'sensor_2'],
         piezoelectric_large=['sensor_3', 'sensor_6'],
         acoustic=['sensor_4', 'sensor_5']
+    )
+    AC = BeltConfig(
+        accelerometer=['sensor_1', 'sensor_2'],
+        piezoelectric_large=['sensor_3', 'sensor_6'],
+        other=['sensor_4', 'sensor_5']
     )
 
 __all__ = (

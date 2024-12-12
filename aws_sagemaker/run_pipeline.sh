@@ -51,7 +51,7 @@ if [[ -z "${manifest_file}" ]]; then
   exit 1
 fi
 
-belt_type=$(jq -r '.beltType // "A"' "${manifest_file}")
+belt_type=$(jq -r '.beltType // "AC"' "${manifest_file}")
 echo "Belt type: $belt_type"
 items_count=$(jq '.items | length' "$manifest_file")
 if [[ "$items_count" -le 0 ]]; then

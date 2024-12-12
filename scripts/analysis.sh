@@ -75,7 +75,7 @@ if [[ -z "${manifest_file}" ]]; then
     show_help
     exit 1
 fi
-belt_type=$(jq -r '.beltType // "A"' "${manifest_file}")
+belt_type=$(jq -r '.beltType // "AC"' "${manifest_file}")
 belt_config_path="$SCRIPT_DIR/../configs/dataset-cfg_belt$belt_type.yaml"
 belt_config_path="$(realpath "$belt_config_path")"
 
