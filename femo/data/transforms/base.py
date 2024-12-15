@@ -33,7 +33,7 @@ class BaseTransform(ABC):
         return LOGGER
     
     @property
-    def sensor_selection(self) -> dict:
+    def sensor_selection(self) -> list:
         return self._sensor_selection
     
     @property
@@ -46,7 +46,15 @@ class BaseTransform(ABC):
     
     @property
     def sensors(self) -> list:
-        return sorted([item for s in self.sensor_selection for item in self.sensor_map[s]])
+        sensors = []
+        for s in self.sensor_selection:
+            if '_left' in s or '_right' in s:
+                key, side = s.rsplit('_', 1)
+                index = 0 if side == 'left' else 1
+                sensors.append(self.sensor_map[key][index])
+            else:
+                sensors.extend(self.sensor_map[s])
+        return sorted(sensors)
 
     @property
     def num_sensors(self) -> int:
