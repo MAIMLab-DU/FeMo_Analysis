@@ -16,11 +16,11 @@ data_pipeline:
     sensor_selection:
       - 'piezoelectric_large'
   load:
-    <<: *base   # Merge base dictionary
+    <<: *base
   preprocess:
-    <<: *base   # Merge base dictionary
+    <<: *base
   segment:
-    <<: *base   # Merge base dictionary
+    <<: *base
     imu_acceleration_threshold: 0.2
     imu_rotation_threshold: 4
     maternal_dilation_forward: 2.0
@@ -30,12 +30,12 @@ data_pipeline:
     fm_min_sn: 40
     fm_signal_cutoff: 0.0001
   fusion:
-    <<: *base   # Merge base dictionary
-    desired_scheme: 1
+    <<: *base
+    desired_scheme: ['type', 1]
   extract_det:
-    <<: *base   # Merge base dictionary
+    <<: *base
   extract_feat:
-    <<: *base   # Merge base dictionary
+    <<: *base
     freq_mode_threshold: 1
     freq_bands:
       - [1, 2]

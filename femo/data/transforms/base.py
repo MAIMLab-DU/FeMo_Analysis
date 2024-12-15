@@ -11,20 +11,6 @@ class BaseTransform(ABC):
     @property
     def sensor_map(self):
         return self._sensor_map
-    
-    @property
-    def scheme_map(self):
-        return {
-            0: ['type', 1],
-            1: ['type', 2],
-            2: ['type', 3],
-            3: ['number', 1],
-            4: ['number', 2],
-            5: ['number', 3],
-            6: ['number', 4],
-            7: ['number', 5],
-            8: ['number', 6]
-        }
 
     @property
     def logger(self):

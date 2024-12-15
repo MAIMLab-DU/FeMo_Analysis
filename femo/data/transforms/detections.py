@@ -47,7 +47,7 @@ class DetectionExtractor(BaseTransform):
         num_dets = scheme_dict['num_labels']
         labeled_user_scheme = scheme_dict['labeled_user_scheme']
         num_tp_dets = len(np.unique(labeled_user_scheme * sensation_map)) - 1
-        num_fp_dets = num_dets - num_tp_dets
+        num_dets - num_tp_dets
         preprocessed_sensor_data = [preprocessed_data[key] for key in self.sensors]
 
         tp_detections_indices = []
@@ -68,7 +68,6 @@ class DetectionExtractor(BaseTransform):
             indv_window[label_start:label_end] = 1
 
             # Used to calculate 'weightage', unused in legacy code
-            tmp_var = 0
             if self.use_all_sensors:
                 pass
 
