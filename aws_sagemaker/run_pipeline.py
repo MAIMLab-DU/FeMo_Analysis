@@ -49,8 +49,8 @@ def main():
         "--belt-type",
         dest="belt_type",
         type=str,
-        choices=["A", "B", "C"],
-        default="A",
+        choices=["A", "B", "C", "AC"],
+        default="AC",
         help="Data used for specific belt type (A, B, or C).",
     )
     parser.add_argument(

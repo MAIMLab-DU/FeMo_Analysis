@@ -95,7 +95,7 @@ def get_pipeline(
     manifest_file: str,
     role=None,
     default_bucket=None,
-    belt_type: Literal["A", "B", "C"] = "A",
+    belt_type: Literal["A", "B", "C", "AC"] = "AC",
     model_package_group_name="FeMoModelPackageGroup",
     pipeline_name="FeMoPipeline",
     base_job_prefix="FeMo",
