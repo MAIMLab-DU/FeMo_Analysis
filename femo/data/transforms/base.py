@@ -2,17 +2,15 @@ import os
 from ...logger import LOGGER
 import struct
 import pandas as pd
-from femo import BeltTypes
-from typing import Literal
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 
 class BaseTransform(ABC):
 
     @property
     def sensor_map(self):
-        return asdict(BeltTypes[self._belt_type].value, dict_factory=lambda x: {k: v for (k, v) in x if v is not None})
+        return self._sensor_map
     
     @property
     def scheme_map(self):
@@ -65,19 +63,26 @@ class BaseTransform(ABC):
         return True if len(self.sensor_selection) == len(self.sensor_map) else False
     
     def __init__(self,
+                 description: str = "Only large piezos from belt types 'A' and 'C'",
                  sensor_freq: int = 1024,
                  sensation_freq: int = 1024,
-                 belt_type: Literal['A', 'B', 'C'] = 'A',
-                 sensor_selection: list = ['accelerometer', 
-                                           'piezoelectric_small', 
-                                           'piezoelectric_large']) -> None:
+                 sensor_map: dict = {
+                     'accelerometer': ['sensor_1', 'sensor_2'],
+                     'piezoelectric_large': ['sensor_3', 'sensor_6'],
+                     'other': ['sensor_4', 'sensor_5']
+                 },
+                 sensor_selection: list = ['piezoelectric_large']) -> None:
         super().__init__()
 
-        self._belt_type = belt_type
+        self._description = description
+        self._sensor_map = sensor_map
         self._sensor_selection = sensor_selection
         self._sensor_freq = sensor_freq
         self._sensation_freq = sensation_freq
     
+    def __repr__(self):
+        return self._description
+
     def __call__(self, *args, **kwargs):
         return self.transform(*args, **kwargs)
     
