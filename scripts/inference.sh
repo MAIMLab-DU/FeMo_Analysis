@@ -1,72 +1,112 @@
 #!/bin/bash
 set -e
 
+# Record the start time
 start_time="$(date +%s)"
-SCRIPT_DIR="scripts"
+VIRTUAL_ENV=.venv
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+data_filename=""
+repacked_model=""
+perf_filename="meta_info.xlsx"
+work_dir="$SCRIPT_DIR/../work_dir/inference"
 
-# Process the positional arguments
-while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        *)
-            # Store the positional arguments (DATA_FILENAME, output_file, run_dir, ckpt_name)
-            if [ -z "$DATA_FILENAME" ]; then
-                DATA_FILENAME="$1"
-            elif [ -z "$CKPT_NAME" ]; then
-                CKPT_NAME="$1"
-            elif [ -z "$PARAMS_DICT" ]; then
-                PARAMS_DICT="$1"
-            elif [ -z "$PERF_FILE" ]; then
-                PERF_FILE="$1"
-            elif [ -z "$RUN_DIR" ]; then
-                RUN_DIR="$1"
-            else
-                echo "Unknown option or too many arguments: $1"
-                exit 1
-            fi
-            shift # Remove the argument from the list
-            ;;
-    esac
+# Function to display help
+function show_help {
+  echo "Usage: $0 -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-p|--perf-filename] [-h|--help]"
+  echo
+  echo "Options:"
+  echo "  -d <data_filename>, --data-filename"
+  echo "                             Path to log data file (.dat)."
+  echo "  -m <repacked_model>, --repacked-model"
+  echo "                             Path to repacked model file (.tar.gz)."
+  echo "  -p <perf_filename>, --perf-filename"
+  echo "                             Performance csv filename."
+  echo "  -w <work_dir>, --work-dir" 
+  echo "                             Project working directory."
+  echo "  -r <run_name>, --run-name"
+  echo "                             Name of a specific run."
+  echo "  -h, --help             Show this help message and exit."
+  echo
+}
+
+# Parse command-line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -d|--data-filename)
+      data_filename="$2"
+      shift
+      shift
+      ;;
+    -m|--repacked-model)
+      repacked_model="$2"
+      shift
+      shift
+      ;;
+    -p|--perf-filename)
+      perf_filename="$2"
+      shift
+      shift
+      ;;
+    -w|--work-dir)
+      work_dir="$2"
+      shift
+      shift
+      ;;
+    -r|--run-name)
+      run_name="$2"
+      shift
+      shift
+      ;;
+    -h|--help)
+      show_help  # Display help and exit
+      exit
+      ;;
+    *)
+      echo "Invalid option: $1" >&2
+      echo "Use -h or --help for usage information."
+      exit 1
+      ;;
+  esac
 done
 
-# Check if the required positional arguments are provided
-if [ -z "$DATA_FILENAME" ] || [ -z "$CKPT_NAME" ]; then
-    echo "Usage: $0 <data_filename> <ckpt_name> <params_dict> [output_file] [run_dir]"
+# Check if the required arguments are provided
+if [[ -z "$repacked_model" ]]; then
+    show_help
     exit 1
 fi
 
-# Set defaults for optional arguments if not provided
-PERF_FILE=${PERF_FILE:-"meta_info.xlsx"}
-WORK_DIR=${WORK_DIR:-"./work_dir"}
-
-# Create the $WORK_DIR directory if it doesn't exist
-mkdir -p "$WORK_DIR"
-
-# Create the next run directory
-if [ -z "$RUN_DIR" ]; then
-    RUN_DIR="$WORK_DIR/inference"
+# Create the work directory and determine the run directory
+mkdir -p "$work_dir"
+if [[ -z "${run_name}" ]]; then    
+    run_dir="$work_dir"
+else
+    run_dir="$work_dir/$run_name"
 fi
-mkdir -p "$RUN_DIR"
+mkdir -p "$run_dir"
 
-# Output the created run directory and the DATA_FILENAME and CKPT_NAME
-echo "Created run directory: $RUN_DIR"
-echo "Data filename: $DATA_FILENAME"
-echo "Checkpoint name: $CKPT_NAME"
-echo "Parameters dict: $PARAMS_DICT"
-echo "Performance file: $PERF_FILE"
+# Output the run directory
+echo "Saving inference results to: $run_dir"
 
-VIRTUAL_ENV=.venv
-# Set up virtual env
+# Create a temporary directory inside run_dir
+TEMP_DIR=$(mktemp -d "$run_dir/temp.XXXXXX")
+# Ensure the temporary directory is removed upon script exit
+trap "rm -rf '$TEMP_DIR';" EXIT
+
+# Set up virtual environment
 virtualenv -p python3.10 $VIRTUAL_ENV
-. $VIRTUAL_ENV/bin/activate
+source $VIRTUAL_ENV/bin/activate
 
 # Install requirements
-pip install -r ./requirements.txt -q
+pip install $SCRIPT_DIR/../. -q
 
-# Run inference.py
-python "./$SCRIPT_DIR/inference.py" --data-file "$DATA_FILENAME" --ckpt-file "$CKPT_NAME" --params-file "$PARAMS_DICT" --work-dir "$RUN_DIR" --outfile "$PERF_FILE"
+# Extract repacked model files to the temp directory
+tar -xzf "$repacked_model" -C "$TEMP_DIR"
+echo "Repacked model files extracted to: $TEMP_DIR"
+
+# Run inference script
+python "$SCRIPT_DIR/inference.py" --data-file "$data_filename" --model "$TEMP_DIR/model.joblib" --pipeline "$TEMP_DIR/pipeline.joblib" --processor "$TEMP_DIR/processor.joblib" --metrics "$TEMP_DIR/metrics.joblib" --work-dir "$run_dir" --outfile "$perf_filename"
 
 # Record the end time
 end_time="$(date +%s)"
-# Calculate the running time
 running_time="$((end_time - start_time)) seconds"
 echo "Total time taken: $running_time"

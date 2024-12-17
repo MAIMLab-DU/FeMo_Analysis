@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import pandas as pd
 import argparse
+from datetime import datetime
 from tqdm import tqdm
 from femo.logger import LOGGER
 from femo.inference import PredictionService
@@ -26,6 +27,7 @@ def main(args):
     LOGGER.info("Starting inference...")
 
     os.makedirs(args.work_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     if args.data_file.endswith('.dat'):
         # If it's a .dat file, store it in a list
@@ -37,7 +39,6 @@ def main(args):
             filenames = [line for line in filenames if line.endswith('.dat')]
     else:
         raise ValueError("Unsupported file format. Please provide a .dat or .txt file.")
-    LOGGER.info(f"Filenames: {filenames}")
 
     try:
         pred_service = PredictionService(
@@ -62,7 +63,8 @@ def main(args):
         )
 
         metainfo_dict = {
-            "File Name": [data.fileName],
+            "Timestamp": [timestamp],
+            "File Name": [data_filename],
             "Number of bouts per hour": [(data.numKicks*60) / (data.totalFMDuration+data.totalNonFMDuration)],
             "Mean duration of fetal movement (seconds)": [data.totalFMDuration*60/data.numKicks if data.numKicks > 0 else 0],
             "Median onset interval (seconds)": [np.median(data.onsetInterval)],
@@ -70,9 +72,9 @@ def main(args):
         }
 
         # Check if the file exists
-        if os.path.exists(args.outfile):
+        if os.path.exists(os.path.join(args.work_dir, args.outfile)):
             # If file exists, read it and append the new data
-            df_existing = pd.read_excel(args.outfile)
+            df_existing = pd.read_excel(os.path.join(args.work_dir, args.outfile))
             df_new = pd.DataFrame(metainfo_dict)
             df_combined = pd.concat([df_existing, df_new], ignore_index=True)
         else:
@@ -82,14 +84,14 @@ def main(args):
         # Write the combined DataFrame to the Excel file
         df_combined.to_excel(os.path.join(args.work_dir, args.outfile), index=False)
 
-        LOGGER.info(f"Meta info saved to {os.path.join(args.work_dir, args.outfile)}")
+        LOGGER.info(f"Meta info saved to {os.path.realpath(os.path.join(args.work_dir, args.outfile))}")
 
         LOGGER.info("Plotting the results. It may take some time....")
         
         pred_service.save_pred_plots(
             pipeline_output,
             ml_map,
-            os.path.join(args.work_dir, os.path.basename(data_filename).replace('.dat', '.png'))
+            os.path.join(args.work_dir, f"{timestamp}_{data_filename.replace('/', '-').replace('.dat', '.png')}")
         )
         
 
