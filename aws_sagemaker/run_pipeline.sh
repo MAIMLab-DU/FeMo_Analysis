@@ -14,7 +14,7 @@ function show_help {
   echo
   echo "Options:"
   echo "  -l, --local-mode           Upload the configuration file to S3 before downloading it."
-  echo "  -m <manifest_file>, --manifest-file <belt_type>"
+  echo "  -m <manifest_file>, --manifest-file"
   echo "                             Path to the dataManifest file."
   echo "  -h, --help             Show this help message and exit."
   echo
@@ -51,12 +51,10 @@ if [[ -z "${manifest_file}" ]]; then
   exit 1
 fi
 
-belt_type=$(jq -r '.beltType // "AC"' "${manifest_file}")
-echo "Belt type: $belt_type"
 items_count=$(jq '.items | length' "$manifest_file")
 if [[ "$items_count" -le 0 ]]; then
-    echo "Items array is empty, skipping pipeline run for Belt Type: $belt_type"
-    output_file="$SCRIPT_DIR/pipelineExecution_belt$belt_type.json"
+    echo "Items array is empty, skipping pipeline run"
+    output_file="$SCRIPT_DIR/pipelineExecution.json"
     echo '{"arn": "NotTrained"}' > "$output_file"
     exit 0
 fi
@@ -71,9 +69,9 @@ pip install $SCRIPT_DIR/../.[sagemaker] -q
 echo "Starting Pipeline Execution"
 export PYTHONUNBUFFERED=TRUE
 
-python $SCRIPT_DIR/run_pipeline.py --module-name pipeline --manifest-file "$manifest_file" --belt-type "$belt_type" \
+python $SCRIPT_DIR/run_pipeline.py --module-name pipeline --manifest-file "$manifest_file" --work-dir "$SCRIPT_DIR" \
         --role-arn "$SAGEMAKER_PIPELINE_ROLE_ARN" --work-dir "$SCRIPT_DIR" \
-        --tags "[{\"Key\":\"sagemaker:project-name\", \"Value\":\"${SAGEMAKER_PROJECT_NAME}\"}, {\"Key\":\"femo:belt-type\", \"Value\":\"$belt_type\"}]" \
+        --tags "[{\"Key\":\"sagemaker:project-name\", \"Value\":\"${SAGEMAKER_PROJECT_NAME}\"}]" \
         --kwargs "{\"region\":\"${AWS_DEFAULT_REGION}\",\"role\":\"${SAGEMAKER_PIPELINE_ROLE_ARN}\",\"default_bucket\":\"${SAGEMAKER_ARTIFACT_BUCKET}\",\"pipeline_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"model_package_group_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"base_job_prefix\":\"${SAGEMAKER_PROJECT_NAME}\",\"local_mode\":\"${local_mode}\"}"
 
 echo "Create/Update of the SageMaker Pipeline and execution Completed."
