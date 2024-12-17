@@ -6,21 +6,30 @@ start_time="$(date +%s)"
 VIRTUAL_ENV=.venv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+dataset_config="$SCRIPT_DIR/../configs/dataset-cfg.yaml"
+preproc_config="$SCRIPT_DIR/../configs/preprocess-cfg.yaml"
+train_config="$SCRIPT_DIR/../configs/train-cfg.yaml"
 manifest_file=""
 perf_filename="performance.csv"
-work_dir="$SCRIPT_DIR/../work_dir"
+work_dir="$SCRIPT_DIR/../work_dir/train"
 run_name=""
 force_extract=false
 
 
 # Function to display help
 function show_help {
-  echo "Usage: $0 [-f|--force-extract] -m <manifest_file> [-w|--work-dir] [-r|--run-name] [-p|--perf-filename] [-h|--help]"
+  echo "Usage: $0 [-f|--force-extract] -m <manifest_file> [-d|--dataset-cfg] [-c|preprocess-cfg] [-t|--train-cfg] [-w|--work-dir] [-r|--run-name] [-p|--perf-filename] [-h|--help]"
   echo
   echo "Options:"
   echo "  -m <manifest_file>, --manifest-file"
   echo "                             Path to the dataManifest file."
   echo "  -f, --force-extract        Force extract features."
+  echo "  -d <dataset_config>, --dataset-cfg" 
+  echo "                             Path to dataset config (default 'dataset-cfg.yaml')."
+  echo "  -c <preproc_config>, --preprocess-cfg" 
+  echo "                             Path to preprocess config (default 'preprocess-cfg.yaml')."
+  echo "  -t <train_config>, --train-cfg" 
+  echo "                             Path to training config (default 'train-cfg.yaml')."
   echo "  -w <work_dir>, --work-dir" 
   echo "                             Project working directory."
   echo "  -r <run_name>, --run-name"
@@ -40,6 +49,21 @@ while [[ $# -gt 0 ]]; do
       ;;
     -m|--manifest-file)
       manifest_file="$2"
+      shift
+      shift
+      ;;
+    -d|--dataset-cfg)
+      dataset_config="$2"
+      shift
+      shift
+      ;;
+    -c|--preprocess-cfg)
+      preproc_config="$2"
+      shift
+      shift
+      ;;
+    -t|--train-cfg)
+      train_config="$2"
       shift
       shift
       ;;
@@ -75,9 +99,6 @@ if [[ -z "${manifest_file}" ]]; then
     show_help
     exit 1
 fi
-belt_type=$(jq -r '.beltType // "AC"' "${manifest_file}")
-belt_config_path="$SCRIPT_DIR/../configs/dataset-cfg_belt$belt_type.yaml"
-belt_config_path="$(realpath "$belt_config_path")"
 
 # Create the work directory if it doesn't exist
 work_dir="$(realpath "$work_dir")"
@@ -105,17 +126,18 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 source $VIRTUAL_ENV/bin/activate
 
 # Install dependencies
-pip install -e .
+pip install $SCRIPT_DIR/../. -q
 
 # Execute the scripts
 if [ "$force_extract" = true ]; then
-    python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$belt_config_path" --work-dir "$run_dir" --extract
+    python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir" --extract
 else
-    python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$belt_config_path" --work-dir "$run_dir"
+    python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir"
 fi
-python "$SCRIPT_DIR/process.py" --features-dir "$run_dir/features/" --work-dir "$run_dir"
-python "$SCRIPT_DIR/train.py" --train "$run_dir/dataset/" --model-dir "$run_dir/model" --output-data-dir "$run_dir/output" --tune
-python "$SCRIPT_DIR/evaluate.py" --data-manifest "$manifest_file" --results-path "$run_dir/output/results/results.csv" --metadata-path "$run_dir/output/metadata/metadata.joblib" --work-dir "$run_dir" --out-filename "$perf_filename"
+python "$SCRIPT_DIR/process.py" --features-dir "$run_dir/features/" --work-dir "$run_dir" --config-path "$preproc_config"
+python "$SCRIPT_DIR/train.py" --train "$run_dir/dataset/" --config-path "$train_config" --model-dir "$run_dir/model" --output-data-dir "$run_dir/output" --tune
+python "$SCRIPT_DIR/evaluate.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --results-path "$run_dir/output/results/results.csv" --metadata-path "$run_dir/output/metadata/metadata.joblib" --work-dir "$run_dir" --out-filename "$perf_filename"
+python "$SCRIPT_DIR/repack.py" --model "$run_dir/model/model.joblib" --pipeline "$run_dir/pipeline/pipeline.joblib" --processor "$run_dir/processor/processor.joblib" --metrics "$run_dir/metrics/metrics.joblib" --work-dir "$run_dir"
 
 # Calculate and display the total running time
 end_time="$(date +%s)"

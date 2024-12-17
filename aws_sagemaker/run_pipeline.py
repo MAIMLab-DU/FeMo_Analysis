@@ -45,15 +45,6 @@ def main():
         help="Path to data manifest file (json)",
     )
     parser.add_argument(
-        "-b",
-        "--belt-type",
-        dest="belt_type",
-        type=str,
-        choices=["A", "B", "C", "AC"],
-        default="AC",
-        help="Data used for specific belt type (A, B, or C).",
-    )
-    parser.add_argument(
         "-kwargs",
         "--kwargs",
         dest="kwargs",
@@ -89,7 +80,6 @@ def main():
         sys.exit(2)
     tags = convert_struct(args.tags)
     args.kwargs = convert_struct(args.kwargs)
-    args.kwargs['belt_type'] = args.belt_type
     args.kwargs['manifest_file'] = args.manifest_file
 
     try:
@@ -111,7 +101,7 @@ def main():
             LOGGER.info("Waiting for the execution to finish...")
             execution.wait(
                 delay=300,
-                max_attempts=132
+                max_attempts=420
             )
             LOGGER.info("Execution completed. Execution step details:")
 
@@ -120,7 +110,7 @@ def main():
 
         if not args.kwargs.get('local_mode', False):
             model_package_name = get_model_package_name(pipeline_steps)
-            json_filename = os.path.join(args.work_dir, f"pipelineExecution_belt{args.belt_type}.json")
+            json_filename = os.path.join(args.work_dir, "pipelineExecution.json")
             with open(json_filename, "w") as f:
                 json.dump({"arn": model_package_name}, f, indent=2)
                 

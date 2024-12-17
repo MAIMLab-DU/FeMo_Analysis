@@ -1,5 +1,6 @@
 import numpy as np
 from collections import defaultdict
+from typing import Tuple, Literal
 from skimage.measure import label
 from functools import reduce
 from .base import BaseTransform
@@ -8,12 +9,18 @@ from .base import BaseTransform
 class SensorFusion(BaseTransform):
 
     def __init__(self,
-                 desired_scheme: int = 1,
+                 desired_scheme: Tuple[Literal['type', 'number'], int] = ['type', 1],
                  **kwargs) -> None:
         super().__init__(**kwargs)
 
-        assert desired_scheme in range(9), f"{desired_scheme} must be in range(0, 9)"
-        self.desired_scheme = self.scheme_map[desired_scheme]
+        if not isinstance(desired_scheme, list) or len(desired_scheme) != 2:
+            raise ValueError("desired_scheme must be a tuple of two elements: ('type'/'number', int)")        
+        if desired_scheme[0] not in ('type', 'number'):
+            raise ValueError("The first element of desired_scheme must be 'type' or 'number'")        
+        if not isinstance(desired_scheme[1], int):
+            raise ValueError("The second element of desired_scheme must be an integer")
+        
+        self.desired_scheme = tuple(desired_scheme)
 
     def transform(self, fm_dict: dict):
 

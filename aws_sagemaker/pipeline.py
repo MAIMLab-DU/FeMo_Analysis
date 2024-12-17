@@ -14,7 +14,6 @@ import boto3
 import sagemaker
 import sagemaker.local
 import sagemaker.session
-from typing import Literal
 from sagemaker.inputs import (
     TrainingInput
 )
@@ -95,7 +94,6 @@ def get_pipeline(
     manifest_file: str,
     role=None,
     default_bucket=None,
-    belt_type: Literal["A", "B", "C", "AC"] = "AC",
     model_package_group_name="FeMoModelPackageGroup",
     pipeline_name="FeMoPipeline",
     base_job_prefix="FeMo",
@@ -111,9 +109,6 @@ def get_pipeline(
     Returns:
         an instance of a pipeline
     """
-
-    pipeline_name = pipeline_name + "-belt" + belt_type
-    model_package_group_name = model_package_group_name + '-belt' + belt_type
     assert manifest_file.endswith('.json'), "Must be a path to manifest.json file"
 
     sagemaker_session = get_session(region, default_bucket, local_mode)
@@ -145,8 +140,8 @@ def get_pipeline(
     manifest_path = os.path.join(PROC_DIR, "input", "dataManifest", os.path.basename(manifest_file))
     feat_args = ["--data-manifest", manifest_path,
                  "--work-dir", os.path.join(PROC_DIR, "output"),
-                 "--config-path", os.path.join(PROC_DIR, "input", f"config/dataset-cfg_belt{belt_type}.yaml")]
-    if os.getenv("FORCE_EXTRACT_FEATURES", False):
+                 "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml")]
+    if os.getenv("FORCE_EXTRACT_FEATURES", 'False').lower() in ('true', '1', 't'):
         feat_args.append("--extract")
 
     step_extract = ProcessingStep(
@@ -154,7 +149,7 @@ def get_pipeline(
         processor=script_extract,
         inputs=[
             ProcessingInput(input_name="config",
-                            source=os.path.join(BASE_DIR, "..", f"configs/dataset-cfg_belt{belt_type}.yaml"),
+                            source=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"),
                             destination=os.path.join(PROC_DIR, "input", "config")),
             ProcessingInput(input_name="dataManifest",
                             source=manifest_file,
@@ -276,7 +271,7 @@ def get_pipeline(
     eval_args = ["--data-manifest", manifest_path,
                  "--results-path", os.path.join(EVAL_DIR, "results/results.csv"),
                  "--metadata-path", os.path.join(EVAL_DIR, "metadata/metadata.joblib"),
-                 "--config-path", os.path.join(PROC_DIR, "input", f"config/dataset-cfg_belt{belt_type}.yaml"),
+                 "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml"),
                  "--work-dir", PROC_DIR,
                  "--sagemaker", os.path.join(PROC_DIR, "input", "trainjob")]
 
@@ -291,7 +286,7 @@ def get_pipeline(
         inputs=[
             ProcessingInput(
                 input_name="config",
-                source=os.path.join(BASE_DIR, "..", f"configs/dataset-cfg_belt{belt_type}.yaml"),
+                source=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"),
                 destination=os.path.join(PROC_DIR, "input", "config")
             ),
             ProcessingInput(
