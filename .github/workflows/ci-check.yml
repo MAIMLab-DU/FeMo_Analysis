@@ -7,12 +7,16 @@ on:
       - dev
     paths:
       - 'femo/**'
+      - 'configs/*.yaml'
+      - 'tests/**'
   push:
     branches:
       - main
       - dev
     paths:
       - 'femo/**'
+      - 'configs/*.yaml'
+      - 'tests/**'
 
 jobs: 
   ci-check:
