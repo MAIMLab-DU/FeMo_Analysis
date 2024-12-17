@@ -101,7 +101,7 @@ def main():
             LOGGER.info("Waiting for the execution to finish...")
             execution.wait(
                 delay=300,
-                max_attempts=132
+                max_attempts=420
             )
             LOGGER.info("Execution completed. Execution step details:")
 
