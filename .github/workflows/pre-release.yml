@@ -10,6 +10,7 @@ on:
   push:
     paths:
       - 'aws_sagemaker/**'
+      - 'scripts/*.py'
     branches:
       - dev
 
