@@ -11,7 +11,7 @@ preproc_config="$SCRIPT_DIR/../configs/preprocess-cfg.yaml"
 train_config="$SCRIPT_DIR/../configs/train-cfg.yaml"
 manifest_file=""
 perf_filename="performance.csv"
-work_dir="$SCRIPT_DIR/../work_dir"
+work_dir="$SCRIPT_DIR/../work_dir/train"
 run_name=""
 force_extract=false
 
@@ -126,7 +126,7 @@ virtualenv -p python3.10 $VIRTUAL_ENV
 source $VIRTUAL_ENV/bin/activate
 
 # Install dependencies
-pip install -e .
+pip install $SCRIPT_DIR/../. -q
 
 # Execute the scripts
 if [ "$force_extract" = true ]; then
@@ -137,6 +137,7 @@ fi
 python "$SCRIPT_DIR/process.py" --features-dir "$run_dir/features/" --work-dir "$run_dir" --config-path "$preproc_config"
 python "$SCRIPT_DIR/train.py" --train "$run_dir/dataset/" --config-path "$train_config" --model-dir "$run_dir/model" --output-data-dir "$run_dir/output" --tune
 python "$SCRIPT_DIR/evaluate.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --results-path "$run_dir/output/results/results.csv" --metadata-path "$run_dir/output/metadata/metadata.joblib" --work-dir "$run_dir" --out-filename "$perf_filename"
+python "$SCRIPT_DIR/repack.py" --model "$run_dir/model/model.joblib" --pipeline "$run_dir/pipeline/pipeline.joblib" --processor "$run_dir/processor/processor.joblib" --metrics "$run_dir/metrics/metrics.joblib" --work-dir "$run_dir"
 
 # Calculate and display the total running time
 end_time="$(date +%s)"
