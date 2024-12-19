@@ -107,13 +107,13 @@ class FeMoMetrics(object):
 
                 if overlap:
                     # This is a TPD
-                    if overall_tpd_pred[matching_index_tpd] == 1:  # Checks the detection from the classifier
+                    if matching_index_tpd < len(overall_tpd_pred) and overall_tpd_pred[matching_index_tpd] == 1:  # Checks the detection from the classifier
                         segmented_sensor_data_ml[label_start:label_end] = 1
                     matching_index_tpd += 1
                     tpd_indices.append(k)
                 else:
                     # This is an FPD
-                    if overall_fpd_pred[matching_index_fpd] == 1:  # Checks the detection from the classifier
+                    if matching_index_fpd < len(overall_fpd_pred) and overall_fpd_pred[matching_index_fpd] == 1:  # Checks the detection from the classifier
                         segmented_sensor_data_ml[label_start:label_end] = 1
                     matching_index_fpd += 1
                     fpd_indices.append(k)
