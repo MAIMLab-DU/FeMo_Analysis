@@ -23,7 +23,7 @@ data_pipeline:
     <<: *base
     imu_acceleration_threshold: 0.2
     imu_rotation_threshold: 4
-    maternal_dilation_forward: 2.0
+    maternal_dilation_forward: 5.0
     maternal_dilation_backward: 5.0
     imu_dilation: 4.0
     fm_dilation: 3.0
