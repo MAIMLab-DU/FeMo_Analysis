@@ -16,7 +16,7 @@ function show_help {
   echo
   echo "Options:"
   echo "  -d <data_filename>, --data-filename"
-  echo "                             Path to log data file (.dat)."
+  echo "                             Path to log data file(s) (.dat or .txt)."
   echo "  -m <repacked_model>, --repacked-model"
   echo "                             Path to repacked model file (.tar.gz)."
   echo "  -p <perf_filename>, --perf-filename"
