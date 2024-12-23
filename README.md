@@ -177,14 +177,16 @@ The FeMo device collects movement data continuously from the fetus, and this rep
 ---
 
 ## 🚀 Getting Started
+This codebase is developed and tested on **Ubuntu 22.04** operating system and **Python 3.10.15**. For running *Shell Script* file in **Windows** operating system, please follow [this guide](https://www.thewindowsclub.com/how-to-run-sh-or-shell-script-file-in-windows-10).
 
 ### 🔖 Prerequisites
 
-**Python**: `version 3.10`
+**Python**: `version 3.10.15`.
+**conda** or **virtualenv** must be installed on system.
 
 ### 📦 Installation
 
-Create a new `conda` or `virtualenv` with appropriate Python version
+Create a new `conda` or `virtualenv`.
 
 Build the project from source:
 
@@ -197,12 +199,12 @@ For cloning using SSH, make sure to create and store SSH key on your device. The
 ❯ git clone git@github.com:MAIMLab/FeMo_Analysis.git
 ```
 
-2. Navigate to the project directory:
+1. Navigate to the project directory:
 ```sh
 ❯ cd FeMo_Analysis
 ```
 
-3. Install the repo as a package:
+1. Install the repo as a package:
 ```sh
 ❯ pip install .
 ```
@@ -223,7 +225,7 @@ environment with necessary dependencies.*
 
 #### Feature Extraction
 ```sh
-❯ python scripts/extract.py [-h] --data-manifest DATA_MANIFEST [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--extract]
+❯ python scripts/extract.py [-h] --data-manifest DATA_MANIFEST [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--config-path CONFIG_PATH] [--extract]
 
 options:
   -h, --help            show this help message and exit
@@ -231,76 +233,120 @@ options:
                         Path to data manifest json file
   --data-dir DATA_DIR   Path to directory containing .dat and .csv files
   --work-dir WORK_DIR   Path to save generated artifacts
-  --extract             Extract features
+  --config-path CONFIG_PATH
+                        Path to config file
+  --extract             Force extract features even if they exist
 ```
 
 #### Data Preprocessing
 ```sh
-❯ python scripts/preprocess.py [-h] --dataset-path DATASET_PATH [--params-filename PARAMS_FILENAME] [--work-dir WORK_DIR]
+❯ python scripts/process.py [-h] --features-dir FEATURES_DIR [--work-dir WORK_DIR] [--config-path CONFIG_PATH] [--train-config-path TRAIN_CONFIG_PATH]
 
 options:
   -h, --help            show this help message and exit
-  --dataset-path DATASET_PATH
-                        Path to 'dataset.csv' file
-  --params-filename PARAMS_FILENAME
-                        Parameters dict filename
+  --features-dir FEATURES_DIR
+                        Directory containing 'features.csv' file
   --work-dir WORK_DIR   Path to save generated artifacts
+  --config-path CONFIG_PATH
+                        Path to config file
+  --train-config-path TRAIN_CONFIG_PATH
+                        Path to config file
 ```
-
 
 #### Train
 ```sh
-❯ python scripts/train.py [-h] --dataset-path DATASET_PATH --ckpt-name CKPT_NAME [--tune] [--work-dir WORK_DIR]
+❯ python scripts/train.py [-h] --train TRAIN --model-dir MODEL_DIR --output-data-dir OUTPUT_DATA_DIR [--tune] [--config-path CONFIG_PATH]
 
 options:
   -h, --help            show this help message and exit
-  --dataset-path DATASET_PATH
-                        Path to dataset csv file
-  --ckpt-name CKPT_NAME
-                        Name of model checkpoint file
+  --train TRAIN         Path to dataset
+  --model-dir MODEL_DIR
+                        Model output directory
+  --output-data-dir OUTPUT_DATA_DIR
+                        Model output directory
   --tune                Tune hyperparameters before training
-  --work-dir WORK_DIR   Path to save generated artifacts
+  --config-path CONFIG_PATH
+                        Path to config file
 ```
 
 #### Evaluation
 ```sh
-❯ python scripts/evaluate.py [-h] --data-manifest DATA_MANIFEST --results-path RESULTS_PATH [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--outfile OUTFILE]
+❯ python scripts/evaluate.py [-h] --data-manifest DATA_MANIFEST --results-path RESULTS_PATH --metadata-path METADATA_PATH [--config-path CONFIG_PATH] [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--out-filename OUT_FILENAME]
+                   [--sagemaker SAGEMAKER]
 
 options:
   -h, --help            show this help message and exit
   --data-manifest DATA_MANIFEST
                         Path to data manifest json file
   --results-path RESULTS_PATH
-                        Directory containing prediction results
+                        Path to file containing prediction results
+  --metadata-path METADATA_PATH
+                        Path to file containing prediction metadata
+  --config-path CONFIG_PATH
+                        Path to config file
   --data-dir DATA_DIR   Path to directory containing .dat and .csv files
   --work-dir WORK_DIR   Path to save generated artifacts
-  --outfile OUTFILE     Metrics output file
+  --out-filename OUT_FILENAME
+                        Metrics output filename
+  --sagemaker SAGEMAKER
+                        Sagemaker directory for results
 ```
 
-
-Together, an **analysis job** (feature_extraction -> process -> train -> evaluate) can be run with following command:
+Together, an **analysis job** (feature_extraction -> process -> train -> repack -> evaluate) can be run with following command:
 ```sh
-❯ bash scripts/analysis.sh <data_manifest> <ckpt_name> [run_dir] [performance_filename] [params_filename]
+❯ bash scripts/analysis.sh [-f|--force-extract] -m <manifest_file> [-d|--dataset-cfg] [-c|preprocess-cfg] [-t|--train-cfg] [-w|--work-dir] [-r|--run-name] [-p|--perf-filename] [-h|--help]
+
+Options:
+  -m <manifest_file>, --manifest-file
+                             Path to the dataManifest file.
+  -f, --force-extract        Force extract features.
+  -d <dataset_config>, --dataset-cfg
+                             Path to dataset config (default 'dataset-cfg.yaml').
+  -c <preproc_config>, --preprocess-cfg
+                             Path to preprocess config (default 'preprocess-cfg.yaml').
+  -t <train_config>, --train-cfg
+                             Path to training config (default 'train-cfg.yaml').
+  -w <work_dir>, --work-dir
+                             Project working directory.
+  -r <run_name>, --run-name
+                             Name of a specific run.
+  -p <perf_filename>, --perf-filename
+                             Performance csv filename.
+  -h, --help             Show this help message and exit.
 ```
 
 #### Inference
 ```sh
-❯ python scripts/inference.py [-h] --data-file DATA_FILE --ckpt-file CKPT_FILE --params-file PARAMS_FILE [--work-dir WORK_DIR] [--outfile OUTFILE]
+❯ python inference.py [-h] --data-file DATA_FILE --model MODEL --pipeline PIPELINE --processor PROCESSOR --metrics METRICS [--work-dir WORK_DIR] [--outfile OUTFILE]
 
 options:
   -h, --help            show this help message and exit
   --data-file DATA_FILE
-                        Path to data file
-  --ckpt-file CKPT_FILE
-                        Path to model checkpoint file
-  --params-file PARAMS_FILE
-                        Path to params file
+                        Path to data file(s) (.dat or .txt)
+  --model MODEL         Path to trained classifier file (.joblib)
+  --pipeline PIPELINE   Path to data pipeline object (.joblib)
+  --processor PROCESSOR
+                        Path to data processor object (.joblib)
+  --metrics METRICS     Path to evaluation metrics object (.joblib)
   --work-dir WORK_DIR   Path to save generated artifacts
   --outfile OUTFILE     Metrics output file
 ```
 To run an inference job using `bash`, run the following command:
 ```sh
-❯ bash scripts/inference.sh <data_filename> <ckpt_name> <params_dict> [output_file] [run_dir]
+❯ bash scripts/inference.sh -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-p|--perf-filename] [-h|--help]
+
+Options:
+  -d <data_filename>, --data-filename
+                             Path to log data file(s) (.dat or .txt).
+  -m <repacked_model>, --repacked-model
+                             Path to repacked model file (.tar.gz).
+  -p <perf_filename>, --perf-filename
+                             Performance csv filename.
+  -w <work_dir>, --work-dir
+                             Project working directory.
+  -r <run_name>, --run-name
+                             Name of a specific run.
+  -h, --help             Show this help message and exit.
 ```
 
 ### 🧪 Tests
