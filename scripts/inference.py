@@ -11,7 +11,7 @@ from femo.inference import PredictionService
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-file", type=str, required=True, help="Path to data file")
+    parser.add_argument("--data-file", type=str, required=True, help="Path to data file(s) (.dat or .txt)")
     parser.add_argument("--model", type=str, required=True, help="Path to trained classifier file (.joblib)")
     parser.add_argument("--pipeline", type=str, required=True, help="Path to data pipeline object (.joblib)")
     parser.add_argument("--processor", type=str, required=True, help="Path to data processor object (.joblib)")
