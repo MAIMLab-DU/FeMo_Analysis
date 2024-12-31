@@ -18,6 +18,8 @@ from sklearn.model_selection import RepeatedStratifiedKFold, GridSearchCV
 
 
 class FeMoEnsembleClassifier(FeMoBaseClassifier):
+
+    model_framework = 'sklearn'
     
     def __init__(self,
                  config = {

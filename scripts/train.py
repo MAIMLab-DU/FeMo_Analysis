@@ -90,8 +90,10 @@ def main(args):
     )
     
     try:
-        joblib.dump(classifier, os.path.join(args.model_dir, 'model.joblib'), compress=False)
-        LOGGER.info(f"Model saved to: {os.path.abspath(os.path.join(args.model_dir, 'model.joblib'))}")
+        classifier.save_model(os.path.join(args.model_dir, 'model.joblib'))
+        classifier.model = None
+        joblib.dump(classifier, os.path.join(args.model_dir, 'classifier.joblib'), compress=False)
+        LOGGER.info(f"Classifier and fitted model saved to: {os.path.abspath(os.path.join(args.model_dir))}")
     except Exception as e:
         LOGGER.error(f"Failed to save model: {e}")
         sys.exit(1)

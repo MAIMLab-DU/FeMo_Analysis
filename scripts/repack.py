@@ -22,7 +22,7 @@ def safe_extract(tar_filepath: str, temp_dir: str):
     # If file is not a tar.gz, simply copy it
     if not tar_filepath.endswith(".tar.gz"):
         try:
-            if tar_filepath.endswith(".joblib"):
+            if tar_filepath.endswith(".joblib") or tar_filepath.endswith(".h5"):
                 shutil.copy(tar_filepath, temp_dir)
             return
         except Exception as e:
@@ -46,7 +46,7 @@ def repack_joblib_files(work_dir, output_tar):
     joblib_files = []
     for root, dirs, files in os.walk(work_dir):
         for file in files:
-            if file.endswith(".joblib"):
+            if file.endswith(".joblib") or file.endswith(".h5"):
                 joblib_files.append(os.path.join(root, file))
 
     # Create a tar.gz file containing all .joblib files
@@ -57,7 +57,8 @@ def repack_joblib_files(work_dir, output_tar):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, required=True, help="Path to trained classifier file (.tar.gz or .joblib)")
+    parser.add_argument("--classifier", type=str, required=True, help="Path to classifier object file (.tar.gz or .joblib)")
+    parser.add_argument("--model", type=str, required=True, help="Path to trained model file (.tar.gz or .joblib or .h5)")
     parser.add_argument("--pipeline", type=str, required=True, help="Path to data pipeline object (.tar.gz or .joblib)")
     parser.add_argument("--processor", type=str, required=True, help="Path to data processor object (.tar.gz or .joblib)")
     parser.add_argument("--metrics", type=str, required=True, help="Path to evaluation metrics object (.tar.gz or .joblib)")
@@ -72,6 +73,7 @@ def main(args):
 
     try:
         # Extract or copy files into the temporary directory
+        safe_extract(args.classifier, temp_dir)
         safe_extract(args.model, temp_dir)
         safe_extract(args.pipeline, temp_dir)
         safe_extract(args.processor, temp_dir)

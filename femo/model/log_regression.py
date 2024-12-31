@@ -9,6 +9,8 @@ from .base import FeMoBaseClassifier
 
 class FeMoLogRegClassifier(FeMoBaseClassifier):
 
+    model_framework = 'sklearn'
+
     def __init__(self,
                  config = {
                      'search_space': {
