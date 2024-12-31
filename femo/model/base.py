@@ -188,10 +188,11 @@ class FeMoBaseClassifier(ABC):
         if self.model is not None:
             try:
                 if self.model_framework == 'sklearn':
-                    model_filename = model_filename.split('.')[0] + '.joblib'
+                    assert model_filename.endswith('.pkl') or model_filename.endswith('.joblib'), "Must be a pickle or joblib file"
                     joblib.dump(self.model, model_filename)
                 if self.model_framework == 'keras':
-                    model_filename = model_filename.split('.')[0] + '.h5'
+                    model_filename = model_filename.replace('.joblib', '.h5').replace('.pkl', '.h5')
+                    assert model_filename.endswith('.h5'), "Must be a h5 file"
                     self.model.save(model_filename)
             except Exception as e:
                 self.logger.error(f"Error saving model: {e}")
@@ -203,10 +204,11 @@ class FeMoBaseClassifier(ABC):
                    model_filename: str):
         try:
             if self.model_framework == 'sklearn':
-                model_filename = model_filename.split('.')[0] + '.joblib'
+                assert model_filename.endswith('.pkl') or model_filename.endswith('.joblib'), "Must be a pickle or joblib file"
                 self.model = joblib.load(model_filename)
             if self.model_framework == 'keras':
-                model_filename = model_filename.split('.')[0] + '.h5'
+                model_filename = model_filename.replace('.joblib', '.h5').replace('.pkl', '.h5')
+                assert model_filename.endswith('.h5'), "Must be a h5 file"
                 self.model = load_model(model_filename)
         except Exception as e:
             self.logger.error(f"Error loading model: {e}")

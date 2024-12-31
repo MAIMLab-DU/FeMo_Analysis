@@ -123,10 +123,11 @@ echo "Repacked model files extracted to: $TEMP_DIR"
 # Run inference script
 python "$(convert_path "$SCRIPT_DIR/inference.py")" \
   --data-file "$(convert_path "$data_filename")" \
-  --model "$TEMP_DIR/model.joblib" \
-  --pipeline "$TEMP_DIR/pipeline.joblib" \
-  --processor "$TEMP_DIR/processor.joblib" \
-  --metrics "$TEMP_DIR/metrics.joblib" \
+  --classifier "$(convert_path "$TEMP_DIR/classifier.joblib")" \
+  --model "$(convert_path "$(find "$TEMP_DIR" -name 'model.*' -print -quit)")" \
+  --pipeline "$(convert_path "$TEMP_DIR/pipeline.joblib")" \
+  --processor "$(convert_path "$TEMP_DIR/processor.joblib")" \
+  --metrics "$(convert_path "$TEMP_DIR/metrics.joblib")" \
   --work-dir "$(convert_path "$run_dir")" \
   --outfile "$(convert_path "$perf_filename")"
 

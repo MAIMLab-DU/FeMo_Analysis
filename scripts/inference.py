@@ -13,7 +13,8 @@ from femo.inference import PredictionService
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-file", type=str, required=True, help="Path to data file(s) (.dat or .txt)")
-    parser.add_argument("--model", type=str, required=True, help="Path to trained classifier file (.joblib)")
+    parser.add_argument("--classifier", type=str, required=True, help="Path to fitted classifier object file (.joblib)")
+    parser.add_argument("--model", type=str, required=True, help="Path to trained model file (.joblib or .h5)")
     parser.add_argument("--pipeline", type=str, required=True, help="Path to data pipeline object (.joblib)")
     parser.add_argument("--processor", type=str, required=True, help="Path to data processor object (.joblib)")
     parser.add_argument("--metrics", type=str, required=True, help="Path to evaluation metrics object (.joblib)")
@@ -43,6 +44,7 @@ def main(args):
 
     try:
         pred_service = PredictionService(
+            args.classifier,
             args.model,
             args.pipeline,
             args.processor,

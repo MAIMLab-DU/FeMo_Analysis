@@ -25,6 +25,7 @@ class RequestData(BaseModel):
 # A singleton for holding the model. This simply loads the model and holds it.
 # It has a predict function that does a prediction based on the model and the input data.
 pred_service = PredictionService(
+    os.path.join(model_path, 'classifier.joblib'),
     os.path.join(model_path, 'model.joblib'),
     os.path.join(model_path, 'pipeline.joblib'),
     os.path.join(model_path, 'processor.joblib'),
