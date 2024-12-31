@@ -10,6 +10,15 @@ repacked_model=""
 perf_filename="meta_info.xlsx"
 work_dir="$SCRIPT_DIR/../work_dir/inference"
 
+# Function to convert paths for Git Bash
+function convert_path {
+  if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
+    echo "$(cygpath -w "$1")"
+  else
+    echo "$1"
+  fi
+}
+
 # Function to display help
 function show_help {
   echo "Usage: $0 -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-p|--perf-filename] [-h|--help]"
@@ -58,7 +67,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      show_help  # Display help and exit
+      show_help
       exit
       ;;
     *)
@@ -76,7 +85,9 @@ if [[ -z "$repacked_model" ]]; then
 fi
 
 # Create the work directory and determine the run directory
+work_dir="$(convert_path "$work_dir")"
 mkdir -p "$work_dir"
+
 if [[ -z "${run_name}" ]]; then    
     run_dir="$work_dir"
 else
@@ -93,18 +104,31 @@ TEMP_DIR=$(mktemp -d "$run_dir/temp.XXXXXX")
 trap "rm -rf '$TEMP_DIR';" EXIT
 
 # Set up virtual environment
-virtualenv -p python3.10 $VIRTUAL_ENV
-source $VIRTUAL_ENV/bin/activate
+if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
+  # Use Windows-compatible virtual environment creation
+  python -m venv "$(convert_path $VIRTUAL_ENV)"
+  source "$(convert_path $VIRTUAL_ENV)/Scripts/activate"
+else
+  virtualenv -p python3.10 $VIRTUAL_ENV
+  source $VIRTUAL_ENV/bin/activate
+fi
 
 # Install requirements
-pip install $SCRIPT_DIR/../. -q
+pip install "$(convert_path "$SCRIPT_DIR/../.")" -q
 
 # Extract repacked model files to the temp directory
 tar -xzf "$repacked_model" -C "$TEMP_DIR"
 echo "Repacked model files extracted to: $TEMP_DIR"
 
 # Run inference script
-python "$SCRIPT_DIR/inference.py" --data-file "$data_filename" --model "$TEMP_DIR/model.joblib" --pipeline "$TEMP_DIR/pipeline.joblib" --processor "$TEMP_DIR/processor.joblib" --metrics "$TEMP_DIR/metrics.joblib" --work-dir "$run_dir" --outfile "$perf_filename"
+python "$(convert_path "$SCRIPT_DIR/inference.py")" \
+  --data-file "$(convert_path "$data_filename")" \
+  --model "$TEMP_DIR/model.joblib" \
+  --pipeline "$TEMP_DIR/pipeline.joblib" \
+  --processor "$TEMP_DIR/processor.joblib" \
+  --metrics "$TEMP_DIR/metrics.joblib" \
+  --work-dir "$(convert_path "$run_dir")" \
+  --outfile "$(convert_path "$perf_filename")"
 
 # Record the end time
 end_time="$(date +%s)"

@@ -6,6 +6,17 @@ start_time="$(date +%s)"
 VIRTUAL_ENV=.venv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Adjust paths for Windows compatibility
+function convert_path {
+  if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
+    # Convert Git Bash-style paths to Windows-style paths
+    echo "$(cygpath -w "$1")"
+  else
+    # Return the path as-is for WSL or Linux
+    echo "$1"
+  fi
+}
+
 dataset_config="$SCRIPT_DIR/../configs/dataset-cfg.yaml"
 preproc_config="$SCRIPT_DIR/../configs/preprocess-cfg.yaml"
 train_config="$SCRIPT_DIR/../configs/train-cfg.yaml"
@@ -14,7 +25,6 @@ perf_filename="performance.csv"
 work_dir="$SCRIPT_DIR/../work_dir/train"
 run_name=""
 force_extract=false
-
 
 # Function to display help
 function show_help {
@@ -83,7 +93,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      show_help  # Display help and exit
+      show_help
       exit
       ;;
     *)
@@ -101,8 +111,9 @@ if [[ -z "${manifest_file}" ]]; then
 fi
 
 # Create the work directory if it doesn't exist
-work_dir="$(realpath "$work_dir")"
+work_dir="$(convert_path "$work_dir")"
 mkdir -p "$work_dir"
+work_dir="$(realpath "$work_dir")"
 
 # Determine the next run directory
 if [[ -z "${run_name}" ]]; then    
@@ -110,34 +121,39 @@ if [[ -z "${run_name}" ]]; then
     next_run=$((last_run + 1))
     run_name="run$next_run"
 fi
-
 # Set and create run directory
 run_dir="$work_dir/$run_name"
+run_dir="$(convert_path "$run_dir")"
 mkdir -p "$run_dir"
 
 # Output the initial configuration
-echo "Belt type: $belt_type"
 echo "Run artifact directory: $run_dir"
 echo "Data manifest: $manifest_file"
 echo "Performance file: $perf_filename"
 
 # Set up the virtual environment
-virtualenv -p python3.10 $VIRTUAL_ENV
-source $VIRTUAL_ENV/bin/activate
+if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
+  # Use Windows-compatible virtual environment creation
+  python -m venv "$(convert_path $VIRTUAL_ENV)"
+  source "$(convert_path $VIRTUAL_ENV)/Scripts/activate"
+else
+  virtualenv -p python3.10 $VIRTUAL_ENV
+  source $VIRTUAL_ENV/bin/activate
+fi
 
 # Install dependencies
-pip install $SCRIPT_DIR/../. -q
+pip install "$(convert_path "$SCRIPT_DIR/../.")" -q
 
 # Execute the scripts
 if [ "$force_extract" = true ]; then
-    python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir" --extract
+    python "$(convert_path "$SCRIPT_DIR/extract.py")" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir" --extract
 else
-    python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir"
+    python "$(convert_path "$SCRIPT_DIR/extract.py")" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir"
 fi
-python "$SCRIPT_DIR/process.py" --features-dir "$run_dir/features/" --work-dir "$run_dir" --config-path "$preproc_config"
-python "$SCRIPT_DIR/train.py" --train "$run_dir/dataset/" --config-path "$train_config" --model-dir "$run_dir/model" --output-data-dir "$run_dir/output" --tune
-python "$SCRIPT_DIR/evaluate.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --results-path "$run_dir/output/results/results.csv" --metadata-path "$run_dir/output/metadata/metadata.joblib" --work-dir "$run_dir" --out-filename "$perf_filename"
-python "$SCRIPT_DIR/repack.py" --model "$run_dir/model/model.joblib" --pipeline "$run_dir/pipeline/pipeline.joblib" --processor "$run_dir/processor/processor.joblib" --metrics "$run_dir/metrics/metrics.joblib" --work-dir "$run_dir"
+python "$(convert_path "$SCRIPT_DIR/process.py")" --features-dir "$run_dir/features/" --work-dir "$run_dir" --config-path "$preproc_config"
+python "$(convert_path "$SCRIPT_DIR/train.py")" --train "$run_dir/dataset/" --config-path "$train_config" --model-dir "$run_dir/model" --output-data-dir "$run_dir/output" --tune
+python "$(convert_path "$SCRIPT_DIR/evaluate.py")" --data-manifest "$manifest_file" --config-path "$dataset_config" --results-path "$run_dir/output/results/results.csv" --metadata-path "$run_dir/output/metadata/metadata.joblib" --work-dir "$run_dir" --out-filename "$perf_filename"
+python "$(convert_path "$SCRIPT_DIR/repack.py")" --model "$run_dir/model/model.joblib" --pipeline "$run_dir/pipeline/pipeline.joblib" --processor "$run_dir/processor/processor.joblib" --metrics "$run_dir/metrics/metrics.joblib" --work-dir "$run_dir"
 
 # Calculate and display the total running time
 end_time="$(date +%s)"
