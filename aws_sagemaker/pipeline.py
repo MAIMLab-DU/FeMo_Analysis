@@ -97,7 +97,8 @@ def get_pipeline(
     model_package_group_name="FeMoModelPackageGroup",
     pipeline_name="FeMoPipeline",
     base_job_prefix="FeMo",
-    local_mode=False
+    local_mode=False,
+    force_extract=False
 ):
     """Gets a SageMaker ML Pipeline instance working with on femo data.
 
@@ -141,8 +142,8 @@ def get_pipeline(
     feat_args = ["--data-manifest", manifest_path,
                  "--work-dir", os.path.join(PROC_DIR, "output"),
                  "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml")]
-    if os.getenv("FORCE_EXTRACT_FEATURES", 'False').lower() in ('true', '1', 't'):
-        feat_args.append("--extract")
+    if force_extract:
+        feat_args.append("--force-extract")
 
     step_extract = ProcessingStep(
         name="ExtractFeatures",

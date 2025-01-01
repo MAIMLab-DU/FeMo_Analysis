@@ -6,14 +6,16 @@ VIRTUAL_ENV=.venv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 local_mode=false
+force_extract=false
 manifest_file=""
 
 # Function to display help
 function show_help {
-  echo "Usage: $0 [-l|--local-mode] -m <manifest_file> [-h|--help]"
+  echo "Usage: $0 [-l|--local-mode] [-f|--force-extract] -m <manifest_file> [-h|--help]"
   echo
   echo "Options:"
-  echo "  -l, --local-mode           Upload the configuration file to S3 before downloading it."
+  echo "  -l, --local-mode           Whether to run sagemaker pipeline in local system."
+  echo "  -f, --force-extract        Whether to force extract features from logfiles."
   echo "  -m <manifest_file>, --manifest-file"
   echo "                             Path to the dataManifest file."
   echo "  -h, --help             Show this help message and exit."
@@ -24,11 +26,15 @@ function show_help {
 while [[ $# -gt 0 ]]; do
   case $1 in
     -l|--local-mode)
-      local_mode=true  # Set the upload flag to true
+      local_mode=true
+      shift
+      ;;
+    -f|--force-extract)
+      force_extract=true
       shift
       ;;
     -m|--manifest-file)
-      manifest_file="$2"  # Set CONFIG_S3_PATH to the next argument
+      manifest_file="$2"
       shift
       shift
       ;;
@@ -45,6 +51,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Local mode: $local_mode"
+echo "Force extract: $force_extract"
 # Create/Update the SageMaker Pipeline and wait for the execution to be completed
 if [[ -z "${manifest_file}" ]]; then
   echo "Data manifest file path is required."
@@ -72,7 +79,7 @@ export PYTHONUNBUFFERED=TRUE
 python $SCRIPT_DIR/run_pipeline.py --module-name pipeline --manifest-file "$manifest_file" --work-dir "$SCRIPT_DIR" \
         --role-arn "$SAGEMAKER_PIPELINE_ROLE_ARN" --work-dir "$SCRIPT_DIR" \
         --tags "[{\"Key\":\"sagemaker:project-name\", \"Value\":\"${SAGEMAKER_PROJECT_NAME}\"}]" \
-        --kwargs "{\"region\":\"${AWS_DEFAULT_REGION}\",\"role\":\"${SAGEMAKER_PIPELINE_ROLE_ARN}\",\"default_bucket\":\"${SAGEMAKER_ARTIFACT_BUCKET}\",\"pipeline_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"model_package_group_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"base_job_prefix\":\"${SAGEMAKER_PROJECT_NAME}\",\"local_mode\":\"${local_mode}\"}"
+        --kwargs "{\"region\":\"${AWS_DEFAULT_REGION}\",\"role\":\"${SAGEMAKER_PIPELINE_ROLE_ARN}\",\"default_bucket\":\"${SAGEMAKER_ARTIFACT_BUCKET}\",\"pipeline_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"model_package_group_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"base_job_prefix\":\"${SAGEMAKER_PROJECT_NAME}\",\"local_mode\":\"${local_mode}\",\"force_extract\":\"${force_extract}\"}"
 
 echo "Create/Update of the SageMaker Pipeline and execution Completed."
 
