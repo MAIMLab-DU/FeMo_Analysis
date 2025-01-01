@@ -13,7 +13,7 @@ def parse_args():
     parser.add_argument("--data-dir", type=str, default="./data", help="Path to directory containing .dat and .csv files")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"), help="Path to config file")
-    parser.add_argument("--extract", action='store_true', default=False, help="Force extract features even if they exist")
+    parser.add_argument("--force-extract", action='store_true', default=False, help="Force extract features even if they exist")
     args = parser.parse_args()
 
     return args
@@ -35,7 +35,7 @@ def main(args):
                           False,
                           dataset_cfg.get('data_pipeline'))
 
-    df = dataset.build(force_extract=args.extract)
+    df = dataset.build(force_extract=args.force_extract)
     df.to_csv(os.path.join(args.work_dir, "features/features.csv"), header=True, index=False)
     LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
     dataset.pipeline.save(os.path.join(args.work_dir, 'pipeline'))

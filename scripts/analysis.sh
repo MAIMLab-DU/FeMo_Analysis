@@ -130,7 +130,7 @@ pip install $SCRIPT_DIR/../. -q
 
 # Execute the scripts
 if [ "$force_extract" = true ]; then
-    python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir" --extract
+    python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir" --force-extract
 else
     python "$SCRIPT_DIR/extract.py" --data-manifest "$manifest_file" --config-path "$dataset_config" --work-dir "$run_dir"
 fi
