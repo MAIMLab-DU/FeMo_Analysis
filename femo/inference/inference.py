@@ -21,11 +21,13 @@ class PredictionService(object):
     plotter = FeMoPlotter()
 
     def __init__(self,
+                 classifier_path: str,
                  model_path: str,
                  pipeline_path: str,
                  processor_path: str,
                  metrics_path: str) -> None:
         
+        self.classifier_path = classifier_path
         self.model_path = model_path
         self.pipeline_path = pipeline_path
         self.processor_path = processor_path
@@ -35,7 +37,8 @@ class PredictionService(object):
     def get_model(self):
         """Get the model object for this instance, loading it if it's not already loaded."""
         if self.classifier is None:
-            self.classifier = joblib.load(self.model_path)
+            self.classifier = joblib.load(self.classifier_path)
+        self.classifier.load_model(self.model_path)
         return self.classifier
     
     

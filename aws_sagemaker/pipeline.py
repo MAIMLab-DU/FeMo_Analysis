@@ -340,6 +340,7 @@ def get_pipeline(
         role=role,
     )
     repack_args = [
+        "--classifier", os.path.join(PROC_DIR, "input", "model", "model.tar.gz"),
         "--model", os.path.join(PROC_DIR, "input", "model", "model.tar.gz"),
         "--pipeline", os.path.join(PROC_DIR, "input", "pipeline", "pipeline.tar.gz"),
         "--processor", os.path.join(PROC_DIR, "input", "processor", "processor.tar.gz"),

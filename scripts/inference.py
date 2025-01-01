@@ -1,8 +1,9 @@
 import os
 import sys
+import uuid
+import argparse
 import numpy as np
 import pandas as pd
-import argparse
 from datetime import datetime
 from tqdm import tqdm
 from femo.logger import LOGGER
@@ -12,7 +13,8 @@ from femo.inference import PredictionService
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-file", type=str, required=True, help="Path to data file(s) (.dat or .txt)")
-    parser.add_argument("--model", type=str, required=True, help="Path to trained classifier file (.joblib)")
+    parser.add_argument("--classifier", type=str, required=True, help="Path to fitted classifier object file (.joblib)")
+    parser.add_argument("--model", type=str, required=True, help="Path to trained model file (.joblib or .h5)")
     parser.add_argument("--pipeline", type=str, required=True, help="Path to data pipeline object (.joblib)")
     parser.add_argument("--processor", type=str, required=True, help="Path to data processor object (.joblib)")
     parser.add_argument("--metrics", type=str, required=True, help="Path to evaluation metrics object (.joblib)")
@@ -42,6 +44,7 @@ def main(args):
 
     try:
         pred_service = PredictionService(
+            args.classifier,
             args.model,
             args.pipeline,
             args.processor,
@@ -61,9 +64,11 @@ def main(args):
         data, pipeline_output, ml_map = pred_service.predict(
             data_filename
         )
+        job_id = str(uuid.uuid4())[:8]
 
         metainfo_dict = {
             "Timestamp": [timestamp],
+            "JobId": [job_id],
             "File Name": [data_filename],
             "Number of bouts per hour": [(data.numKicks*60) / (data.totalFMDuration+data.totalNonFMDuration)],
             "Mean duration of fetal movement (seconds)": [data.totalFMDuration*60/data.numKicks if data.numKicks > 0 else 0],
@@ -91,7 +96,7 @@ def main(args):
         pred_service.save_pred_plots(
             pipeline_output,
             ml_map,
-            os.path.join(args.work_dir, f"{timestamp}_{data_filename.replace('/', '-').replace('.dat', '.png')}")
+            os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}.png")
         )
         
 

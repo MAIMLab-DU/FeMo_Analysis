@@ -10,6 +10,8 @@ from sklearn.model_selection import RepeatedStratifiedKFold, GridSearchCV
 
 class FeMoAdaBoostClassifier(FeMoBaseClassifier):
 
+    model_framework = 'sklearn'
+
     def __init__(self,
                  config = {
                      'search_space': {

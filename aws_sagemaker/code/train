@@ -18,7 +18,6 @@ train_channel_name = 'train'
 
 output_path = os.path.join(prefix, 'output')
 model_path = os.path.join(prefix, 'model')
-model_file_name = 'model.joblib'
 train_path = os.path.join(input_path, train_channel_name)
 output_data_path = os.path.join(output_path, 'data')
 
@@ -87,8 +86,10 @@ def train():
     )
     
     try:
-        joblib.dump(classifier, os.path.join(model_path, model_file_name), compress=False)
-        LOGGER.info(f"Model saved to: {os.path.abspath(model_path)}")
+        classifier.save_model(os.path.join(model_path, 'model.joblib'))
+        classifier.model = None
+        joblib.dump(classifier, os.path.join(model_path, 'classifier.joblib'), compress=False)
+        LOGGER.info(f"Classifier and fitted model saved to: {os.path.abspath(model_path)}")
     except Exception:
         raise RuntimeError(
             'Failed to save classifier'

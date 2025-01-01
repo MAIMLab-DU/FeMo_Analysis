@@ -109,6 +109,8 @@ class Result:
 
 class FeMoBaseClassifier(ABC):
 
+    model_framework: Literal['sklearn', 'keras'] = None
+
     @property
     def logger(self):
         return LOGGER
@@ -182,15 +184,15 @@ class FeMoBaseClassifier(ABC):
         return train, test, metadata
         
     def save_model(self,
-                   model_filename: str,
-                   model_framework: Literal['sklearn', 'keras']):
+                   model_filename: str):
         if self.model is not None:
             try:
-                if model_framework == 'sklearn':
-                    assert model_filename.endswith('.pkl'), "Must be a pickle filename"
+                if self.model_framework == 'sklearn':
+                    assert model_filename.endswith('.pkl') or model_filename.endswith('.joblib'), "Must be a pickle or joblib file"
                     joblib.dump(self.model, model_filename)
-                if model_framework == 'keras':
-                    assert model_filename.endswith('.h5'), "Must be a h5 filename"
+                if self.model_framework == 'keras':
+                    model_filename = model_filename.replace('.joblib', '.h5').replace('.pkl', '.h5')
+                    assert model_filename.endswith('.h5'), "Must be a h5 file"
                     self.model.save(model_filename)
             except Exception as e:
                 self.logger.error(f"Error saving model: {e}")
@@ -199,14 +201,14 @@ class FeMoBaseClassifier(ABC):
             self.logger.error("No model trained yet. Cannot save.")
 
     def load_model(self,
-                   model_filename: str,
-                   model_framework: Literal['sklearn', 'keras']):
+                   model_filename: str):
         try:
-            if model_framework == 'sklearn':
-                assert model_filename.endswith('.pkl'), "Must be a pickle filename"
+            if self.model_framework == 'sklearn':
+                assert model_filename.endswith('.pkl') or model_filename.endswith('.joblib'), "Must be a pickle or joblib file"
                 self.model = joblib.load(model_filename)
-            if model_framework == 'keras':
-                assert model_filename.endswith('.h5'), "Must be a h5 filename"
+            if self.model_framework == 'keras':
+                model_filename = model_filename.replace('.joblib', '.h5').replace('.pkl', '.h5')
+                assert model_filename.endswith('.h5'), "Must be a h5 file"
                 self.model = load_model(model_filename)
         except Exception as e:
             self.logger.error(f"Error loading model: {e}")

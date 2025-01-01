@@ -10,6 +10,8 @@ from .base import FeMoBaseClassifier
 
 class FeMoSVClassifier(FeMoBaseClassifier):
 
+    model_framework = 'sklearn'
+
     def __init__(self,
                  config = {
                      'search_space': {
