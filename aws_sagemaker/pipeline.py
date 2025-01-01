@@ -143,7 +143,7 @@ def get_pipeline(
                  "--work-dir", os.path.join(PROC_DIR, "output"),
                  "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml")]
     if force_extract:
-        feat_args.append("--extract")
+        feat_args.append("--force-extract")
 
     step_extract = ProcessingStep(
         name="ExtractFeatures",
