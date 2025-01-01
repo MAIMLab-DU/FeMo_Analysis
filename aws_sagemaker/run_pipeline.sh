@@ -51,6 +51,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Local mode: $local_mode"
+echo "Force extract: $force_extract"
 # Create/Update the SageMaker Pipeline and wait for the execution to be completed
 if [[ -z "${manifest_file}" ]]; then
   echo "Data manifest file path is required."
