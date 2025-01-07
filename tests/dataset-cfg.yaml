@@ -1,6 +1,6 @@
 data_pipeline:
   base: &base
-    description: "Belt type 'A'"
+    description: "Only large piezos from belt types 'A' and 'C'"
     sensor_freq: 1024
     sensation_freq: 1024
     sensor_map:
@@ -10,30 +10,34 @@ data_pipeline:
       piezoelectric_large:
         - 'sensor_3'
         - 'sensor_6'
-      piezoelectric_small:
+      other:
         - 'sensor_4'
         - 'sensor_5'
     sensor_selection:
-      - 'accelerometer'
       - 'piezoelectric_large'
-      - 'piezoelectric_small'
   load:
     <<: *base
   preprocess:
     <<: *base
+    resolve_debounce: true
+    debounce_thresh: 97.65625
   segment:
     <<: *base
-    imu_acceleration_threshold: 0.2
-    imu_rotation_threshold: 4
-    maternal_dilation_forward: 2.0
+    percentile_threshold:
+      sensor_3: 0.0
+      sensor_6: 0.0
+    num_common_sensors_imu: 2
+    imu_acceleration_threshold: 0.675
+    imu_rotation_threshold: 1.75
+    maternal_dilation_forward: 5.0
     maternal_dilation_backward: 5.0
-    imu_dilation: 4.0
+    imu_dilation: 5.5
     fm_dilation: 3.0
     fm_min_sn: 40
     fm_signal_cutoff: 0.0001
   fusion:
     <<: *base
-    desired_scheme: ['type', 2]
+    desired_scheme: ['type', 1]
   extract_det:
     <<: *base
   extract_feat:

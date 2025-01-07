@@ -10,6 +10,15 @@ from .base import BaseTransform
 class DataSegmentor(BaseTransform):
 
     def __init__(self,
+                 percentile_threshold: dict = {
+                     'sensor_1': 0.0,
+                     'sensor_2': 0.0,
+                     'sensor_3': 0.0,
+                     'sensor_4': 0.0,
+                     'sensor_5': 0.0,
+                     'sensor_6': 0.0,
+                 },
+                 num_common_sensors_imu: int = 2,
                  imu_acceleration_threshold: float = 0.2,
                  imu_rotation_threshold: int = 4,
                  maternal_dilation_forward: int = 2,
@@ -21,6 +30,9 @@ class DataSegmentor(BaseTransform):
                  **kwargs) -> None:
         
         super().__init__(**kwargs)
+
+        self.num_common_sensors_imu = num_common_sensors_imu
+        self.percentile_threshold = percentile_threshold
         self.imu_acceleration_threshold = imu_acceleration_threshold
         self.imu_rotation_threshold = imu_rotation_threshold        
         # Dilation length in seconds
@@ -80,18 +92,36 @@ class DataSegmentor(BaseTransform):
     
         return imu_rotation_map
     
+    def _create_sensor_based_imu_map(self, preprocessed_sensor_data: dict):
+
+        imu_for_sensors = dict()
+    
+        for key in self.percentile_threshold.keys():
+            imu_for_sensors[key] = custom_binary_dilation(
+                np.abs(preprocessed_sensor_data[key]) >= self.percentile_threshold[key],
+                self.imu_dilation_size
+            )
+        
+        imu_for_sensors_stacked = np.vstack(list(imu_for_sensors.values()))
+        imu_for_sensors_sums = np.sum(imu_for_sensors_stacked, axis=0)
+
+        return imu_for_sensors_sums >= self.num_common_sensors_imu
+    
     def create_imu_map(self, preprocessed_data: dict):
 
         tic = time.time()
-        map_added = self._create_imu_accleration_map(preprocessed_data['imu_acceleration']).astype(int) \
-                    + self._create_imu_rotation_map(preprocessed_data['imu_rotation']).astype(int)
+        preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
+
+        imu_acceleration_map = self._create_imu_accleration_map(preprocessed_data['imu_acceleration']).astype(int)
+        imu_rotation_map = self._create_imu_rotation_map(preprocessed_data['imu_rotation']).astype(int)
+        imu_sensorbased_map = self._create_sensor_based_imu_map(preprocessed_sensor_data).astype(int)
+        map_added = imu_acceleration_map + imu_rotation_map + imu_sensorbased_map
     
         map_added[0] = 0
         map_added[-1] = 0
         
         # Find where changes from non-zero to zero or zero to non-zero occur
         changes = np.where((map_added[:-1] == 0) != (map_added[1:] == 0))  [0] + 1
-
 
         # Create tuples of every two values
         windows = []
@@ -113,7 +143,7 @@ class DataSegmentor(BaseTransform):
             else:
                 map_final[start:] = 1        
 
-        self.logger.info(f"IMU rotation map created in {(time.time()-tic)*1000:.2f} ms")                
+        self.logger.info(f"IMU map created in {(time.time()-tic)*1000:.2f} ms")                
         return map_final.astype(dtype=bool)
     
     def _get_segmented_sensor_data(self, preprocessed_sensor_data, imu_map):  
@@ -165,7 +195,7 @@ class DataSegmentor(BaseTransform):
         
         segmented_sensor_data, threshold = self._get_segmented_sensor_data(preprocessed_sensor_data, 
                                                                            imu_map)
-
+        
         for i in range(self.num_sensors):
             map_added = imu_map.astype(int) + segmented_sensor_data[i].astype(int)
     
