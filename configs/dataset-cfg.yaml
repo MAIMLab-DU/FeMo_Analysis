@@ -19,6 +19,8 @@ data_pipeline:
     <<: *base
   preprocess:
     <<: *base
+    resolve_debounce: true
+    debounce_thresh: 97.65625
   segment:
     <<: *base
     imu_acceleration_threshold: 0.2

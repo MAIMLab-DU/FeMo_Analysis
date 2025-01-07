@@ -7,8 +7,43 @@ from .base import BaseTransform
 
 class DataPreprocessor(BaseTransform): 
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self,
+                 resolve_debounce: bool = True,
+                 debounce_thresh: float = 97.65625,  # milliseconds (default value might be too low, because avg human reaction time for touch is ~150ms)
+                 **kwargs) -> None:
         super().__init__(**kwargs)
+
+        self.resolve_debounce = resolve_debounce
+        self.debounce_thresh = debounce_thresh
+
+    def _resolve_debouncing(self, sensation_data: np.ndarray):
+        """
+        Resolves debouncing issues in the sensation data by ensuring
+        isolated '1's surrounded by '0's within a threshold are retained.
+
+        Parameters:
+        - sensation_data (np.ndarray): Input array with debouncing noise.
+
+        Returns:
+        - np.ndarray: Processed array with debouncing resolved.
+        """
+        
+        new_sensation_data = np.zeros_like(sensation_data)
+        sample_range = int(self.debounce_thresh * self.sensation_freq / 1000)
+        self.logger.debug(f"Resolving debounce issues with debounce_time: {self.debounce_thresh}ms, sample_range: {sample_range}")
+        
+        for i in range(len(sensation_data)):
+            count = 0
+            if sensation_data[i] == 1: 
+                for j in range(1, sample_range + 1):
+                    if (i+j) < len(sensation_data) and sensation_data[i+j] == 0:
+                        count+=1
+                    else:
+                        break
+                if count < sample_range:
+                    new_sensation_data[i:i+j] = 1
+                    i = i + j
+        return new_sensation_data
     
     def transform(self, loaded_data: dict):
         start = time.time()
@@ -37,8 +72,6 @@ class DataPreprocessor(BaseTransform):
         self.logger.debug(f"FM band-pass: {lowCutoff_FM}-{highCutoff_FM} Hz")
         # self.logger.debug(f'\tForce sensor low-pass: {highCutoff_force} Hz')
         self.logger.debug(f"Removal period: {removal_period} s")
-
-
 
         # TODO: Add descriptive comments to docstrings or wiki
         # ================Bandpass filter design==========================
@@ -83,6 +116,8 @@ class DataPreprocessor(BaseTransform):
         end_index = -removal_period * self.sensor_freq
         try:
             preprocessed_data['sensation_data'] = preprocessed_data['sensation_data'][start_index:end_index]
+            if self.resolve_debounce:
+                preprocessed_data['sensation_data'] = self._resolve_debouncing(preprocessed_data['sensation_data'])
         except IndexError:
             preprocessed_data['sensation_data'] = preprocessed_data['sensation_data']
 
