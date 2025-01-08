@@ -24,8 +24,8 @@ data_pipeline:
   segment:
     <<: *base
     percentile_threshold:
-      sensor_3: 0.0
-      sensor_6: 0.0
+      sensor_3: 1.555
+      sensor_6: 1.613
     num_common_sensors_imu: 2
     imu_acceleration_threshold: 0.675
     imu_rotation_threshold: 1.75
@@ -37,7 +37,7 @@ data_pipeline:
     fm_signal_cutoff: 0.0001
   fusion:
     <<: *base
-    desired_scheme: ['type', 1]
+    desired_scheme: ['number', 1]
   extract_det:
     <<: *base
   extract_feat:
