@@ -51,7 +51,7 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
                 ('adaboost', AdaBoostClassifier(random_state=0,
                                                 **params.get('adaboost_clf'))),
                 ('gradient_boosting', GradientBoostingClassifier(random_state=0,
-                                                                 loss='exponential',
+                                                                 loss='log_loss',
                                                                  **params.get('gradboost_clf'))),
                 ('svc', SVC(probability=True, class_weight=class_weight, random_state=0)),
                 ('knn', KNeighborsClassifier()),
@@ -63,8 +63,8 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
     # TODO: proper hyperparameter tuning - should tune individual classifiers
     # https://stackoverflow.com/questions/46580199/hyperparameter-in-voting-classifier
     def tune(self,
-               train_data: list[np.ndarray],
-               test_data: list[np.ndarray]):
+             train_data: list[np.ndarray],
+             test_data: list[np.ndarray]):
         
         start = time.time()
 

@@ -37,7 +37,7 @@ data_pipeline:
     fm_signal_cutoff: 0.0001
   fusion:
     <<: *base
-    desired_scheme: ['type', 1]
+    desired_scheme: ['number', 1]
   extract_det:
     <<: *base
   extract_feat:
