@@ -127,6 +127,7 @@ run_dir="$(convert_path "$run_dir")"
 mkdir -p "$run_dir"
 
 # Copy configuration files to the run directory
+cp "$manifest_file" "$run_dir/"
 cp "$dataset_config" "$run_dir/"
 cp "$preproc_config" "$run_dir/"
 cp "$train_config" "$run_dir/"
