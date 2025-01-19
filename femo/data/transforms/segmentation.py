@@ -25,7 +25,7 @@ class DataSegmentor(BaseTransform):
                  maternal_dilation_backward: int = 5,
                  imu_dilation: int = 4,
                  fm_dilation: int = 3,
-                 fm_min_sn: int = 40,
+                 fm_min_sn: int | list[int] = 40,
                  fm_signal_cutoff: float = 0.0001,
                  **kwargs) -> None:
         
@@ -40,7 +40,8 @@ class DataSegmentor(BaseTransform):
         self.fm_dilation = fm_dilation
         self.maternal_dilation_forward = maternal_dilation_forward
         self.maternal_dilation_backward = maternal_dilation_forward
-        self.fm_min_sn = [fm_min_sn for _ in range(self.num_sensors)]
+        self.fm_min_sn = [fm_min_sn for _ in range(self.num_sensors)] if isinstance(fm_min_sn, int) else fm_min_sn
+        assert len(self.fm_min_sn) == self.num_sensors, f"{len(self.fm_min_sn) = } != {self.num_sensors = }"
         self.segmentation_signal_cutoff = [fm_signal_cutoff for _ in range(self.num_sensors)]
         # Dilation length in sample number 
         self.imu_dilation_size = round(imu_dilation * self.sensor_freq)
