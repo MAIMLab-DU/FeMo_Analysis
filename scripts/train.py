@@ -106,6 +106,7 @@ def main(args):
     os.makedirs(metadata_path, exist_ok=True)
     
     classifier.result.compile_results(
+        threshold=train_cfg.get('threshold', 0.5),
         metadata=metadata,
         results_path=results_path,
         metadata_path=metadata_path

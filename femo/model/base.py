@@ -22,6 +22,7 @@ class Result:
     @staticmethod
     def process_attributes(attribute,
                            metadata: dict,
+                           thresh: float = 0.5,
                            preds: bool = False):
         tpd_attribute_rand = np.zeros((1, 1))
         fpd_attribute_rand = np.zeros((1, 1))
@@ -57,8 +58,8 @@ class Result:
             fpd_attribute = fpd_attribute_rand
 
         if preds:
-            tpd_attribute = tpd_attribute >= 0.5
-            fpd_attribute = fpd_attribute >= 0.5
+            tpd_attribute = tpd_attribute >= thresh
+            fpd_attribute = fpd_attribute >= thresh
 
         return np.concatenate([tpd_attribute, fpd_attribute])
 
@@ -84,14 +85,15 @@ class Result:
     
     def compile_results(self,
                         metadata: dict,
+                        threshold: float = 0.5,
                         results_path: str|None = None,
                         metadata_path: str|None = None):
         self._assert_no_none_fields()
 
-        preds = self.process_attributes(self.preds, metadata, preds=True)
-        pred_scores = self.process_attributes(self.pred_scores, metadata)
-        det_indices = self.process_attributes(self.det_indices, metadata)
-        filename_hash = self.process_attributes(self.filename_hash, metadata)
+        preds = self.process_attributes(self.preds, metadata, preds=True, thresh=threshold)
+        pred_scores = self.process_attributes(self.pred_scores, metadata, thresh=threshold)
+        det_indices = self.process_attributes(self.det_indices, metadata, thresh=threshold)
+        filename_hash = self.process_attributes(self.filename_hash, metadata, thresh=threshold)
 
         self.preds = preds.astype(float)
         self.pred_scores = pred_scores.astype(float)
