@@ -126,11 +126,14 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.virtualenv
 env/
 venv/
+virtualenv/
 ENV/
 env.bak/
 venv.bak/
+virtualenv.bak/
 .secrets
 
 # Spyder project settings
@@ -219,7 +222,8 @@ work_dir/
 work_dirs/
 */run*/
 tests/datafiles/
-configs/*.yaml
+configs/*
+!configs/dataManifest.json.template
 !configs/dataset-cfg.yaml
 !configs/inference-cfg.yaml
 !configs/preprocess-cfg.yaml

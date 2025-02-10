@@ -19,19 +19,25 @@ data_pipeline:
     <<: *base
   preprocess:
     <<: *base
+    resolve_debounce: true
+    debounce_thresh: 97.65625
   segment:
     <<: *base
-    imu_acceleration_threshold: 0.2
-    imu_rotation_threshold: 4
+    percentile_threshold:
+      sensor_3: 1.555
+      sensor_6: 1.613
+    num_common_sensors_imu: 2
+    imu_acceleration_threshold: 0.675
+    imu_rotation_threshold: 1.75
     maternal_dilation_forward: 5.0
     maternal_dilation_backward: 5.0
-    imu_dilation: 4.0
+    imu_dilation: 5.5
     fm_dilation: 3.0
     fm_min_sn: 40
     fm_signal_cutoff: 0.0001
   fusion:
     <<: *base
-    desired_scheme: ['type', 1]
+    desired_scheme: ['number', 1]
   extract_det:
     <<: *base
   extract_feat:
