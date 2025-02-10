@@ -80,12 +80,12 @@ class DataSegmentor(BaseTransform):
         # Apply new conditions to modify the IMU map
         for i in range(len(imu_rotP_preproc)):
             if imu_rotP_preproc[i] < 1.5:
-                if imu_rotR_preproc[i] < 4 and imu_rotY_preproc[i] < 4:
+                if imu_rotR_preproc[i] < self.imu_rotation_threshold and imu_rotY_preproc[i] < self.imu_rotation_threshold:
                     imu_rotation_map[i] = False  
                 else:
                     imu_rotation_map[i] = True
             else:  # IMU_rotP_preproc[i] >= 1
-                if imu_rotR_preproc[i] > 4 or imu_rotY_preproc[i] > 4:
+                if imu_rotR_preproc[i] > self.imu_rotation_threshold or imu_rotY_preproc[i] > self.imu_rotation_threshold:
                     imu_rotation_map[i] = True  
     
         # Dilation of IMU data
