@@ -139,10 +139,11 @@ class DataSegmentor(BaseTransform):
             
             if len(window) == 2:
                 end = window[1]
-                if np.any(map_added[start:end] == 2):
+                if np.any(map_added[start:end] >= 1):
                     map_final[start:end] = 1
             else:
-                map_final[start:] = 1        
+                if np.any(map_added[start:end] >= 1):
+                    map_final[start:] = 1        
 
         self.logger.info(f"IMU map created in {(time.time()-tic)*1000:.2f} ms")                
         return map_final.astype(dtype=bool)
