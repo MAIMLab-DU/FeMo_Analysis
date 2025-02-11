@@ -200,16 +200,12 @@ def test_features_for_train(folder):
         os.path.join(data_folder, folder, "extracted_features_train.pkl")
     )
 
-    compare_elements(
-        key='features',
-        actual=actual_extracted_features['features'],
-        desired=desired_extracted_features['features']
-    )
-    compare_elements(
-        key='labels',
-        actual=actual_extracted_features['labels'],
-        desired=desired_extracted_features['labels']
-    )
+    for key in actual_extracted_features.keys():
+        compare_dictionaries(
+            actual_dict=actual_extracted_features[key],
+            desired_dict=desired_extracted_features[key],
+            keys=['features', 'labels']
+        )
 
 
 if __name__ == "__main__":
