@@ -1,7 +1,10 @@
+import tsfel
 import numpy as np
 from functools import wraps
 from tqdm import tqdm
 from scipy.stats import skew, kurtosis
+import tsfel.feature_extraction
+import tsfel.feature_extraction.features_settings
 from .feature_utils import (
     get_frequency_mode,
     get_band_energy,
@@ -27,6 +30,8 @@ class FeatureExtractor(BaseTransform):
                      [20, 30]
                  ],
                  freq_mode_threshold: int = 1,
+                 tsfel_features: list[str] | None = None,
+                 add_imu_features: bool = True,
                  **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -34,6 +39,10 @@ class FeatureExtractor(BaseTransform):
         self.freq_bands = freq_bands        
         # Main frequency mode above threshold (in Hz)
         self.freq_mode_threshold = freq_mode_threshold
+        self.tsfel_features = tsfel_features
+        if tsfel_features is not None:
+            self.tsfel_cfg = tsfel.feature_extraction.features_settings.get_features_by_domain(tsfel_features)
+        self.add_imu_features = add_imu_features
         assert len(self.freq_bands) == 5, "Only 5 band energy features supported"
 
     def _extract_features_of_signal(self,
@@ -45,13 +54,14 @@ class FeatureExtractor(BaseTransform):
         num_segments = len(extracted_sensor_data)
 
         num_common_feats = 53  # i.e. max, mean, sum, sd, percentile, skew, kurtosis, ...
+        num_maps = self.num_sensors + 2 if self.add_imu_features else self.num_sensors
         # +1 feature for segment duration
-        total_feats = (self.num_sensors + 2) * num_common_feats + 1   
+        total_feats = num_maps * num_common_feats 
         
         # Features array
         X_extracted = np.zeros((num_segments, total_feats))
         columns = ['' for _ in range(total_feats)]
-        self.logger.debug("Extracting features...")
+        self.logger.debug("Extracting hand-crafted features...")
 
         # For each segment
         for i in tqdm(range(num_segments), desc="Processing segments"):
@@ -59,7 +69,7 @@ class FeatureExtractor(BaseTransform):
             columns[0] = 'duration'
             X_extracted[i, 0] = len(extracted_sensor_data[i]) / self.sensor_freq
 
-            for k in range(self.num_sensors + 2):
+            for k in range(num_maps):
                 
                 # Assigning sensor data, IMU rotation, or acceleration based on the sensor index
                 # For FM sensors, get thesholded signal
@@ -125,6 +135,45 @@ class FeatureExtractor(BaseTransform):
 
         return X_extracted, columns
         
+    def _extract_features_tsfel(self,
+                                extracted_sensor_data,
+                                extracted_imu_acceleration,
+                                extracted_imu_rotation):
+        
+        num_segments = len(extracted_sensor_data)
+
+        num_common_feats = 156  # i.e. num tsfel features per signal data
+        num_maps = self.num_sensors + 2 if self.add_imu_features else self.num_sensors
+        # +1 feature for segment duration
+        total_feats = num_maps * num_common_feats
+
+        # Features array
+        X_extracted = np.zeros((num_segments, total_feats))
+        columns = ['' for _ in range(total_feats)]
+        self.logger.debug("Extracting hand-crafted features...")
+
+        for i in tqdm(range(num_segments), desc="Processing segments"):
+
+            for k in range(num_maps):
+                
+                # Assigning sensor data, IMU rotation, or acceleration based on the sensor index
+                if k < self.num_sensors:
+                    signal = extracted_sensor_data[i][:, k]
+                    sensor_name = f"snsr_{k+1}"
+                else:
+                    signal = extracted_imu_rotation[i] if k == self.num_sensors else extracted_imu_acceleration[i]
+                    sensor_name = 'imu_rot' if k == self.num_sensors else 'imu_accltn'
+                
+                try:
+                    features = tsfel.time_series_features_extractor(self.tsfel_cfg, signal, fs=self.sensor_freq, n_jobs=-1, verbose=0)
+                    X_extracted[i, k*num_common_feats: (k+1)*num_common_feats-1] = features.to_numpy().flatten()
+                    for c in range(num_common_feats):
+                        columns[k*num_common_feats+c] = f"{sensor_name}_tsfel_{c}"
+                except Exception as e:
+                    self.logger.debug(f"Exception occured during tsfel extraction: {e}")
+                    continue
+        
+        return X_extracted, columns
 
     def _extract_features_for_inference(self,
                                         extracted_detections: dict,
