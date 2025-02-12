@@ -35,11 +35,12 @@ def main(args):
                           False,
                           dataset_cfg.get('data_pipeline'))
 
-    df = dataset.build(force_extract=args.force_extract)
-    df.to_csv(os.path.join(args.work_dir, "features/features.csv"), header=True, index=False)
-    LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
-    dataset.pipeline.save(os.path.join(args.work_dir, 'pipeline'))
-    LOGGER.info(f"Pipeline saved to {os.path.abspath(os.path.join(args.work_dir, 'pipeline'))}")
+    feature_dict: dict = dataset.build(force_extract=args.force_extract)
+    for key, df in feature_dict.items():
+        df.to_csv(os.path.join(args.work_dir, f"features/{key}_features.csv"), header=True, index=False)
+        LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
+        dataset.pipeline.save(os.path.join(args.work_dir, 'pipeline'))
+        LOGGER.info(f"Pipeline saved to {os.path.abspath(os.path.join(args.work_dir, 'pipeline'))}")    
 
 
 if __name__ == "__main__":

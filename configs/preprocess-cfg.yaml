@@ -1,5 +1,5 @@
+feature_sets: ['crafted', 'tsfel']
 feature_ranking:
-  min_common: 2
   feat_ratio: 3
   param_cfg:
     nca_ranking:

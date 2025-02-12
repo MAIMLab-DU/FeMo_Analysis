@@ -192,10 +192,13 @@ def test_features_for_train(folder):
     fm_dict = joblib.load(
         os.path.join(data_folder, folder, "fm_dict.pkl")
     )
-    actual_extracted_features = feature_extractor.transform(
-        inference=False,
-        extracted_detections=extracted_detections, fm_dict=fm_dict
-    )
+    actual_extracted_features = dict()
+    for feature_set in ['crafted', 'tsfel']:
+        actual_extracted_features[feature_set] = feature_extractor.transform(
+            inference=False,
+            extracted_detections=extracted_detections, fm_dict=fm_dict,
+            feat=feature_set
+        )
     desired_extracted_features = joblib.load(
         os.path.join(data_folder, folder, "extracted_features_train.pkl")
     )

@@ -7,6 +7,7 @@ For some guidelines, check out [this page](https://scikit-learn.org/stable/modul
 
 import itertools
 import numpy as np
+from typing import Literal
 from ..logger import LOGGER
 from functools import wraps
 from sklearn.neighbors import NeighborhoodComponentsAnalysis
@@ -23,7 +24,7 @@ class FeatureRanker:
         return LOGGER
 
     def __init__(self,
-                 min_common: int = 2,
+                 feature_set: Literal['crafted', 'tsfel'] = 'crafted',
                  feat_ratio: int = 3,
                  param_cfg: dict = {
                      'nca_ranking': {
@@ -56,8 +57,7 @@ class FeatureRanker:
                 'recursive_ranker: {'step': 1}
         """
 
-        assert min_common in range(1, 5), "min_common must be in range(1, 5)"
-        self._min_common = min_common
+        self._min_common = 2 if feature_set == 'crafted' else 3
         self._feature_ratio = feat_ratio
         self._param_cfg = param_cfg
 
@@ -76,7 +76,7 @@ class FeatureRanker:
         n_top_feats = X.shape[1] // self._feature_ratio
         nca = NeighborhoodComponentsAnalysis(init='auto',
                                              tol=1e-5,
-                                             verbose=0,
+                                             verbose=1,
                                              random_state=0,
                                              **self._param_cfg.get('nca_ranking'))
         nca.fit(X, y)

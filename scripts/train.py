@@ -40,8 +40,12 @@ def main(args):
     with open(args.config_path, 'r') as f:
         train_cfg = yaml.safe_load(f) if args.config_path.endswith('.yaml') else json.load(f)
 
+    feature_sets = train_cfg.get('feature_sets', ['crafted'])
+
+    dataset = pd.DataFrame([])
     try:
-        dataset = pd.read_csv(os.path.join(args.train, "dataset.csv"))
+        for key in feature_sets:
+            dataset = pd.concat([dataset, pd.read_csv(os.path.join(args.train, f"{key}_dataset.csv"))], axis=1)
     except Exception:
         raise ValueError(
             (

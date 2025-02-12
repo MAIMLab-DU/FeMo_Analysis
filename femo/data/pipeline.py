@@ -50,7 +50,7 @@ class Pipeline(object):
 
         return stages
 
-    def process(self, filename: str, outputs: list[str] = [
+    def process(self, filename: str, feature_set: str = 'crafted', outputs: list[str] = [
         'imu_map', 'fm_dict', 'scheme_dict', 'sensation_map',
         'extracted_detections', 'extracted_features', 'loaded_data',
         'preprocessed_data'
@@ -140,7 +140,8 @@ class Pipeline(object):
             extracted_features = self.stages[5](
                 inference=self.inference,
                 fm_dict=fm_dict,
-                extracted_detections=extracted_detections
+                extracted_detections=extracted_detections,
+                feat=feature_set
             )
 
         self.logger.info(f"Pipeline process completed in {time.time() - start: 0.3f} seconds.")
