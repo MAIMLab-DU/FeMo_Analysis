@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--outfile", type=str, default="meta_info.xlsx", help="Metrics output file")
     parser.add_argument("--remove-hiccups", action='store_true', default=False, help="Exclude hiccups from ML detections map")
+    parser.add_argument("--plot", action='store_true', default=False, help="Generate and save detection plots")
     args = parser.parse_args()
 
     return args
@@ -91,14 +92,14 @@ def main(args):
         df_combined.to_excel(os.path.join(args.work_dir, args.outfile), index=False)
 
         LOGGER.info(f"Meta info saved to {os.path.realpath(os.path.join(args.work_dir, args.outfile))}")
-
-        LOGGER.info("Plotting the results. It may take some time....")
         
-        pred_service.save_pred_plots(
-            pipeline_output,
-            ml_map,
-            os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}.png")
-        )
+        if args.plot:
+            LOGGER.info("Plotting the results. It may take some time....")
+            pred_service.save_pred_plots(
+                pipeline_output,
+                ml_map,
+                os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}.png")
+            )
         
 
 if __name__ == "__main__":
