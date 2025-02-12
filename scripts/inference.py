@@ -1,6 +1,7 @@
 import os
 import sys
 import uuid
+import yaml
 import argparse
 import numpy as np
 import pandas as pd
@@ -9,6 +10,7 @@ from tqdm import tqdm
 from femo.logger import LOGGER
 from femo.inference import PredictionService
 
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -18,6 +20,7 @@ def parse_args():
     parser.add_argument("--pipeline", type=str, required=True, help="Path to data pipeline object (.joblib)")
     parser.add_argument("--processor", type=str, required=True, help="Path to data processor object (.joblib)")
     parser.add_argument("--metrics", type=str, required=True, help="Path to evaluation metrics object (.joblib)")
+    parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/inference-cfg.yaml"), help="Path to config file")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--outfile", type=str, default="meta_info.xlsx", help="Metrics output file")
     parser.add_argument("--remove-hiccups", action='store_true', default=False, help="Exclude hiccups from ML detections map")
@@ -32,6 +35,9 @@ def main(args):
 
     os.makedirs(args.work_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    with open(args.config_path, 'r') as f:
+        pred_cfg = yaml.safe_load(f)
 
     if args.data_file.endswith('.dat'):
         # If it's a .dat file, store it in a list
@@ -50,7 +56,8 @@ def main(args):
             args.model,
             args.pipeline,
             args.processor,
-            args.metrics
+            args.metrics,
+            pred_cfg
         )
         _ = all([
             pred_service.get_model() is not None,
@@ -63,20 +70,28 @@ def main(args):
         sys.exit(1)
         
     for data_filename in tqdm(filenames, desc=f"Peforming inference on {len(filenames)} files..."):
-        data, pipeline_output, ml_map = pred_service.predict(
-            data_filename
+        pred_output = pred_service.predict(
+            data_filename,
+            remove_hiccups=args.remove_hiccups
         )
         job_id = str(uuid.uuid4())[:8]
 
+        pre_removal_data = pred_output['pre_hiccup_removal']['data']
         metainfo_dict = {
             "Timestamp": [timestamp],
             "JobId": [job_id],
             "File Name": [data_filename],
-            "Number of bouts per hour": [(data.numKicks*60) / (data.totalFMDuration+data.totalNonFMDuration)],
-            "Mean duration of fetal movement (seconds)": [data.totalFMDuration*60/data.numKicks if data.numKicks > 0 else 0],
-            "Median onset interval (seconds)": [np.median(data.onsetInterval)],
-            "Active time of fetal movement (%)": [(data.totalFMDuration/(data.totalFMDuration+data.totalNonFMDuration))*100]
+            "Number of bouts per hour - pre_hiccup": [(pre_removal_data.numKicks*60) / (pre_removal_data.totalFMDuration+pre_removal_data.totalNonFMDuration)],
+            "Mean duration of fetal movement (seconds) - pre_hiccup": [pre_removal_data.totalFMDuration*60/pre_removal_data.numKicks if pre_removal_data.numKicks > 0 else 0],
+            "Median onset interval (seconds) - pre_hiccup": [np.median(pre_removal_data.onsetInterval)],
+            "Active time of fetal movement (%) - pre_hiccup": [(pre_removal_data.totalFMDuration/(pre_removal_data.totalFMDuration+pre_removal_data.totalNonFMDuration))*100]
         }
+        if args.remove_hiccups:
+            post_removal_data = pred_output['post_hiccup_removal']['data']
+            metainfo_dict['Number of bouts per hour - post_hiccup'] = [(post_removal_data.numKicks*60) / (post_removal_data.totalFMDuration+post_removal_data.totalNonFMDuration)]
+            metainfo_dict['Mean duration of fetal movement (seconds) - post_hiccup'] = [post_removal_data.totalFMDuration*60/post_removal_data.numKicks if post_removal_data.numKicks > 0 else 0]
+            metainfo_dict['Median onset interval (seconds) - post_hiccup'] = [np.median(post_removal_data.onsetInterval)]
+            metainfo_dict['Active time of fetal movement (%) - post_hiccup'] = [(post_removal_data.totalFMDuration/(post_removal_data.totalFMDuration+post_removal_data.totalNonFMDuration))*100]
 
         # Check if the file exists
         if os.path.exists(os.path.join(args.work_dir, args.outfile)):
@@ -96,8 +111,8 @@ def main(args):
         if args.plot:
             LOGGER.info("Plotting the results. It may take some time....")
             pred_service.save_pred_plots(
-                pipeline_output,
-                ml_map,
+                pred_output['pipeline_output'],
+                pred_output['pre_hiccup_removal']['ml_map'],
                 os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}.png")
             )
         
