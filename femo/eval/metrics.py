@@ -3,22 +3,8 @@ import joblib
 import tarfile
 import numpy as np
 from ..logger import LOGGER
-from dataclasses import dataclass
 from skimage.measure import label
 from sklearn.metrics import accuracy_score
-
-
-@dataclass
-class InferenceMetaInfo:
-    """
-    Holds the data for inference.
-    """
-    fileName: str
-    numKicks: int
-    totalFMDuration: float
-    totalNonFMDuration: float
-    onsetInterval: list
-
 
 
 class FeMoMetrics(object):
@@ -274,62 +260,6 @@ class FeMoMetrics(object):
         metric_dict['PABAK'] = pabak
 
         return metric_dict
-    
-    def calc_meta_info(self,
-                       filename: str,
-                       y_pred: np.ndarray,
-                       preprocessed_data: dict,
-                       fm_dict: dict,
-                       scheme_dict: dict):
-        
-        self.logger.info(f"Calculating meta info for {filename}")
-
-        ones = np.sum(y_pred)
-        self.logger.info(f"Number of bouts: {ones}")
-
-        num_labels = scheme_dict['num_labels']
-        ml_map = np.zeros_like(scheme_dict['labeled_user_scheme'])
-
-        for k in range(1, num_labels+1):
-            L_min = np.argmax(scheme_dict['labeled_user_scheme'] == k)
-            L_max = len(scheme_dict['labeled_user_scheme']) - np.argmax(scheme_dict['labeled_user_scheme'][::-1] == k)
-
-            if y_pred[k-1] == 1:
-                ml_map[L_min:L_max] = 1
-            else:
-                ml_map[L_min:L_max] = 0
-
-        self.fm_dilation = 3 # Detections within this s will be considered as the same detection  
-
-        #Now get the reduced detection_map
-        reduced_detection_map = ml_map * fm_dict['fm_map']  # Reduced, because of the new dilation length
-        reduced_detection_map_labeled = label(reduced_detection_map)
-
-        n_movements = np.max(reduced_detection_map_labeled)
-
-        # Keeps only the detected segments
-        detection_only = reduced_detection_map[reduced_detection_map == 1]
-        # Dilation length on sides of each detection is removed and converted to minutes
-        total_FM_duration = (len(detection_only) / self._sensor_freq - n_movements * self.fm_dilation / 2) / 60
-
-        onset_interval = []
-        for j in range(1, n_movements):
-            onset1 = np.where(reduced_detection_map_labeled == j)[0][0]  # Sample no. corresponding to start of the label
-            onset2 = np.where(reduced_detection_map_labeled == j + 1)[0][0]  # Sample no. corresponding to start of the next label
-            onset_interval.append( (onset2 - onset1) / self._sensor_freq ) # onset to onset interval in seconds
-
-        duration_trimmed_data_files = len(preprocessed_data['sensor_1']) / 1024 / 60 # in minutes
-        # Time fetus was not moving
-        total_nonFM_duration = duration_trimmed_data_files - total_FM_duration
-        data = InferenceMetaInfo(
-            fileName=os.path.basename(filename),
-            numKicks=n_movements,
-            totalFMDuration=total_FM_duration,
-            totalNonFMDuration=total_nonFM_duration,
-            onsetInterval=onset_interval
-        )
-
-        return data, ml_map
     
     def save(self, file_path):
         """Save the metrics to a joblib file

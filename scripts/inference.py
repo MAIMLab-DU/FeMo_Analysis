@@ -20,6 +20,7 @@ def parse_args():
     parser.add_argument("--metrics", type=str, required=True, help="Path to evaluation metrics object (.joblib)")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--outfile", type=str, default="meta_info.xlsx", help="Metrics output file")
+    parser.add_argument("--remove-hiccups", action='store_true', default=False, help="Exclude hiccups from ML detections map")
     args = parser.parse_args()
 
     return args
