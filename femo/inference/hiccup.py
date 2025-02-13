@@ -548,13 +548,13 @@ class HiccupAnalysis:
         plt.yticks([])
 
     def plot_hiccup_analysis_v3(self, fltdSignal_piezo1, fltdSignal_aclm1, fltdSignal_acstc1, 
-                           detection_map, hiccup_map, x_axis_type, file_name, sensation_data, hiccup_GT,
+                           detection_map, hiccup_map, x_axis_type, file_name,
                            piezo_1_or_2, acoustic_1_or_2, accelerometer_1_or_2, cndtn1_body_map):
         """Plot hiccup analysis with sensation data and ground truth"""
 
         total_time_points = max(len(fltdSignal_piezo1), len(fltdSignal_aclm1), 
                             len(fltdSignal_acstc1), len(detection_map), 
-                            len(hiccup_map), len(sensation_data), len(hiccup_GT))
+                            len(hiccup_map))
         time_each_data_point = np.arange(0, total_time_points, 1)
 
         if x_axis_type == 'm':
@@ -598,21 +598,6 @@ class HiccupAnalysis:
         plt.ylabel("Detected\nHiccups", fontsize=12)
         plt.legend(fontsize=10)
 
-        # Plot ground truth in position 6
-        plt.subplot(6, 1, 6)
-        plt.plot(time_ticks, hiccup_GT, label="Ground Truth Hiccups", color='blue', linewidth=2)
-
-        # Add sensation data scatter points
-        sensation_indices = np.where(sensation_data > 0)[0]
-        sensation_times = sensation_indices / 1024 / 60 if x_axis_type == 'm' else sensation_indices / 1024
-        plt.scatter(sensation_times, 
-                np.ones_like(sensation_times) * 0.5,
-                c='red',
-                marker='o',
-                s=15,
-                label="Ground Truth Events",
-                alpha=0.7)
-
         plt.xlabel('Time (minutes)', fontweight='bold', fontsize=15)
         plt.ylim(-.1, 1.1)
         plt.xticks(xticks, fontsize=14)
@@ -644,6 +629,8 @@ class HiccupAnalysis:
         # Label the bouts
         labeled_map = label(binary_map)
         n_bouts = labeled_map.max()
+        if n_bouts == 0:
+            return binary_map
         
         # Create output map
         merged_map = binary_map.copy()
@@ -698,51 +685,48 @@ class HiccupAnalysis:
                                                                   self.tolerance_limit)  # Apply hiccup frequency and continuity
 
         # # if hiccup is present will return hiccup is present
-        if np.max(hiccup_map) > 0:
-            # =======Check Condition_3==========
-            std_all_sensors, std_deviation_values_list, max_std_deviation = self.standard_deviation_check_all_sensors(
-                signals, self.std_threshold_percentage, hiccup_map
-            )
+        # =======Check Condition_3==========
+        std_all_sensors, std_deviation_values_list, max_std_deviation = self.standard_deviation_check_all_sensors(
+            signals, self.std_threshold_percentage, hiccup_map
+        )
 
-            piezo_1_2_or = np.logical_or(std_all_sensors['Piezo1'], std_all_sensors['Piezo2'])
-            aclm_1_2_or = np.logical_or(std_all_sensors['Aclm1'], std_all_sensors['Aclm2'])
-            acstc_1_2_or = np.logical_or(std_all_sensors['Acstc1'], std_all_sensors['Acstc2'])
+        piezo_1_2_or = np.logical_or(std_all_sensors['Piezo1'], std_all_sensors['Piezo2'])
+        aclm_1_2_or = np.logical_or(std_all_sensors['Aclm1'], std_all_sensors['Aclm2'])
+        acstc_1_2_or = np.logical_or(std_all_sensors['Acstc1'], std_all_sensors['Acstc2'])
+        
+        piezo_and_aclm = np.logical_or(piezo_1_2_or, aclm_1_2_or)
+        piezo_and_aclm_and_acstc = np.logical_or(piezo_and_aclm, acstc_1_2_or)
+
+        # New Condition: At least two types of sensors should have common high
+        piezo_and_aclm = np.logical_and(piezo_1_2_or, aclm_1_2_or)
+        piezo_and_acstc = np.logical_and(piezo_1_2_or, acstc_1_2_or)
+        aclm_and_acstc = np.logical_and(aclm_1_2_or, acstc_1_2_or)
+
+        piezo_supremacy = np.logical_or(piezo_1_2_or, np.logical_and(aclm_1_2_or, acstc_1_2_or))
+        # piezo_supremacy = piezo_1_2_or
+
+        # Combine the conditions to ensure at least two sensor types are high
+        fusion_hiccup_map_TWO = np.logical_or(np.logical_or(piezo_and_aclm, piezo_and_acstc), aclm_and_acstc)
+
+        # New Condition: At least three types of sensors should have common high
+        fusion_hiccup_map_THREE = np.logical_and(piezo_1_2_or, np.logical_and(aclm_1_2_or, acstc_1_2_or))
+        if self.fusion == 'piezo_sup':
+            # For piezo supremacy, use only the piezo sensors for fusion
+            fusion_hiccup_map = piezo_supremacy
+        elif self.fusion == 'any_type':
+            fusion_hiccup_map = piezo_and_aclm_and_acstc
             
-            piezo_and_aclm = np.logical_or(piezo_1_2_or, aclm_1_2_or)
-            piezo_and_aclm_and_acstc = np.logical_or(piezo_and_aclm, acstc_1_2_or)
-
-            # New Condition: At least two types of sensors should have common high
-            piezo_and_aclm = np.logical_and(piezo_1_2_or, aclm_1_2_or)
-            piezo_and_acstc = np.logical_and(piezo_1_2_or, acstc_1_2_or)
-            aclm_and_acstc = np.logical_and(aclm_1_2_or, acstc_1_2_or)
-
-            piezo_supremacy = np.logical_or(piezo_1_2_or, np.logical_and(aclm_1_2_or, acstc_1_2_or))
-            # piezo_supremacy = piezo_1_2_or
-
-            # Combine the conditions to ensure at least two sensor types are high
-            fusion_hiccup_map_TWO = np.logical_or(np.logical_or(piezo_and_aclm, piezo_and_acstc), aclm_and_acstc)
-
-            # New Condition: At least three types of sensors should have common high
-            fusion_hiccup_map_THREE = np.logical_and(piezo_1_2_or, np.logical_and(aclm_1_2_or, acstc_1_2_or))
-            if self.fusion == 'piezo_sup':
-                # For piezo supremacy, use only the piezo sensors for fusion
-                fusion_hiccup_map = piezo_supremacy
-            elif self.fusion == 'any_type':
-                fusion_hiccup_map = piezo_and_aclm_and_acstc
-             
-            elif self.fusion == 'two_type':
-                # Use the condition where at least two types of sensors are high
-                fusion_hiccup_map = fusion_hiccup_map_TWO
-            elif self.fusion == 'three_type':
-                # Use the condition where at least three types of sensors are high
-                fusion_hiccup_map = fusion_hiccup_map_THREE
-            else:
-                raise ValueError("Invalid fusion mode. Please choose 'piezo_only', 'two_sensors', or 'three_sensors'.")
-            fusion_hiccup_map = self._merge_nearby_bouts(fusion_hiccup_map)
+        elif self.fusion == 'two_type':
+            # Use the condition where at least two types of sensors are high
+            fusion_hiccup_map = fusion_hiccup_map_TWO
+        elif self.fusion == 'three_type':
+            # Use the condition where at least three types of sensors are high
+            fusion_hiccup_map = fusion_hiccup_map_THREE
         else:
-            fusion_hiccup_map = hiccup_map
+            raise ValueError("Invalid fusion mode. Please choose 'piezo_only', 'two_sensors', or 'three_sensors'.")
+        fusion_hiccup_map = self._merge_nearby_bouts(fusion_hiccup_map)
                 
-        return fusion_hiccup_map
+        return dilated_data_raw_, hiccup_map, fusion_hiccup_map, aclm_1_2_or, piezo_1_2_or, acstc_1_2_or
     
     def hiccup_bout_counter(self, signal, length_threshold):
         """

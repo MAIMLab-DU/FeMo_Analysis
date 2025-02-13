@@ -193,20 +193,29 @@ class PredictionService(object):
             'Acstc2': preprocessed_data['sensor_5']
         }
 
-        hiccup_map = hiccup_analyzer.detect_hiccups(
+        dilated_data, pre_hiccup_map, hiccup_map, aclm_1_or_2, piezo_1_or_2, acstc_1_or_2 = hiccup_analyzer.detect_hiccups(
             reduced_detection_map=reduced_detection_map,
             signals=filtered_signals,
             imu_map=imu_map
         )
 
-        hiccup_removed_ml_map = ml_map - hiccup_map
+        hiccup_removed_ml_map = np.clip(ml_map - hiccup_map, 0, 1)
         data = self._calc_meta_info(
             filename,
             preprocessed_data,
             hiccup_removed_ml_map
         )
 
-        return data, hiccup_map, hiccup_removed_ml_map
+        return {
+            'data': data,
+            'dilated_data': dilated_data,
+            'pre_hiccup_map': pre_hiccup_map,
+            'hiccup_map': hiccup_map,
+            'hiccup_removed_ml_map': hiccup_removed_ml_map,
+            'aclm_1_or_2': aclm_1_or_2,
+            'piezo_1_or_2': piezo_1_or_2,
+            'acstc_1_or_2': acstc_1_or_2
+        }
 
     def predict(self, filename: str, bucket_name: str = None, remove_hiccups: bool = False):
         """For the input, perform predictions and return results.
@@ -249,18 +258,14 @@ class PredictionService(object):
             }
 
             if remove_hiccups:
-                data, hiccup_map, post_ml_map = self._post_hiccup_removal(
+                post_hiccup_dict = self._post_hiccup_removal(
                     filename=filename,
                     hiccup_analyzer=hiccup_analyzer,
                     ml_map=ml_map,
                     preprocessed_data=pipeline_output['preprocessed_data'],
                     imu_map=pipeline_output['imu_map']
                 )
-                prediction_output['post_hiccup_removal'] = {
-                    'data': data,
-                    'hiccup_map': hiccup_map,
-                    'hiccup_removed_ml_map': post_ml_map
-                }
+                prediction_output['post_hiccup_removal'] = post_hiccup_dict
             
             return prediction_output
         
@@ -278,6 +283,7 @@ class PredictionService(object):
         return result  
     
     def save_pred_plots(self, pipeline_output: dict, ml_map: np.ndarray, filename: str):
+
         plt_cfg = {
             'figsize': [16, 15],
             'x_unit': 'min'
@@ -322,3 +328,26 @@ class PredictionService(object):
         )
 
         self.plotter.save_figure(fig, filename)
+
+    def save_hiccup_analysis_plots(self,
+                                   pipeline_output: dict,
+                                   hiccup_output: dict,
+                                   ml_map: np.ndarray,
+                                   filename: str):
+
+        hiccup_cfg = self.pred_cfg.get('hiccup_removal', self.default_hiccup_cfg)
+        hiccup_analyzer = HiccupAnalysis(Fs_sensor=self.pipeline.stages[0].sensor_freq, **hiccup_cfg)
+
+        hiccup_analyzer.plot_hiccup_analysis_v3(
+            fltdSignal_aclm1=pipeline_output['preprocessed_data']['sensor_1'],
+            fltdSignal_piezo1=pipeline_output['preprocessed_data']['sensor_3'],
+            fltdSignal_acstc1=pipeline_output['preprocessed_data']['sensor_4'],
+            detection_map=ml_map,
+            hiccup_map=hiccup_output['hiccup_map'],
+            cndtn1_body_map=hiccup_output['dilated_data'],
+            accelerometer_1_or_2=hiccup_output['aclm_1_or_2'],
+            piezo_1_or_2=hiccup_output['piezo_1_or_2'],
+            acoustic_1_or_2=hiccup_output['acstc_1_or_2'],
+            x_axis_type='m',
+            file_name=filename
+        )
