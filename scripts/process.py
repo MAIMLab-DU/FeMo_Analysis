@@ -43,7 +43,7 @@ def main(args):
         shutil.move(args.train_config_path, dump_path)
         LOGGER.info(f"Training configuration saved to {os.path.abspath(dump_path)}")
 
-    for key in feature_sets:    
+    for key in feature_sets:  
         features = pd.read_csv(os.path.join(args.features_dir, f"{key}_features.csv"))
         X, y = features.to_numpy()[:, :-3], features.to_numpy()[:, -1]
         filename_hash, det_indices = features.to_numpy()[:, -3], features.to_numpy()[:, -2]  # metadata columns
@@ -53,7 +53,7 @@ def main(args):
             data_processor: Processor = joblib.load(os.path.join(processor_dir, f'{key}_processor.joblib'))
             X_pre = data_processor.predict(X)
         else:
-            data_processor = Processor(preprocess_config=preproc_cfg)
+            data_processor = Processor(preprocess_config=preproc_cfg, feature_set=key)
             X_pre = data_processor.fit(X, y).predict(X)
 
         dataset = data_processor.convert_to_df(

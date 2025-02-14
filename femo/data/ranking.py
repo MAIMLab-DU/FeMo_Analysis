@@ -181,17 +181,19 @@ class FeatureRanker:
     
         def find_common_features(sets, count):
             """Finds features common to at least 'count' feature sets."""
-            common_features = np.concatenate([np.intersect1d(*combo) 
-                                            for combo in itertools.combinations(sets, count)])
-            return common_features
+            common_features = []
+            
+            for combo in itertools.combinations(sets, count):
+                intersection = combo[0]
+                for arr in combo[1:]:  # Iteratively find intersection across multiple sets
+                    intersection = np.intersect1d(intersection, arr)
+                common_features.append(intersection)
+
+            return np.unique(np.concatenate(common_features)) if common_features else recursive_top_n
 
         # Handle different fusion criteria
-        if self._min_common == 4:
-            selected_features = np.intersect1d(nca_top_n, np.intersect1d(xgb_top_n, np.intersect1d(l1_based_top_n, recursive_top_n)))
-        else:
-            selected_features = find_common_features(feature_sets, self._min_common)
-        
-        selected_features = np.unique(selected_features)
+        selected_features = find_common_features(feature_sets, self._min_common)
+
         self.logger.debug(f"Selected top {len(selected_features)} features: {selected_features}\n")
         
         return selected_features
@@ -215,30 +217,8 @@ class FeatureRanker:
     def fit(self):
         # Placeholder method for decorator function
         pass
-        
-        
-# TODO: add example to doctstring
-# if __name__ == '__main__':
-#     # Example usage
-#     X = np.random.rand(100, 10)  # Replace with your dataset
-#     y = np.random.randint(0, 2, 100)  # Replace with your target labels
 
-#     feature_ranker = FeatureRanker(X, y)
-#     n = 5  # Number of top features to select
 
-#     rf_top_n = feature_ranker.random_forest_ranking(n)
-#     pca_top_n = feature_ranker.pca_ranking(n)
-#     nca_top_n = feature_ranker.nca_ranking(n)
-#     xgb_top_n = feature_ranker.xgboost_ranking(n)
-#     lr_top_n = feature_ranker.logistic_regression_ranking(n)
-#     f_classif_top_n = feature_ranker.f_classif_ranking(n)
-
-#     self.logger.debug("Random Forest Top Features:", rf_top_n)
-#     self.logger.debug("PCA Top Features:", pca_top_n)
-#     self.logger.debug("NCA Top Features:", nca_top_n)
-#     self.logger.debug("XGBoost Top Features:", xgb_top_n)
-#     self.logger.debug("Logistic Regression Top Features:", lr_top_n)
-#     self.logger.debug("F-Classif Top Features:", f_classif_top_n)
 
 
 

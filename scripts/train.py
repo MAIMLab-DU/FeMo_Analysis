@@ -45,7 +45,9 @@ def main(args):
     dataset = pd.DataFrame([])
     try:
         for key in feature_sets:
-            dataset = pd.concat([dataset, pd.read_csv(os.path.join(args.train, f"{key}_dataset.csv"))], axis=1)
+            key_dataset = pd.read_csv(os.path.join(args.train, f"{key}_dataset.csv"))
+            dataset = pd.concat([dataset, key_dataset.iloc[:, :-3]], axis=1)
+        dataset = pd.concat([dataset, key_dataset.iloc[:, -3:]], axis=1)
     except Exception:
         raise ValueError(
             (
@@ -56,7 +58,7 @@ def main(args):
             ).format(args.train, "train")
         )
 
-    LOGGER.info(f"Loaded dataset from: {os.path.abspath(args.train)}")
+    LOGGER.info(f"Loaded dataset from: {os.path.abspath(args.train)} with shape: {dataset.shape}")
     
     try:
         classifier_type = train_cfg.get('type')
@@ -118,7 +120,6 @@ def main(args):
 
     LOGGER.info(f"Predictions saved to {os.path.abspath(results_path)}")
     LOGGER.info(f"Metadata saved to {os.path.abspath(metadata_path)}")
-
 
 
 if __name__ == "__main__":
