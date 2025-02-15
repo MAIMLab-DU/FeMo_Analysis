@@ -62,7 +62,6 @@ def main(args):
         _ = all([
             pred_service.get_model() is not None,
             pred_service.get_pipeline() is not None,
-            pred_service.get_processor() is not None,
             pred_service.get_metrics() is not None
         ])
     except Exception as e:

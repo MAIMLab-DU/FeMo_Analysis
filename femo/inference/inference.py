@@ -36,7 +36,7 @@ class InferenceMetaInfo:
 class PredictionService(object):
     classifier: FeMoBaseClassifier = None
     pipeline: Pipeline = None
-    processor: Processor = None
+    processor: defaultdict = {'crafted': None, 'tsfel': None}
     metrics: FeMoMetrics = None
     plotter = FeMoPlotter()
     default_hiccup_cfg = {
@@ -85,12 +85,12 @@ class PredictionService(object):
             self.pipeline.inference = True
         return self.pipeline
     
-    def get_processor(self):
+    def get_processor(self, feature_set: str = None):
         """Get the model object for this instance, loading it if it's not already loaded."""
-        if self.processor is None:
-            self.processor = joblib.load(self.processor_path)
-        return self.processor
-    
+        if self.processor[feature_set] is None and feature_set is not None:
+            self.processor[feature_set] = joblib.load(self.processor_path.replace('processor.joblib', f'{feature_set}_processor.joblib'))
+        return self.processor[feature_set]
+
     def get_metrics(self):
         """Get the model object for this instance, loading it if it's not already loaded."""
         if self.metrics is None:
@@ -235,12 +235,19 @@ class PredictionService(object):
             prediction_output = defaultdict()
 
             pipeline = self.get_pipeline()
+
+            feature_dict = defaultdict()
+            LOGGER.info(f"{pipeline.stages[5].feature_sets = }")
+            for feature_set in pipeline.stages[5].feature_sets:
+                pipeline_output = pipeline.process(filename=file_path, feature_set=feature_set)
+                X_extracted = pipeline_output['extracted_features']['features']
+                processor: Processor = self.get_processor(feature_set)
+                feature_dict[feature_set] = processor.predict(X_extracted)
+                
             pipeline_output = pipeline.process(filename=file_path)
             prediction_output['pipeline_output'] = pipeline_output
             
-            processor = self.get_processor()
-            X_extracted = pipeline_output['extracted_features']['features']
-            X_norm_ranked = processor.predict(X_extracted)
+            X_norm_ranked = np.hstack([x for x in feature_dict.values()])
             
             clf = self.get_model()
             y_pred = clf.predict(X_norm_ranked)

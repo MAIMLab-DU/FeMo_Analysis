@@ -3,6 +3,7 @@ import joblib
 import tarfile
 import numpy as np
 import pandas as pd
+from typing import Literal
 from sklearn.base import BaseEstimator
 from ..logger import LOGGER
 from .utils import normalize_features
@@ -22,6 +23,7 @@ class Processor(BaseEstimator):
                  mu: np.ndarray = None,
                  dev: np.ndarray = None,
                  top_feat_indices: np.ndarray = None,
+                 feature_set: Literal['crafted', 'tsfel'] = 'crafted',
                  preprocess_config: dict = None
                 ) -> None:
         
@@ -29,7 +31,7 @@ class Processor(BaseEstimator):
         self.dev = dev
         self.top_feat_indices = top_feat_indices
         self._feat_rank_cfg = preprocess_config.get('feature_ranking') if preprocess_config else {}
-        self._feature_ranker = FeatureRanker(**self.feat_rank_cfg) if self.feat_rank_cfg is not None else FeatureRanker()
+        self._feature_ranker = FeatureRanker(feature_set=feature_set, **self.feat_rank_cfg) if self.feat_rank_cfg is not None else FeatureRanker()
 
     def fit(self, X, y=None):
         """Fit the processor by calculating normalization parameters and ranking features.
@@ -87,15 +89,15 @@ class Processor(BaseEstimator):
             columns = columns[self.top_feat_indices].tolist() + ['filename_hash', 'det_indices', 'labels']
         return pd.DataFrame(data, columns=columns)
     
-    def save(self, file_path):
+    def save(self, file_path, key: str = 'crafted'):
         """Save the processor to a joblib file
 
         Args:
             file_path (str): Path to directory for saving the processor
         """
         
-        joblib.dump(self, os.path.join(file_path, "processor.joblib"))
+        joblib.dump(self, os.path.join(file_path, f"{key}_processor.joblib"))
         tar = tarfile.open(os.path.join(file_path, "processor.tar.gz"), "w:gz")
-        tar.add(os.path.join(file_path, "processor.joblib"), arcname="processor.joblib")
+        tar.add(os.path.join(file_path, f"{key}_processor.joblib"), arcname=f"{key}_processor.joblib")
         tar.close()
         self.logger.debug(f"Processor saved to {file_path}")

@@ -66,19 +66,17 @@ class FeMoDataset:
             raise ValueError("data_manifest must be either a JSON path or a dict")
         
         self.inference = inference
-        self.features_df = pd.DataFrame([])
-        self.map = defaultdict()
     
-    def __len__(self):
-        return self.features_df.shape[0]
+    # def __len__(self):
+    #     return self.features_df.shape[0]
     
-    def __repr__(self):
-        return f"{self.__class__.__name__}(features_df={repr(self.features_df)})"
+    # def __repr__(self):
+    #     return f"{self.__class__.__name__}(features_df={repr(self.features_df)})"
     
-    def __getitem__(self, filename: str):
-        """Get the rows of features for the given key (filename)"""
-        filename_hash = gen_hash(filename)
-        return self.features_df[self.features_df['filename_hash'] == filename_hash]
+    # def __getitem__(self, filename: str):
+    #     """Get the rows of features for the given key (filename)"""
+    #     filename_hash = gen_hash(filename)
+    #     return self.features_df[self.features_df['filename_hash'] == filename_hash]
     
     def _upload_to_s3(self, filename, bucket=None, key=None):
 
@@ -148,15 +146,16 @@ class FeMoDataset:
     
     def build(self, force_extract: bool = False):
 
+        features_dict = {
+            key: pd.DataFrame([]) for key in self.pipeline.stages[5].feature_sets
+        }
+
         for item in tqdm(self.data_manifest['items'], desc="Processing items", unit="item"):
-            start_idx = len(self.features_df)
 
             bucket = item.get('bucketName', None)
             data_file_key = item.get('datFileKey', None)
             feat_file_key = item.get('csvFileKey', None)
             map_key = gen_hash(data_file_key)
-            if map_key in self.map.keys():
-                continue
 
             data_filename = os.path.join(self.base_dir, data_file_key)
             data_success = self._download_from_s3(
@@ -168,36 +167,30 @@ class FeMoDataset:
                 self.logger.warning(f"Failed to download {data_filename} from {bucket = }, {data_file_key =}")
                 continue
 
-            feat_filename = os.path.join(self.base_dir, feat_file_key)
-            feat_success = self._download_from_s3(
-                filename=feat_filename,
-                bucket=bucket,
-                key=feat_file_key
-            )
-            if feat_success and not force_extract:
-                current_features = pd.read_csv(feat_filename, index_col=False)
-            else:
-                extracted_features = self.pipeline.process(filename=data_filename)['extracted_features']
-                current_features = self._save_features(filename=feat_filename,
-                                                       data=extracted_features,
-                                                       key=map_key)
-                try:
-                    self._upload_to_s3(
-                        filename=feat_filename,
-                        bucket=bucket,
-                        key=feat_file_key
-                    )
-                except Exception as e:
-                    self.logger.warning(e)
-                    pass
-
-            self.features_df = pd.concat([self.features_df, current_features], axis=0, ignore_index=True)
-
-            # Create mapping to get features give a filename from the dataset
-            end_idx = len(self.features_df)
-            self.map[map_key] = (start_idx, end_idx)
+            for feature_set in self.pipeline.stages[5].feature_sets:
+                feat_filename = os.path.join(self.base_dir, feat_file_key.replace('.csv', f'-{feature_set}.csv'))
+                feat_success = self._download_from_s3(
+                    filename=feat_filename,
+                    bucket=bucket,
+                    key=os.path.basename(feat_filename)
+                )
+                if feat_success and not force_extract:
+                    current_features = pd.read_csv(feat_filename, index_col=False)
+                else:
+                    extracted_features: dict = self.pipeline.process(filename=data_filename, feature_set=feature_set)['extracted_features']
+                    current_features = self._save_features(filename=feat_filename, 
+                                                           data=extracted_features, 
+                                                           key=map_key)
+                    try:
+                        self._upload_to_s3(
+                            filename=feat_filename,
+                            bucket=bucket,
+                            key=os.path.basename(feat_filename)
+                        )
+                    except Exception as e:
+                        self.logger.warning(e)
+                        pass
+                features_dict[feature_set] = pd.concat([features_dict[feature_set], current_features], axis=0)
         
-        self.logger.info("FeMoDataset process completed.")
-        return self.features_df
-
-
+        self.logger.info(f"FeMoDataset process completed.")
+        return features_dict

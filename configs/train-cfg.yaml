@@ -1,6 +1,8 @@
 # options: 'neural-net', 'logReg', 'svc', 'adaboost', 'random-forest'
 type: 'neural-net'
 
+feature_sets: ['crafted', 'tsfel']
+
 split_config:
   strategy: 'kfold'
   num_folds: 5

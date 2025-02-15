@@ -40,8 +40,14 @@ def main(args):
     with open(args.config_path, 'r') as f:
         train_cfg = yaml.safe_load(f) if args.config_path.endswith('.yaml') else json.load(f)
 
+    feature_sets = train_cfg.get('feature_sets', ['crafted'])
+
+    dataset = pd.DataFrame([])
     try:
-        dataset = pd.read_csv(os.path.join(args.train, "dataset.csv"))
+        for key in feature_sets:
+            key_dataset = pd.read_csv(os.path.join(args.train, f"{key}_dataset.csv"))
+            dataset = pd.concat([dataset, key_dataset.iloc[:, :-3]], axis=1)
+        dataset = pd.concat([dataset, key_dataset.iloc[:, -3:]], axis=1)
     except Exception:
         raise ValueError(
             (
@@ -52,7 +58,7 @@ def main(args):
             ).format(args.train, "train")
         )
 
-    LOGGER.info(f"Loaded dataset from: {os.path.abspath(args.train)}")
+    LOGGER.info(f"Loaded dataset from: {os.path.abspath(args.train)} with shape: {dataset.shape}")
     
     try:
         classifier_type = train_cfg.get('type')
@@ -114,7 +120,6 @@ def main(args):
 
     LOGGER.info(f"Predictions saved to {os.path.abspath(results_path)}")
     LOGGER.info(f"Metadata saved to {os.path.abspath(metadata_path)}")
-
 
 
 if __name__ == "__main__":
