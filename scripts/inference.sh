@@ -23,7 +23,7 @@ function convert_path {
 
 # Function to display help
 function show_help {
-  echo "Usage: $0 [-i|--remove-hiccups] [-p|--plot] -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-f|--perf-filename] [-h|--help]"
+  echo "Usage: $0 [-z|--remove-hiccups] [-p|--plot] -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-f|--perf-filename] [-h|--help]"
   echo
   echo "Options:"
   echo "  -d <data_filename>, --data-filename"

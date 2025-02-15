@@ -223,6 +223,8 @@ b. To install the package for integration with AWS Sagemaker:
 *When running python scripts, first activate appropriate virtual environment. Bash scripts for a particular job automatically creates
 environment with necessary dependencies.*
 
+**WARNING: Running bash scripts in Windows OS will require installing [Git bash](https://git-scm.com/downloads/win)**
+
 #### Feature Extraction
 ```sh
 ❯ python scripts/extract.py [-h] --data-manifest DATA_MANIFEST [--data-dir DATA_DIR] [--work-dir WORK_DIR] [--config-path CONFIG_PATH] [--extract]
@@ -317,30 +319,39 @@ Options:
 
 #### Inference
 ```sh
-❯ python inference.py [-h] --data-file DATA_FILE --model MODEL --pipeline PIPELINE --processor PROCESSOR --metrics METRICS [--work-dir WORK_DIR] [--outfile OUTFILE]
+❯ python inference.py [-h] --data-file DATA_FILE --classifier CLASSIFIER --model MODEL --pipeline PIPELINE --processor PROCESSOR --metrics METRICS [--config-path CONFIG_PATH] [--work-dir WORK_DIR] [--outfile OUTFILE] [--remove-hiccups REMOVE_HICCUPS] [--plot PLOT]
 
 options:
   -h, --help            show this help message and exit
   --data-file DATA_FILE
                         Path to data file(s) (.dat or .txt)
-  --model MODEL         Path to trained classifier file (.joblib)
+  --classifier CLASSIFIER
+                        Path to fitted classifier object file (.joblib)
+  --model MODEL         Path to trained model file (.joblib or .h5)
   --pipeline PIPELINE   Path to data pipeline object (.joblib)
   --processor PROCESSOR
                         Path to data processor object (.joblib)
   --metrics METRICS     Path to evaluation metrics object (.joblib)
+  --config-path CONFIG_PATH
+                        Path to config file
   --work-dir WORK_DIR   Path to save generated artifacts
   --outfile OUTFILE     Metrics output file
+  --remove-hiccups REMOVE_HICCUPS
+                        Exclude hiccups from ML detections map
+  --plot PLOT           Generate and save detection plots
 ```
 To run an inference job using `bash`, run the following command:
 ```sh
-❯ bash scripts/inference.sh -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-p|--perf-filename] [-h|--help]
+❯ bash scripts/inference.sh [-z|--remove-hiccups] [-p|--plot] -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-f|--perf-filename] [-h|--help]
 
 Options:
   -d <data_filename>, --data-filename
                              Path to log data file(s) (.dat or .txt).
+  -z, --remove-hiccups       Remove hiccups for analysis.
+  -p, --plot                 Generate plots.
   -m <repacked_model>, --repacked-model
                              Path to repacked model file (.tar.gz).
-  -p <perf_filename>, --perf-filename
+  -f <perf_filename>, --perf-filename
                              Performance csv filename.
   -w <work_dir>, --work-dir
                              Project working directory.
