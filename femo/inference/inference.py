@@ -4,6 +4,7 @@ import joblib
 import boto3
 import tempfile
 import numpy as np
+from collections import defaultdict
 from ..model.base import FeMoBaseClassifier
 from ..logger import LOGGER
 from ..data.pipeline import Pipeline
@@ -16,7 +17,7 @@ from ..data.transforms import SensorFusion
 class PredictionService(object):
     classifier: FeMoBaseClassifier = None
     pipeline: Pipeline = None
-    processor: Processor = None
+    processor: defaultdict = {'crafted': None, 'tsfel': None}
     metrics: FeMoMetrics = None
     plotter = FeMoPlotter()
 
@@ -33,14 +34,12 @@ class PredictionService(object):
         self.processor_path = processor_path
         self.metrics_path = metrics_path
 
-    
     def get_model(self):
         """Get the model object for this instance, loading it if it's not already loaded."""
         if self.classifier is None:
             self.classifier = joblib.load(self.classifier_path)
         self.classifier.load_model(self.model_path)
         return self.classifier
-    
     
     def get_pipeline(self):
         """Get the pipeline object for this instance, loading it if it's not already loaded."""
@@ -49,21 +48,17 @@ class PredictionService(object):
             self.pipeline.inference = True
         return self.pipeline
     
-    
-    def get_processor(self):
+    def get_processor(self, feature_set: str = None):
         """Get the model object for this instance, loading it if it's not already loaded."""
-        if self.processor is None:
-            self.processor = joblib.load(self.processor_path)
-        return self.processor
-    
+        if self.processor[feature_set] is None and feature_set is not None:
+            self.processor[feature_set] = joblib.load(self.processor_path.replace('processor.joblib', f'{feature_set}_processor.joblib'))
+        return self.processor[feature_set]
     
     def get_metrics(self):
         """Get the model object for this instance, loading it if it's not already loaded."""
         if self.metrics is None:
             self.metrics = joblib.load(self.metrics_path)
         return self.metrics
-    
-
     
     def predict(self, filename: str, bucket_name: str = None):
         """For the input, perform predictions and return results.
@@ -76,11 +71,16 @@ class PredictionService(object):
         # Helper function to process the file
         def process_file(file_path: str):
             pipeline = self.get_pipeline()
-            pipeline_output = pipeline.process(filename=file_path)
+
+            feature_dict = defaultdict()
+            LOGGER.info(f"{pipeline.stages[5].feature_sets = }")
+            for feature_set in pipeline.stages[5].feature_sets:
+                pipeline_output = pipeline.process(filename=file_path, feature_set=feature_set)
+                X_extracted = pipeline_output['extracted_features']['features']
+                processor: Processor = self.get_processor(feature_set)
+                feature_dict[feature_set] = processor.predict(X_extracted)
             
-            processor = self.get_processor()
-            X_extracted = pipeline_output['extracted_features']['features']
-            X_norm_ranked = processor.predict(X_extracted)
+            X_norm_ranked = np.hstack([x for x in feature_dict.values()])
             
             clf = self.get_model()
             y_pred = clf.predict(X_norm_ranked)
