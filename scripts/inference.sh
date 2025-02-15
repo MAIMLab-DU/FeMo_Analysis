@@ -5,6 +5,8 @@ set -e
 start_time="$(date +%s)"
 VIRTUAL_ENV=.venv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+remove_hiccups=false
+plot=false
 data_filename=""
 repacked_model=""
 perf_filename="meta_info.xlsx"
@@ -21,14 +23,16 @@ function convert_path {
 
 # Function to display help
 function show_help {
-  echo "Usage: $0 -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-p|--perf-filename] [-h|--help]"
+  echo "Usage: $0 [-z|--remove-hiccups] [-p|--plot] -d <data_filename> -m <repacked_model> [-w|--work-dir] [-r|--run-name] [-f|--perf-filename] [-h|--help]"
   echo
   echo "Options:"
   echo "  -d <data_filename>, --data-filename"
   echo "                             Path to log data file(s) (.dat or .txt)."
+  echo "  -z, --remove-hiccups       Remove hiccups for analysis."
+  echo "  -p, --plot                 Generate plots."
   echo "  -m <repacked_model>, --repacked-model"
   echo "                             Path to repacked model file (.tar.gz)."
-  echo "  -p <perf_filename>, --perf-filename"
+  echo "  -f <perf_filename>, --perf-filename"
   echo "                             Performance csv filename."
   echo "  -w <work_dir>, --work-dir" 
   echo "                             Project working directory."
@@ -41,6 +45,14 @@ function show_help {
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
+    -z|--remove-hiccups)
+      remove_hiccups=true
+      shift
+      ;;
+    -p|--plot)
+      plot=true
+      shift
+      ;;
     -d|--data-filename)
       data_filename="$2"
       shift
@@ -129,7 +141,9 @@ python "$(convert_path "$SCRIPT_DIR/inference.py")" \
   --processor "$(convert_path "$TEMP_DIR/processor.joblib")" \
   --metrics "$(convert_path "$TEMP_DIR/metrics.joblib")" \
   --work-dir "$(convert_path "$run_dir")" \
-  --outfile "$(convert_path "$perf_filename")"
+  --outfile "$(convert_path "$perf_filename")" \
+  --remove-hiccups "$remove_hiccups" \
+  --plot "$plot"
 
 # Record the end time
 end_time="$(date +%s)"
