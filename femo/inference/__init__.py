@@ -1,3 +1,3 @@
-from .inference import PredictionService
+from .inference import PredictionService, InferenceMetaInfo
 
-__all__ = ['PredictionService']
+__all__ = ['PredictionService', 'InferenceMetaInfo']
