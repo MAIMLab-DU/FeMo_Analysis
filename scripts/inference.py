@@ -24,9 +24,14 @@ def parse_args():
     parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/inference-cfg.yaml"), help="Path to config file")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--outfile", type=str, default="meta_info.xlsx", help="Metrics output file")
-    parser.add_argument("--remove-hiccups", type=bool, default=False, help="Exclude hiccups from ML detections map")
-    parser.add_argument("--plot", type=bool, default=False, help="Generate and save detection plots")
+    parser.add_argument("--remove-hiccups", type=str, default='False', help="Exclude hiccups from ML detections map")
+    parser.add_argument("--plot", type=str, default='False', help="Generate and save detection plots")
     args = parser.parse_args()
+
+    if isinstance(args.remove_hiccups, str) and args.remove_hiccups.lower() in ('false', 'f'):
+        args.remove_hiccups = False
+    if isinstance(args.plot, str) and args.plot.lower() in ('false', 'f'):
+        args.plot = False
 
     return args
 
