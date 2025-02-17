@@ -252,8 +252,7 @@ class PredictionService(object):
                 X_extracted = pipeline_output['extracted_features']['features']
                 processor: Processor = self.get_processor(feature_set)
                 feature_dict[feature_set] = processor.predict(X_extracted)
-                
-            pipeline_output = pipeline.process(filename=file_path)
+
             prediction_output['pipeline_output'] = pipeline_output
             
             X_norm_ranked = np.hstack([x for x in feature_dict.values()])
