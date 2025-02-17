@@ -297,7 +297,11 @@ class PredictionService(object):
         
         return result  
     
-    def save_pred_plots(self, pipeline_output: dict, ml_map: np.ndarray, filename: str):
+    def save_pred_plots(self,
+                        pipeline_output: dict,
+                        ml_map: np.ndarray,
+                        filename: str,
+                        det_type: str = 'Fetal movement'):
 
         plt_cfg = {
             'figsize': [16, 15],
@@ -336,7 +340,7 @@ class PredictionService(object):
             axes=axes,
             axis_idx=i+1,
             detection_map=ml_map,
-            det_type='Fetal movement',
+            det_type=det_type,
             ylabel='Detection',
             xlabel=f"Time ({plt_cfg.get('x_unit', 'min')})",
             x_unit=plt_cfg.get('x_unit', 'min')

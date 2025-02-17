@@ -118,7 +118,8 @@ def main(args):
                 pred_service.save_pred_plots(
                     pred_output['pipeline_output'],
                     pred_output['post_hiccup_removal']['hiccup_map'],
-                    os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}_hiccup.png")
+                    os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}_hiccup.png"),
+                    det_type='Hiccup regions'
                 )
                 pred_service.save_pred_plots(
                     pred_output['pipeline_output'],
