@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import Literal
 from ..data.transforms._utils import (
     custom_binary_dilation
 )
@@ -29,10 +30,35 @@ class HiccupAnalysis:
     "get_filtered_signal_stats()" is used to filter out raw signal(piezo) and calculate signal statistics discard inconsistant signal as hiccup
 
     '''
+    @property
+    def config(self):
+        return {
+            'Fs_sensor': self.Fs_sensor,
+            'hiccup_period_distance': self.period_distance,
+            'y_shift': self.y_shift,
+            'fusion': self.fusion,
+            'peak_distance': self.peak_distance,
+            'fm_dilation': self.fm_dilation,
+            'hiccup_continuous_time': self.hiccup_continuous_time,
+            'exception_per_minute': self.exception_per_minute,
+            'tolerance_limit': self.tolerance_limit,
+            'std_threshold_percentage': self.std_threshold_percentage,
+            'delta': self.delta
+        }
 
-    def __init__(self, hiccup_period_distance, Fs_sensor, y_shift, fusion,
-                 peak_distance, fm_dilation, hiccup_continuous_time, exception_per_minute,
-                 tolerance_limit, std_threshold_percentage, delta):
+    def __init__(self,
+                 Fs_sensor,
+                 hiccup_period_distance: int = 5,
+                 y_shift: float = 0.5,
+                 fusion: Literal['piezo_sup', 'any_type', 'two_type', 'three_type'] = 'piezo_sup',
+                 peak_distance: int = 800,
+                 fm_dilation: int = 3,
+                 hiccup_continuous_time: int = 150,
+                 exception_per_minute: int = 2,
+                 tolerance_limit: int = 6,
+                 std_threshold_percentage: float = 0.15,
+                 delta: int = 2):
+        
         self.Fs_sensor = Fs_sensor
         self.period_distance = hiccup_period_distance
         self.y_shift = y_shift
@@ -41,6 +67,7 @@ class HiccupAnalysis:
         self.peak_distance = peak_distance
         self.fm_dilation = fm_dilation
         self.hiccup_continuous_time = hiccup_continuous_time
+        self.exception_per_minute = exception_per_minute
         self.exception_threshold = 60 / exception_per_minute
         self.tolerance_limit = tolerance_limit
         self.std_threshold_percentage = std_threshold_percentage

@@ -238,6 +238,7 @@ class PredictionService(object):
         if remove_hiccups:
             hiccup_cfg = self.pred_cfg.get('hiccup_removal', self.default_hiccup_cfg)
             hiccup_analyzer = HiccupAnalysis(Fs_sensor=self.pipeline.stages[0].sensor_freq, **hiccup_cfg)
+            self.logger.info(f"{hiccup_analyzer.config = }")
     
         # Helper function to process the file
         def process_file(file_path: str):
