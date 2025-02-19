@@ -4,3 +4,5 @@ skip_imu_features: true
 plot:
   figsize: [16, 15]
   x_unit: 'min'
+hiccup_removal:
+  std_threshold_percentage: 0.25
