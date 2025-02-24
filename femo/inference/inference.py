@@ -112,7 +112,10 @@ class PredictionService(object):
         # Keeps only the detected segments
         detection_only = binary_map[binary_map == 1]
         # Dilation length on sides of each detection is removed and converted to minutes
-        total_FM_duration = (len(detection_only) / sensor_freq - n_movements * fm_dilation / 2) / 60
+        if fm_dilation == 1:
+            total_FM_duration = (len(detection_only) / sensor_freq) / 60
+        else:
+            total_FM_duration = (len(detection_only) / sensor_freq - n_movements * fm_dilation / 2) / 60
 
         onset_interval = []
         for j in range(1, n_movements):
@@ -164,23 +167,24 @@ class PredictionService(object):
             reduced_detection_map
         )
 
-        return data, ml_map
+        return data, ml_map, reduced_detection_map
     
     def _post_hiccup_removal(self,
                              filename: str,
                              hiccup_analyzer: HiccupAnalysis,
                              ml_map: np.ndarray,
+                             reduced_ml_map: np.ndarray,
                              preprocessed_data: dict,
                              imu_map: np.ndarray):
         
         ml_detection_map = np.copy(ml_map)
 
-        if hiccup_analyzer.fm_dilation > self.pipeline.stages[2].fm_dilation:
-            dilation_size = int((hiccup_analyzer.fm_dilation - self.pipeline.stages[2].fm_dilation) * hiccup_analyzer.Fs_sensor)
-            ml_detection_map = custom_binary_dilation(ml_detection_map, dilation_size)
-        if hiccup_analyzer.fm_dilation < self.pipeline.stages[2].fm_dilation:
-            erosion_size = int((self.pipeline.stages[2].fm_dilation - hiccup_analyzer.fm_dilation) * hiccup_analyzer.Fs_sensor)
-            ml_detection_map = custom_binary_erosion(ml_detection_map, erosion_size)
+        # if hiccup_analyzer.fm_dilation > self.pipeline.stages[2].fm_dilation:
+        #     dilation_size = int((hiccup_analyzer.fm_dilation - self.pipeline.stages[2].fm_dilation) * hiccup_analyzer.Fs_sensor)
+        #     ml_detection_map = custom_binary_dilation(ml_detection_map, dilation_size)
+        # if hiccup_analyzer.fm_dilation < self.pipeline.stages[2].fm_dilation:
+        #     erosion_size = int((self.pipeline.stages[2].fm_dilation - hiccup_analyzer.fm_dilation) * hiccup_analyzer.Fs_sensor)
+        #     ml_detection_map = custom_binary_erosion(ml_detection_map, erosion_size)
 
         reduced_detection_map = ml_detection_map * ml_map
 
@@ -208,7 +212,7 @@ class PredictionService(object):
             piezo_1_or_2 = np.zeros_like(ml_map)
             acstc_1_or_2 = np.zeros_like(ml_map)
 
-        hiccup_removed_ml_map = np.clip(ml_map - hiccup_map, 0, 1)
+        hiccup_removed_ml_map = np.clip(reduced_ml_map - hiccup_map, 0, 1)  # removing hiccup from reduced ml map instead of original
         data = self._calc_meta_info(
             filename,
             preprocessed_data,
@@ -260,7 +264,7 @@ class PredictionService(object):
             clf = self.get_model()
             y_pred = clf.predict(X_norm_ranked)
 
-            data, ml_map = self._pre_hiccup_removal(
+            data, ml_map, reduced_ml_map = self._pre_hiccup_removal(
                 filename=file_path,
                 y_pred=y_pred,
                 preprocessed_data=pipeline_output['preprocessed_data'],
@@ -269,7 +273,8 @@ class PredictionService(object):
             )
             prediction_output['pre_hiccup_removal'] = {
                 'data': data,
-                'ml_map': ml_map
+                'ml_map': ml_map,
+                'reduced_ml_map': reduced_ml_map
             }
 
             if remove_hiccups:
@@ -277,6 +282,7 @@ class PredictionService(object):
                     filename=filename,
                     hiccup_analyzer=hiccup_analyzer,
                     ml_map=ml_map,
+                    reduced_ml_map=reduced_ml_map,
                     preprocessed_data=pipeline_output['preprocessed_data'],
                     imu_map=pipeline_output['imu_map']
                 )

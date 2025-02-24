@@ -77,12 +77,16 @@ def main(args):
 
     for data_filename in tqdm(filenames, desc=f"Performing inference on {len(filenames)} files..."):
         LOGGER.info(f"Performing inference for {data_filename}")
+        base_filename = os.path.basename(data_filename).split('.dat')[0]
 
         pred_output = pred_service.predict(
             data_filename,
             remove_hiccups=args.remove_hiccups
         )
         job_id = str(uuid.uuid4())[:8]
+
+        ml_map = pred_output['post_hiccup_removal']['hiccup_removed_ml_map']
+        np.save(os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup_removed_ml_map.npy"), ml_map)
 
         # Prepare meta info
         pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']
@@ -131,7 +135,6 @@ def main(args):
         # Plot results if required
         if args.plot:
             LOGGER.info("Plotting the results. It may take some time....")
-            base_filename = os.path.basename(data_filename).split('.dat')[0]
 
             pred_service.save_pred_plots(
                 pred_output['pipeline_output'],
