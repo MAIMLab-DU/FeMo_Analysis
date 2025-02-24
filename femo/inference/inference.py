@@ -193,11 +193,20 @@ class PredictionService(object):
             'Acstc2': preprocessed_data['sensor_5']
         }
 
-        dilated_data, pre_hiccup_map, hiccup_map, aclm_1_or_2, piezo_1_or_2, acstc_1_or_2 = hiccup_analyzer.detect_hiccups(
-            reduced_detection_map=reduced_detection_map,
-            signals=filtered_signals,
-            imu_map=imu_map
-        )
+        try:
+            dilated_data, pre_hiccup_map, hiccup_map, aclm_1_or_2, piezo_1_or_2, acstc_1_or_2 = hiccup_analyzer.detect_hiccups(
+                reduced_detection_map=reduced_detection_map,
+                signals=filtered_signals,
+                imu_map=imu_map
+            )
+        except Exception:
+            LOGGER.info("Empty hiccup array...")
+            dilated_data = custom_binary_dilation(reduced_detection_map, hiccup_analyzer.period_distance * hiccup_analyzer.Fs_sensor)
+            pre_hiccup_map = ml_map.copy()
+            hiccup_map = np.zeros_like(ml_map)
+            aclm_1_or_2 = np.zeros_like(ml_map)
+            piezo_1_or_2 = np.zeros_like(ml_map)
+            acstc_1_or_2 = np.zeros_like(ml_map)
 
         hiccup_removed_ml_map = np.clip(ml_map - hiccup_map, 0, 1)
         data = self._calc_meta_info(
@@ -229,6 +238,7 @@ class PredictionService(object):
         if remove_hiccups:
             hiccup_cfg = self.pred_cfg.get('hiccup_removal', self.default_hiccup_cfg)
             hiccup_analyzer = HiccupAnalysis(Fs_sensor=self.pipeline.stages[0].sensor_freq, **hiccup_cfg)
+            self.logger.info(f"{hiccup_analyzer.config = }")
     
         # Helper function to process the file
         def process_file(file_path: str):
@@ -237,14 +247,12 @@ class PredictionService(object):
             pipeline = self.get_pipeline()
 
             feature_dict = defaultdict()
-            LOGGER.info(f"{pipeline.stages[5].feature_sets = }")
             for feature_set in pipeline.stages[5].feature_sets:
                 pipeline_output = pipeline.process(filename=file_path, feature_set=feature_set)
                 X_extracted = pipeline_output['extracted_features']['features']
                 processor: Processor = self.get_processor(feature_set)
                 feature_dict[feature_set] = processor.predict(X_extracted)
-                
-            pipeline_output = pipeline.process(filename=file_path)
+
             prediction_output['pipeline_output'] = pipeline_output
             
             X_norm_ranked = np.hstack([x for x in feature_dict.values()])
@@ -289,7 +297,11 @@ class PredictionService(object):
         
         return result  
     
-    def save_pred_plots(self, pipeline_output: dict, ml_map: np.ndarray, filename: str):
+    def save_pred_plots(self,
+                        pipeline_output: dict,
+                        ml_map: np.ndarray,
+                        filename: str,
+                        det_type: str = 'Fetal movement'):
 
         plt_cfg = {
             'figsize': [16, 15],
@@ -328,7 +340,7 @@ class PredictionService(object):
             axes=axes,
             axis_idx=i+1,
             detection_map=ml_map,
-            det_type='Fetal movement',
+            det_type=det_type,
             ylabel='Detection',
             xlabel=f"Time ({plt_cfg.get('x_unit', 'min')})",
             x_unit=plt_cfg.get('x_unit', 'min')

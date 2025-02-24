@@ -1,4 +1,5 @@
 import os
+import gc
 import sys
 import uuid
 import yaml
@@ -23,9 +24,14 @@ def parse_args():
     parser.add_argument("--config-path", type=str, default=os.path.join(BASE_DIR, "..", "configs/inference-cfg.yaml"), help="Path to config file")
     parser.add_argument("--work-dir", type=str, default="./work_dir", help="Path to save generated artifacts")
     parser.add_argument("--outfile", type=str, default="meta_info.xlsx", help="Metrics output file")
-    parser.add_argument("--remove-hiccups", type=bool, default=False, help="Exclude hiccups from ML detections map")
-    parser.add_argument("--plot", type=bool, default=False, help="Generate and save detection plots")
+    parser.add_argument("--remove-hiccups", type=str, default='False', help="Exclude hiccups from ML detections map")
+    parser.add_argument("--plot", type=str, default='False', help="Generate and save detection plots")
     args = parser.parse_args()
+
+    if isinstance(args.remove_hiccups, str) and args.remove_hiccups.lower() in ('false', 'f'):
+        args.remove_hiccups = False
+    if isinstance(args.plot, str) and args.plot.lower() in ('false', 'f'):
+        args.plot = False
 
     return args
 
@@ -68,70 +74,94 @@ def main(args):
         LOGGER.error(f"Error loading fitted objects: {e}")
         sys.exit(1)
         
-    for data_filename in tqdm(filenames, desc=f"Peforming inference on {len(filenames)} files..."):
+
+    for data_filename in tqdm(filenames, desc=f"Performing inference on {len(filenames)} files..."):
+        LOGGER.info(f"Performing inference for {data_filename}")
+
         pred_output = pred_service.predict(
             data_filename,
             remove_hiccups=args.remove_hiccups
         )
         job_id = str(uuid.uuid4())[:8]
 
+        # Prepare meta info
         pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']
         metainfo_dict = {
             "Timestamp": [timestamp],
             "JobId": [job_id],
             "File Name": [data_filename],
-            "Number of bouts per hour - pre_hiccup": [(pre_removal_data.numKicks*60) / (pre_removal_data.totalFMDuration+pre_removal_data.totalNonFMDuration)],
-            "Mean duration of fetal movement (seconds) - pre_hiccup": [pre_removal_data.totalFMDuration*60/pre_removal_data.numKicks if pre_removal_data.numKicks > 0 else 0],
+            "Number of bouts per hour - pre_hiccup": [(pre_removal_data.numKicks * 60) / (pre_removal_data.totalFMDuration + pre_removal_data.totalNonFMDuration)],
+            "Mean duration of fetal movement (seconds) - pre_hiccup": [pre_removal_data.totalFMDuration * 60 / pre_removal_data.numKicks if pre_removal_data.numKicks > 0 else 0],
             "Median onset interval (seconds) - pre_hiccup": [np.median(pre_removal_data.onsetInterval)],
-            "Active time of fetal movement (%) - pre_hiccup": [(pre_removal_data.totalFMDuration/(pre_removal_data.totalFMDuration+pre_removal_data.totalNonFMDuration))*100]
+            "Active time of fetal movement (%) - pre_hiccup": [(pre_removal_data.totalFMDuration / (pre_removal_data.totalFMDuration + pre_removal_data.totalNonFMDuration)) * 100]
         }
+
         if args.remove_hiccups:
             post_removal_data: InferenceMetaInfo = pred_output['post_hiccup_removal']['data']
-            metainfo_dict['Number of bouts per hour - post_hiccup'] = [(post_removal_data.numKicks*60) / (post_removal_data.totalFMDuration+post_removal_data.totalNonFMDuration)]
-            metainfo_dict['Mean duration of fetal movement (seconds) - post_hiccup'] = [post_removal_data.totalFMDuration*60/post_removal_data.numKicks if post_removal_data.numKicks > 0 else 0]
-            metainfo_dict['Median onset interval (seconds) - post_hiccup'] = [np.median(post_removal_data.onsetInterval)]
-            metainfo_dict['Active time of fetal movement (%) - post_hiccup'] = [(post_removal_data.totalFMDuration/(post_removal_data.totalFMDuration+post_removal_data.totalNonFMDuration))*100]
+            metainfo_dict.update({
+                "Number of bouts per hour - post_hiccup": [(post_removal_data.numKicks * 60) / (post_removal_data.totalFMDuration + post_removal_data.totalNonFMDuration)],
+                "Mean duration of fetal movement (seconds) - post_hiccup": [post_removal_data.totalFMDuration * 60 / post_removal_data.numKicks if post_removal_data.numKicks > 0 else 0],
+                "Median onset interval (seconds) - post_hiccup": [np.median(post_removal_data.onsetInterval)],
+                "Active time of fetal movement (%) - post_hiccup": [(post_removal_data.totalFMDuration / (post_removal_data.totalFMDuration + post_removal_data.totalNonFMDuration)) * 100]
+            })
+            del post_removal_data  # Free memory
 
-        # Check if the file exists
-        if os.path.exists(os.path.join(args.work_dir, args.outfile)):
-            # If file exists, read it and append the new data
-            df_existing = pd.read_excel(os.path.join(args.work_dir, args.outfile))
-            df_new = pd.DataFrame(metainfo_dict)
+        del pre_removal_data  # Free memory
+
+        # Write meta info to Excel
+        output_file = os.path.join(args.work_dir, args.outfile)
+        df_new = pd.DataFrame(metainfo_dict)
+
+        if os.path.exists(output_file):
+            df_existing = pd.read_excel(output_file)
             df_combined = pd.concat([df_existing, df_new], ignore_index=True)
         else:
-            # If file does not exist, create a new DataFrame with titles and new data
-            df_combined = pd.DataFrame(metainfo_dict)
+            df_combined = df_new
 
-        # Write the combined DataFrame to the Excel file
-        df_combined.to_excel(os.path.join(args.work_dir, args.outfile), index=False)
+        with pd.ExcelWriter(output_file, engine='openpyxl', mode='w') as writer:
+            df_combined.to_excel(writer, index=False)
 
-        LOGGER.info(f"Meta info saved to {os.path.realpath(os.path.join(args.work_dir, args.outfile))}")
-        
+        LOGGER.info(f"Meta info saved to {os.path.realpath(output_file)}")
+
+        # Delete unused DataFrame variables
+        del df_new, df_combined
+        if 'df_existing' in locals():
+            del df_existing
+
+        # Plot results if required
         if args.plot:
             LOGGER.info("Plotting the results. It may take some time....")
+            base_filename = os.path.basename(data_filename).split('.dat')[0]
+
             pred_service.save_pred_plots(
                 pred_output['pipeline_output'],
                 pred_output['pre_hiccup_removal']['ml_map'],
-                os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}_ml.png")
+                os.path.join(args.work_dir, f"{base_filename}_{job_id}_ml.png")
             )
+
             if args.remove_hiccups:
                 pred_service.save_pred_plots(
                     pred_output['pipeline_output'],
                     pred_output['post_hiccup_removal']['hiccup_map'],
-                    os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}_hiccup.png")
+                    os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup.png"),
+                    det_type='Hiccup regions'
                 )
                 pred_service.save_pred_plots(
                     pred_output['pipeline_output'],
                     pred_output['post_hiccup_removal']['hiccup_removed_ml_map'],
-                    os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}_post-removal.png")
+                    os.path.join(args.work_dir, f"{base_filename}_{job_id}_post-removal.png")
                 )
                 pred_service.save_hiccup_analysis_plots(
                     pred_output['pipeline_output'],
                     pred_output['post_hiccup_removal'],
                     pred_output['pre_hiccup_removal']['ml_map'],
-                    os.path.join(args.work_dir, f"{os.path.basename(data_filename).split('.dat')[0]}_{job_id}_hiccup-analysis.png")
+                    os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup-analysis.png")
                 )
-        
+
+        # Free memory by deleting variables
+        del pred_output
+        gc.collect()  # Force garbage collection
+
 
 if __name__ == "__main__":
     args = parse_args()
