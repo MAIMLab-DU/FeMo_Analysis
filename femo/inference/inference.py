@@ -248,6 +248,7 @@ class PredictionService(object):
         def process_file(file_path: str):
             prediction_output = defaultdict()
 
+            self.pipeline = None
             pipeline = self.get_pipeline()
 
             feature_dict = defaultdict()
@@ -260,6 +261,9 @@ class PredictionService(object):
             pipeline.stages[2].post_init(fm_dilation=self.pred_cfg.get('new_fm_dilation', 1))
             new_fm_dict = pipeline.process(filename=file_path, outputs=['fm_dict'])['fm_dict']
             prediction_output['pipeline_output'] = pipeline_output
+
+            self.logger.info(f"fm_dilation_3 = {np.max(label(pipeline_output['fm_dict']['fm_map']))}")
+            self.logger.info(f"fm_dilation_1 = {np.max(label(new_fm_dict['fm_map']))}")
             
             X_norm_ranked = np.hstack([x for x in feature_dict.values()])
             
