@@ -257,6 +257,8 @@ class PredictionService(object):
                 processor: Processor = self.get_processor(feature_set)
                 feature_dict[feature_set] = processor.predict(X_extracted)
 
+            pipeline.stages[2].fm_dilation = self.pred_cfg.get('new_fm_dilation', 1.0)
+            new_fm_dict = pipeline.process(filename=file_path, outputs=['fm_dict'])['fm_dict']
             prediction_output['pipeline_output'] = pipeline_output
             
             X_norm_ranked = np.hstack([x for x in feature_dict.values()])
@@ -268,7 +270,7 @@ class PredictionService(object):
                 filename=file_path,
                 y_pred=y_pred,
                 preprocessed_data=pipeline_output['preprocessed_data'],
-                fm_dict=pipeline_output['fm_dict'],
+                fm_dict=new_fm_dict,
                 scheme_dict=pipeline_output['scheme_dict']
             )
             prediction_output['pre_hiccup_removal'] = {
