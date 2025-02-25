@@ -39,15 +39,19 @@ class DataSegmentor(BaseTransform):
         self.imu_dilation = imu_dilation
         self.fm_dilation = fm_dilation
         self.maternal_dilation_forward = maternal_dilation_forward
-        self.maternal_dilation_backward = maternal_dilation_forward
+        self.maternal_dilation_backward = maternal_dilation_backward
         self.fm_min_sn = [fm_min_sn for _ in range(self.num_sensors)] if isinstance(fm_min_sn, int) else fm_min_sn
         assert len(self.fm_min_sn) == self.num_sensors, f"{len(self.fm_min_sn) = } != {self.num_sensors = }"
         self.segmentation_signal_cutoff = [fm_signal_cutoff for _ in range(self.num_sensors)]
         # Dilation length in sample number 
-        self.imu_dilation_size = round(imu_dilation * self.sensor_freq)
-        self.fm_dilation_size = round(fm_dilation * self.sensor_freq)
-        self.extension_forward = round(maternal_dilation_forward * self.sensor_freq)
-        self.extension_backward = round(maternal_dilation_backward * self.sensor_freq)
+        self.imu_dilation_size = round(self.imu_dilation * self.sensor_freq)
+        self.fm_dilation_size = round(self.fm_dilation * self.sensor_freq)
+        self.extension_forward = round(self.maternal_dilation_forward * self.sensor_freq)
+        self.extension_backward = round(self.maternal_dilation_backward * self.sensor_freq)
+
+    def post_init(self, fm_dilation: int = 1):
+        self.fm_dilation = fm_dilation
+        self.fm_dilation_size = round(self.fm_dilation * self.sensor_freq)
     
     def transform(self, map_name: Literal['imu', 'fm_sensor', 'sensation'], *args, **kwargs):
         if map_name == 'imu':

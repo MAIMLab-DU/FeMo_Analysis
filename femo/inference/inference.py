@@ -257,7 +257,7 @@ class PredictionService(object):
                 processor: Processor = self.get_processor(feature_set)
                 feature_dict[feature_set] = processor.predict(X_extracted)
 
-            pipeline.stages[2].fm_dilation = self.pred_cfg.get('new_fm_dilation', 1.0)
+            pipeline.stages[2].post_init(fm_dilation=self.pred_cfg.get('new_fm_dilation', 1))
             new_fm_dict = pipeline.process(filename=file_path, outputs=['fm_dict'])['fm_dict']
             prediction_output['pipeline_output'] = pipeline_output
             
