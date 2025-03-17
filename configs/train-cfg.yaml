@@ -1,5 +1,5 @@
-# options: 'neural-net', 'logReg', 'svc', 'adaboost', 'random-forest'
-type: 'neural-net'
+# options: 'neural-net', 'logReg', 'svc', 'adaboost', 'random-forest', 'ensemble'
+type: 'ensemble'
 
 feature_sets: ['crafted', 'tsfel']
 
@@ -9,19 +9,43 @@ split_config:
 
 config:
   search_space:
-    units_per_layer: 
-      low: 10
-      high: 200
-      step: 50
+    voting: ['soft']
   hyperparams:
-    num_hidden_layers: 1
-    units_per_layer: 90
-    dropout_rate: 0.25
-    learning_rate: 0.001
-
-tune_params:
-  epochs: 100
-
-train_params:
-  epochs: 100
-  patience: 25
+    logReg_clf:
+      max_iter: 5000
+      C: 500
+      warm_start: true
+    rf_clf:
+      n_estimators: 100
+      max_features: null
+      min_samples_leaf: 0.01
+      warm_start: true
+    adaboost_clf:
+      algorithm: 'SAMME.R'
+      learning_rate: 0.75
+      n_estimators: 250
+    gradboost_clf:
+      subsample: 0.8
+      n_estimators: 100
+      learning_rate: 0.1
+      max_features: 'sqrt'
+      max_depth: null
+      min_samples_leaf: 50
+      warm_start: true
+      validation_fraction: 0.01
+      n_iter_no_change: 10
+    extraTrees_clf:
+      n_estimators: 1000
+      max_features: null
+      min_samples_leaf: 50
+    svc_clf:
+      kernel: 'rbf'
+      probability: true
+    mlp_clf:
+      hidden_layer_sizes: [200, ]
+      activation: 'relu'
+      max_iter: 100
+      batch_size: 32
+      learning_rate: 'adaptive'
+      early_stopping: true
+      warm_start: true
