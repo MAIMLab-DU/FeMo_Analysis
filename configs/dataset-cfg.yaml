@@ -1,6 +1,6 @@
 data_pipeline:
   base: &base
-    description: "Only large piezos from belt types 'A' and 'C'"
+    description: "Belt 'AC', piezoelectric_large"
     sensor_freq: 1024
     sensation_freq: 1024
     sensor_map:
@@ -24,8 +24,8 @@ data_pipeline:
   segment:
     <<: *base
     percentile_threshold:
-      sensor_3: 1.555
-      sensor_6: 1.613
+      sensor_3: 1.5440
+      sensor_6: 1.6106
     num_common_sensors_imu: 2
     imu_acceleration_threshold: 0.675
     imu_rotation_threshold: 1.75
@@ -51,7 +51,4 @@ data_pipeline:
       - [20, 30]
     feature_sets: ['crafted', 'tsfel']
     add_imu_features: true
-
-
-
 
