@@ -1,16 +1,9 @@
 name: Tag and Pre-release on Version Change
 
 on:
-  workflow_run:
-    workflows: ["CI"]
+  pull_request:
     types:
-      - completed
-    branches:
-      - dev
-  push:
-    paths:
-      - 'aws_sagemaker/**'
-      - 'scripts/*.py'
+      - closed
     branches:
       - dev
 
@@ -19,9 +12,7 @@ permissions:
 
 jobs:
   tag-and-release:
-    if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'push' && github.event.paths != '')
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
@@ -62,7 +53,7 @@ jobs:
         run: |
           # Fetch remote tags before checking
           git fetch --tags
-          if git tag -l | grep -q "v${{ env.version }}"; then
+          if git tag -l | grep -Fxq "v${{ env.version }}"; then
             echo "Tag v${{ env.version }} already exists."
             echo "tag_exists=true" >> $GITHUB_ENV
           else

@@ -1,9 +1,9 @@
 name: Tag and Release on Version Change
 
 on:
-  push:
-    paths:
-      - 'femo/__init__.py'
+  pull_request:
+    types:
+      - closed
     branches:
       - main
 
@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   tag-and-release:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'dev'
     runs-on: ubuntu-latest
 
     steps:
@@ -35,7 +36,7 @@ jobs:
         id: check_tag
         run: |
           git fetch --tags
-          if git tag -l | grep "v${{ env.version }}"; then
+          if git tag -l | grep -Fxq "v${{ env.version }}"; then
             echo "Tag v${{ env.version }} already exists."
             echo "tag_exists=true" >> $GITHUB_ENV
           else
