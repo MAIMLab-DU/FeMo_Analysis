@@ -16,6 +16,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 class FeMoNeuralNet:
+
     def __init__(self,
                  num_hidden_layers: int,
                  units_per_layer: int,
@@ -63,6 +64,8 @@ class FeMoNeuralNet:
 
 
 class FeMoNNClassifier(FeMoBaseClassifier):
+
+    model_framework = 'keras'
 
     def __init__(self,
                  config = {

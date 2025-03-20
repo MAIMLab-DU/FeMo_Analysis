@@ -2,25 +2,69 @@
 
 set -e
 
-LOCAL_MODE=false
+VIRTUAL_ENV=.venv
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+local_mode=false
+force_extract=false
+manifest_file=""
+
+# Function to display help
+function show_help {
+  echo "Usage: $0 [-l|--local-mode] [-f|--force-extract] -m <manifest_file> [-h|--help]"
+  echo
+  echo "Options:"
+  echo "  -l, --local-mode           Whether to run sagemaker pipeline in local system."
+  echo "  -f, --force-extract        Whether to force extract features from logfiles."
+  echo "  -m <manifest_file>, --manifest-file"
+  echo "                             Path to the dataManifest file."
+  echo "  -h, --help             Show this help message and exit."
+  echo
+}
 
 # Parse command-line arguments
-while getopts ":l" opt; do
-  case ${opt} in
-    l )
-      LOCAL_MODE=true  # Set the flag to true if -l is provided
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -l|--local-mode)
+      local_mode=true
+      shift
       ;;
-    \? )
-      echo "Invalid option: -$OPTARG" >&2
+    -f|--force-extract)
+      force_extract=true
+      shift
+      ;;
+    -m|--manifest-file)
+      manifest_file="$2"
+      shift
+      shift
+      ;;
+    -h|--help)
+      show_help  # Display help and exit
+      exit
+      ;;
+    *)
+      echo "Invalid option: $1" >&2
+      echo "Use -h or --help for usage information."
       exit 1
       ;;
   esac
 done
-echo "Local mode: $LOCAL_MODE"
-# Create/Update the SageMaker Pipeline and wait for the execution to be completed
 
-VIRTUAL_ENV=.venv
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "Local mode: $local_mode"
+echo "Force extract: $force_extract"
+# Create/Update the SageMaker Pipeline and wait for the execution to be completed
+if [[ -z "${manifest_file}" ]]; then
+  echo "Data manifest file path is required."
+  exit 1
+fi
+
+items_count=$(jq '.items | length' "$manifest_file")
+if [[ "$items_count" -le 0 ]]; then
+    echo "Items array is empty, skipping pipeline run"
+    output_file="$SCRIPT_DIR/pipelineExecution.json"
+    echo '{"arn": "NotTrained"}' > "$output_file"
+    exit 0
+fi
 
 # Set up virtual env
 virtualenv -p python3 $VIRTUAL_ENV
@@ -31,10 +75,11 @@ pip install $SCRIPT_DIR/../.[sagemaker] -q
 
 echo "Starting Pipeline Execution"
 export PYTHONUNBUFFERED=TRUE
-python $SCRIPT_DIR/run_pipeline.py --module-name pipeline \
-        --role-arn $SAGEMAKER_PIPELINE_ROLE_ARN \
+
+python $SCRIPT_DIR/run_pipeline.py --module-name pipeline --manifest-file "$manifest_file" --work-dir "$SCRIPT_DIR" \
+        --role-arn "$SAGEMAKER_PIPELINE_ROLE_ARN" --work-dir "$SCRIPT_DIR" \
         --tags "[{\"Key\":\"sagemaker:project-name\", \"Value\":\"${SAGEMAKER_PROJECT_NAME}\"}]" \
-        --kwargs "{\"region\":\"${AWS_DEFAULT_REGION}\",\"role\":\"${SAGEMAKER_PIPELINE_ROLE_ARN}\",\"default_bucket\":\"${SAGEMAKER_ARTIFACT_BUCKET}\",\"pipeline_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"model_package_group_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"base_job_prefix\":\"${SAGEMAKER_PROJECT_NAME}\",\"local_mode\":\"${LOCAL_MODE}\"}"
+        --kwargs "{\"region\":\"${AWS_DEFAULT_REGION}\",\"role\":\"${SAGEMAKER_PIPELINE_ROLE_ARN}\",\"default_bucket\":\"${SAGEMAKER_ARTIFACT_BUCKET}\",\"pipeline_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"model_package_group_name\":\"${SAGEMAKER_PROJECT_NAME}\",\"base_job_prefix\":\"${SAGEMAKER_PROJECT_NAME}\",\"local_mode\":\"${local_mode}\",\"force_extract\":\"${force_extract}\"}"
 
 echo "Create/Update of the SageMaker Pipeline and execution Completed."
 

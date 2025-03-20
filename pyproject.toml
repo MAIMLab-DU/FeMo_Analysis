@@ -34,10 +34,11 @@ dependencies = [
   "PyWavelets==1.7.0",
   "scikit-learn==1.3.0",
   "scikit-image==0.24.0",
-  "tensorflow==2.12.1",
+  "tensorflow==2.15.1",
   "xgboost==2.1.1",
   "openpyxl==3.1.5",
   "matplotlib==3.9.2",
+  "tsfel==0.1.9"
 ]
 
 # Optional dependencies ------------------------------------------------------------------------------------------------
@@ -46,7 +47,8 @@ dev = [
     "ipython",
     "pytest",
     "pytest-cov",
-    "ruff"
+    "ruff",
+    "typing_extensions==4.12.2"
 ]
 sagemaker = [
     "sagemaker==2.232.0",

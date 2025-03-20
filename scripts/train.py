@@ -40,8 +40,14 @@ def main(args):
     with open(args.config_path, 'r') as f:
         train_cfg = yaml.safe_load(f) if args.config_path.endswith('.yaml') else json.load(f)
 
+    feature_sets = train_cfg.get('feature_sets', ['crafted'])
+
+    dataset = pd.DataFrame([])
     try:
-        dataset = pd.read_csv(os.path.join(args.train, "dataset.csv"))
+        for key in feature_sets:
+            key_dataset = pd.read_csv(os.path.join(args.train, f"{key}_dataset.csv"))
+            dataset = pd.concat([dataset, key_dataset.iloc[:, :-3]], axis=1)
+        dataset = pd.concat([dataset, key_dataset.iloc[:, -3:]], axis=1)
     except Exception:
         raise ValueError(
             (
@@ -52,7 +58,7 @@ def main(args):
             ).format(args.train, "train")
         )
 
-    LOGGER.info(f"Loaded dataset from: {os.path.abspath(args.train)}")
+    LOGGER.info(f"Loaded dataset from: {os.path.abspath(args.train)} with shape: {dataset.shape}")
     
     try:
         classifier_type = train_cfg.get('type')
@@ -90,8 +96,10 @@ def main(args):
     )
     
     try:
-        joblib.dump(classifier, os.path.join(args.model_dir, 'model.joblib'), compress=False)
-        LOGGER.info(f"Model saved to: {os.path.abspath(os.path.join(args.model_dir, 'model.joblib'))}")
+        classifier.save_model(os.path.join(args.model_dir, 'model.joblib'))
+        classifier.model = None
+        joblib.dump(classifier, os.path.join(args.model_dir, 'classifier.joblib'), compress=False)
+        LOGGER.info(f"Classifier and fitted model saved to: {os.path.abspath(os.path.join(args.model_dir))}")
     except Exception as e:
         LOGGER.error(f"Failed to save model: {e}")
         sys.exit(1)
@@ -104,6 +112,7 @@ def main(args):
     os.makedirs(metadata_path, exist_ok=True)
     
     classifier.result.compile_results(
+        threshold=train_cfg.get('threshold', 0.5),
         metadata=metadata,
         results_path=results_path,
         metadata_path=metadata_path
@@ -111,7 +120,6 @@ def main(args):
 
     LOGGER.info(f"Predictions saved to {os.path.abspath(results_path)}")
     LOGGER.info(f"Metadata saved to {os.path.abspath(metadata_path)}")
-
 
 
 if __name__ == "__main__":

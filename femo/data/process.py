@@ -1,8 +1,10 @@
 import os
+import shutil
 import joblib
 import tarfile
 import numpy as np
 import pandas as pd
+from typing import Literal
 from sklearn.base import BaseEstimator
 from ..logger import LOGGER
 from .utils import normalize_features
@@ -22,6 +24,7 @@ class Processor(BaseEstimator):
                  mu: np.ndarray = None,
                  dev: np.ndarray = None,
                  top_feat_indices: np.ndarray = None,
+                 feature_set: Literal['crafted', 'tsfel'] = 'crafted',
                  preprocess_config: dict = None
                 ) -> None:
         
@@ -29,7 +32,7 @@ class Processor(BaseEstimator):
         self.dev = dev
         self.top_feat_indices = top_feat_indices
         self._feat_rank_cfg = preprocess_config.get('feature_ranking') if preprocess_config else {}
-        self._feature_ranker = FeatureRanker(**self.feat_rank_cfg) if self.feat_rank_cfg is not None else FeatureRanker()
+        self._feature_ranker = FeatureRanker(feature_set=feature_set, **self.feat_rank_cfg) if self.feat_rank_cfg is not None else FeatureRanker()
 
     def fit(self, X, y=None):
         """Fit the processor by calculating normalization parameters and ranking features.
@@ -87,15 +90,35 @@ class Processor(BaseEstimator):
             columns = columns[self.top_feat_indices].tolist() + ['filename_hash', 'det_indices', 'labels']
         return pd.DataFrame(data, columns=columns)
     
-    def save(self, file_path):
-        """Save the processor to a joblib file
+    def save(self, file_path, key: str = 'crafted'):
+        """Save the processor to a joblib file and append it to an existing tar.gz archive.
 
         Args:
-            file_path (str): Path to directory for saving the processor
+            file_path (str): Path to directory for saving the processor.
         """
-        
-        joblib.dump(self, os.path.join(file_path, "processor.joblib"))
-        tar = tarfile.open(os.path.join(file_path, "processor.tar.gz"), "w:gz")
-        tar.add(os.path.join(file_path, "processor.joblib"), arcname="processor.joblib")
-        tar.close()
-        self.logger.debug(f"Processor saved to {file_path}")
+        joblib_file = os.path.join(file_path, f"{key}_processor.joblib")
+        tar_file = os.path.join(file_path, "processor.tar.gz")
+
+        # Save processor
+        joblib.dump(self, joblib_file)
+
+        # Temporary directory to extract existing tar.gz contents
+        temp_dir = os.path.join(file_path, "temp_tar")
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # Extract existing tar.gz contents
+        if os.path.exists(tar_file):
+            with tarfile.open(tar_file, "r:gz") as tar:
+                tar.extractall(path=temp_dir)
+
+        # Copy new file into temp directory
+        shutil.copy(joblib_file, temp_dir)
+
+        # Recreate tar.gz with all files
+        with tarfile.open(tar_file, "w:gz") as tar:
+            for filename in os.listdir(temp_dir):
+                tar.add(os.path.join(temp_dir, filename), arcname=filename)
+
+        # Cleanup temporary directory
+        shutil.rmtree(temp_dir)
+        self.logger.debug(f"Processor saved and appended to {tar_file}")

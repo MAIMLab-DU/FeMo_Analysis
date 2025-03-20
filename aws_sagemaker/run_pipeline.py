@@ -1,6 +1,6 @@
 """A CLI to create or update and run pipelines."""
 from __future__ import absolute_import
-
+import os
 import argparse
 import json
 import sys
@@ -27,6 +27,22 @@ def main():
         dest="module_name",
         type=str,
         help="The module name of the pipeline to import.",
+    )
+    parser.add_argument(
+        "-w",
+        "--work-dir",
+        dest="work_dir",
+        type=str,
+        default="./",
+        help="The directory to save the pipelineExecution json file.",
+    )
+    parser.add_argument(
+        "-m",
+        "--manifest-file",
+        dest="manifest_file",
+        type=str,
+        required=True,
+        help="Path to data manifest file (json)",
     )
     parser.add_argument(
         "-kwargs",
@@ -59,11 +75,12 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.module_name is None or args.role_arn is None:
+    if args.module_name is None or args.role_arn is None or args.manifest_file is None:
         parser.print_help()
         sys.exit(2)
     tags = convert_struct(args.tags)
     args.kwargs = convert_struct(args.kwargs)
+    args.kwargs['manifest_file'] = args.manifest_file
 
     try:
         LOGGER.info(f"Local mode: {args.kwargs.get('local_mode', False)}")
@@ -83,8 +100,8 @@ def main():
             LOGGER.info(f"Execution started with PipelineExecutionArn: {execution.arn}")
             LOGGER.info("Waiting for the execution to finish...")
             execution.wait(
-                delay=600,
-                max_attempts=72
+                delay=300,
+                max_attempts=420
             )
             LOGGER.info("Execution completed. Execution step details:")
 
@@ -93,11 +110,9 @@ def main():
 
         if not args.kwargs.get('local_mode', False):
             model_package_name = get_model_package_name(pipeline_steps)
-            with open("pipelineExecution.json", "w") as f:
+            json_filename = os.path.join(args.work_dir, "pipelineExecution.json")
+            with open(json_filename, "w") as f:
                 json.dump({"arn": model_package_name}, f, indent=2)
-        # out_file = open("pipelineExecutionArn", "w")
-        # out_file.write(model_package_name)
-        # out_file.close()
                 
     except Exception as e:
         LOGGER.exception(e)

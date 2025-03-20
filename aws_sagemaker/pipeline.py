@@ -91,12 +91,14 @@ def get_session(region, default_bucket, local_mode=False):
 
 def get_pipeline(
     region,
+    manifest_file: str,
     role=None,
     default_bucket=None,
     model_package_group_name="FeMoModelPackageGroup",
     pipeline_name="FeMoPipeline",
     base_job_prefix="FeMo",
-    local_mode=False
+    local_mode=False,
+    force_extract=False
 ):
     """Gets a SageMaker ML Pipeline instance working with on femo data.
 
@@ -108,6 +110,7 @@ def get_pipeline(
     Returns:
         an instance of a pipeline
     """
+    assert manifest_file.endswith('.json'), "Must be a path to manifest.json file"
 
     sagemaker_session = get_session(region, default_bucket, local_mode)
     if role is None:
@@ -135,12 +138,12 @@ def get_pipeline(
         role=role,
     )
 
-    manifest_path = os.path.join(PROC_DIR, "input", "dataManifest/dataManifest.json")
+    manifest_path = os.path.join(PROC_DIR, "input", "dataManifest", os.path.basename(manifest_file))
     feat_args = ["--data-manifest", manifest_path,
                  "--work-dir", os.path.join(PROC_DIR, "output"),
                  "--config-path", os.path.join(PROC_DIR, "input", "config/dataset-cfg.yaml")]
-    if os.getenv("FORCE_EXTRACT_FEATURES", False):
-        feat_args.append("--extract")
+    if force_extract:
+        feat_args.append("--force-extract")
 
     step_extract = ProcessingStep(
         name="ExtractFeatures",
@@ -150,7 +153,7 @@ def get_pipeline(
                             source=os.path.join(BASE_DIR, "..", "configs/dataset-cfg.yaml"),
                             destination=os.path.join(PROC_DIR, "input", "config")),
             ProcessingInput(input_name="dataManifest",
-                            source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
+                            source=manifest_file,
                             destination=os.path.join(PROC_DIR, "input", "dataManifest")),                
         ],
         outputs=[
@@ -185,7 +188,7 @@ def get_pipeline(
     train_cfg_path = os.path.join(BASE_DIR, "..", "configs/train-cfg.yaml")
 
     step_process = ProcessingStep(
-        name="ProcessData",
+        name="ProcessFeatures",
         processor=script_process,
         inputs=[
             ProcessingInput(input_name="features",
@@ -203,13 +206,13 @@ def get_pipeline(
         outputs=[
             ProcessingOutput(output_name="dataset", source=os.path.join(PROC_DIR, "output", "dataset"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output", "dataset"]) if local_mode else None),
+                                                              "local_run", "ProcessFeatures", "output", "dataset"]) if local_mode else None),
             ProcessingOutput(output_name="processor", source=os.path.join(PROC_DIR, "output", "processor"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output", "processor"]) if local_mode else None),
+                                                              "local_run", "ProcessFeatures", "output", "processor"]) if local_mode else None),
             ProcessingOutput(output_name="train_config", source=os.path.join(PROC_DIR, "output", "train_config"),
                              destination=Join(on='/', values=["s3:/", default_bucket, pipeline_name,
-                                                              "local_run", "ProcessData", "output", "train_config"]) if local_mode else None)
+                                                              "local_run", "ProcessFeatures", "output", "train_config"]) if local_mode else None)
         ],
         code=os.path.join(BASE_DIR, "..", "scripts", "process.py"),
         job_arguments=preproc_args,
@@ -289,7 +292,7 @@ def get_pipeline(
             ),
             ProcessingInput(
                 input_name="dataManifest",
-                source=os.path.join(BASE_DIR, "..", "configs/dataManifest.json"),
+                source=manifest_file,
                 destination=os.path.join(PROC_DIR, "input", "dataManifest")
             ),
             ProcessingInput(
@@ -337,6 +340,7 @@ def get_pipeline(
         role=role,
     )
     repack_args = [
+        "--classifier", os.path.join(PROC_DIR, "input", "model", "model.tar.gz"),
         "--model", os.path.join(PROC_DIR, "input", "model", "model.tar.gz"),
         "--pipeline", os.path.join(PROC_DIR, "input", "pipeline", "pipeline.tar.gz"),
         "--processor", os.path.join(PROC_DIR, "input", "processor", "processor.tar.gz"),

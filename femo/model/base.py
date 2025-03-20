@@ -22,6 +22,7 @@ class Result:
     @staticmethod
     def process_attributes(attribute,
                            metadata: dict,
+                           thresh: float = 0.5,
                            preds: bool = False):
         tpd_attribute_rand = np.zeros((1, 1))
         fpd_attribute_rand = np.zeros((1, 1))
@@ -57,8 +58,8 @@ class Result:
             fpd_attribute = fpd_attribute_rand
 
         if preds:
-            tpd_attribute = tpd_attribute >= 0.5
-            fpd_attribute = fpd_attribute >= 0.5
+            tpd_attribute = tpd_attribute >= thresh
+            fpd_attribute = fpd_attribute >= thresh
 
         return np.concatenate([tpd_attribute, fpd_attribute])
 
@@ -84,14 +85,15 @@ class Result:
     
     def compile_results(self,
                         metadata: dict,
+                        threshold: float = 0.5,
                         results_path: str|None = None,
                         metadata_path: str|None = None):
         self._assert_no_none_fields()
 
-        preds = self.process_attributes(self.preds, metadata, preds=True)
-        pred_scores = self.process_attributes(self.pred_scores, metadata)
-        det_indices = self.process_attributes(self.det_indices, metadata)
-        filename_hash = self.process_attributes(self.filename_hash, metadata)
+        preds = self.process_attributes(self.preds, metadata, preds=True, thresh=threshold)
+        pred_scores = self.process_attributes(self.pred_scores, metadata, thresh=threshold)
+        det_indices = self.process_attributes(self.det_indices, metadata, thresh=threshold)
+        filename_hash = self.process_attributes(self.filename_hash, metadata, thresh=threshold)
 
         self.preds = preds.astype(float)
         self.pred_scores = pred_scores.astype(float)
@@ -108,6 +110,8 @@ class Result:
 
 
 class FeMoBaseClassifier(ABC):
+
+    model_framework: Literal['sklearn', 'keras'] = None
 
     @property
     def logger(self):
@@ -182,15 +186,15 @@ class FeMoBaseClassifier(ABC):
         return train, test, metadata
         
     def save_model(self,
-                   model_filename: str,
-                   model_framework: Literal['sklearn', 'keras']):
+                   model_filename: str):
         if self.model is not None:
             try:
-                if model_framework == 'sklearn':
-                    assert model_filename.endswith('.pkl'), "Must be a pickle filename"
+                if self.model_framework == 'sklearn':
+                    assert model_filename.endswith('.pkl') or model_filename.endswith('.joblib'), "Must be a pickle or joblib file"
                     joblib.dump(self.model, model_filename)
-                if model_framework == 'keras':
-                    assert model_filename.endswith('.h5'), "Must be a h5 filename"
+                if self.model_framework == 'keras':
+                    model_filename = model_filename.replace('.joblib', '.h5').replace('.pkl', '.h5')
+                    assert model_filename.endswith('.h5'), "Must be a h5 file"
                     self.model.save(model_filename)
             except Exception as e:
                 self.logger.error(f"Error saving model: {e}")
@@ -199,14 +203,14 @@ class FeMoBaseClassifier(ABC):
             self.logger.error("No model trained yet. Cannot save.")
 
     def load_model(self,
-                   model_filename: str,
-                   model_framework: Literal['sklearn', 'keras']):
+                   model_filename: str):
         try:
-            if model_framework == 'sklearn':
-                assert model_filename.endswith('.pkl'), "Must be a pickle filename"
+            if self.model_framework == 'sklearn':
+                assert model_filename.endswith('.pkl') or model_filename.endswith('.joblib'), "Must be a pickle or joblib file"
                 self.model = joblib.load(model_filename)
-            if model_framework == 'keras':
-                assert model_filename.endswith('.h5'), "Must be a h5 filename"
+            if self.model_framework == 'keras':
+                model_filename = model_filename.replace('.joblib', '.h5').replace('.pkl', '.h5')
+                assert model_filename.endswith('.h5'), "Must be a h5 file"
                 self.model = load_model(model_filename)
         except Exception as e:
             self.logger.error(f"Error loading model: {e}")

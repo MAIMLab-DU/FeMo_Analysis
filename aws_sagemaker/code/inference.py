@@ -4,7 +4,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from femo.logger import LOGGER
-from femo.inference import PredictionService
+from femo.inference import PredictionService, InferenceMetaInfo
 from utils import (
     convert_floats_to_decimal,
     extract_s3_details,
@@ -25,10 +25,12 @@ class RequestData(BaseModel):
 # A singleton for holding the model. This simply loads the model and holds it.
 # It has a predict function that does a prediction based on the model and the input data.
 pred_service = PredictionService(
+    os.path.join(model_path, 'classifier.joblib'),
     os.path.join(model_path, 'model.joblib'),
     os.path.join(model_path, 'pipeline.joblib'),
     os.path.join(model_path, 'processor.joblib'),
-    os.path.join(model_path, 'metrics.joblib')
+    os.path.join(model_path, 'metrics.joblib'),
+    {}  # empty dict for pred_cfg, couldn't care less for a better approach
 )
 
 dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_DEFAULT_REGION', 'eu-north-1'))
@@ -82,14 +84,24 @@ def run_inference_job(job_id: str, time_stamp: str, s3_path: str):
     bucket_name, file_name = extract_s3_details(s3_path)
 
     try:
-        data, _, _ = pred_service.predict(file_name, bucket_name)
+        pred_output = pred_service.predict(file_name, bucket_name, True)
+        pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']
+        post_removal_data: InferenceMetaInfo = pred_output['post_hiccup_removal']['data']
         result = {
-            "numKicks": int(data.numKicks),
-            "totalFMDuration": float(data.totalFMDuration),
-            "totalNonFMDuration": float(data.totalNonFMDuration),
-            "medianOnsetInterval_s": float(np.median(data.onsetInterval) if data.numKicks > 0 else 0),
+            "pre_hiccup": {                
+                "numKicks": int(pre_removal_data.numKicks),
+                "totalFMDuration": float(pre_removal_data.totalFMDuration),
+                "totalNonFMDuration": float(pre_removal_data.totalNonFMDuration),
+                "medianOnsetInterval_s": float(np.median(pre_removal_data.onsetInterval) if pre_removal_data.numKicks > 0 else 0),
+            },
+            "post_hiccup": {
+                "numKicks": int(post_removal_data.numKicks),
+                "totalFMDuration": float(post_removal_data.totalFMDuration),
+                "totalNonFMDuration": float(post_removal_data.totalNonFMDuration),
+                "medianOnsetInterval_s": float(np.median(post_removal_data.onsetInterval) if post_removal_data.numKicks > 0 else 0),
+            }
         }
-        result = convert_floats_to_decimal(result)
+        result = {k: convert_floats_to_decimal(result[k]) for k in result.keys()}
     
     except Exception as e:
         LOGGER.error(f"Error running inference job: {e}")
@@ -108,7 +120,6 @@ async def ping():
     health = all([
         pred_service.get_model() is not None,
         pred_service.get_pipeline() is not None,
-        pred_service.get_processor() is not None,
         pred_service.get_metrics() is not None
     ])
     status = 200 if health else 404

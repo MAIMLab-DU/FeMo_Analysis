@@ -1,7 +1,10 @@
+import tsfel
 import numpy as np
 from functools import wraps
 from tqdm import tqdm
 from scipy.stats import skew, kurtosis
+import tsfel.feature_extraction
+import tsfel.feature_extraction.features_settings
 from .feature_utils import (
     get_frequency_mode,
     get_band_energy,
@@ -27,6 +30,8 @@ class FeatureExtractor(BaseTransform):
                      [20, 30]
                  ],
                  freq_mode_threshold: int = 1,
+                 feature_sets: list[str] = ['crafted', 'tsfel'],
+                 add_imu_features: bool = True,
                  **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -34,32 +39,43 @@ class FeatureExtractor(BaseTransform):
         self.freq_bands = freq_bands        
         # Main frequency mode above threshold (in Hz)
         self.freq_mode_threshold = freq_mode_threshold
+        self.feature_sets = feature_sets
+
+        allowed_feature_sets = {'crafted', 'tsfel'}
+        assert set(feature_sets).issubset(allowed_feature_sets), "Only 'crafted' and 'tsfel' are allowed in features_sets"
+
+        if 'tsfel' in feature_sets:
+            domains = ['statistical', 'temporal', 'spectral']
+            self.tsfel_cfg = tsfel.feature_extraction.features_settings.get_features_by_domain(domains)
+        self.add_imu_features = add_imu_features
         assert len(self.freq_bands) == 5, "Only 5 band energy features supported"
 
     def _extract_features_of_signal(self,
                                     threshold,
                                     extracted_sensor_data,
                                     extracted_imu_acceleration,
-                                    extracted_imu_rotation):
+                                    extracted_imu_rotation,
+                                    mode: str = 'inference'):
         
         num_segments = len(extracted_sensor_data)
 
         num_common_feats = 53  # i.e. max, mean, sum, sd, percentile, skew, kurtosis, ...
+        num_maps = self.num_sensors + 2 if self.add_imu_features else self.num_sensors
         # +1 feature for segment duration
-        total_feats = (self.num_sensors + 2) * num_common_feats + 1   
+        total_feats = num_maps * num_common_feats + 1
         
         # Features array
         X_extracted = np.zeros((num_segments, total_feats))
         columns = ['' for _ in range(total_feats)]
-        self.logger.debug("Extracting features...")
+        self.logger.info(f"Extracting crafted features for '{mode}'...")
 
         # For each segment
-        for i in tqdm(range(num_segments), desc="Processing segments"):
+        for i in tqdm(range(num_segments), desc=f"Processing '{mode}' segments"):
             # Duration of signal in seconds
             columns[0] = 'duration'
             X_extracted[i, 0] = len(extracted_sensor_data[i]) / self.sensor_freq
 
-            for k in range(self.num_sensors + 2):
+            for k in range(num_maps):
                 
                 # Assigning sensor data, IMU rotation, or acceleration based on the sensor index
                 # For FM sensors, get thesholded signal
@@ -125,18 +141,63 @@ class FeatureExtractor(BaseTransform):
 
         return X_extracted, columns
         
+    def _extract_features_tsfel(self,
+                                extracted_sensor_data,
+                                extracted_imu_acceleration,
+                                extracted_imu_rotation,
+                                mode: str = 'inference'):
+        
+        num_segments = len(extracted_sensor_data)
+
+        num_common_feats = 156  # i.e. num tsfel features per signal data
+        num_maps = self.num_sensors + 2 if self.add_imu_features else self.num_sensors
+        # +1 feature for segment duration
+        total_feats = num_maps * num_common_feats
+
+        # Features array
+        X_extracted = np.zeros((num_segments, total_feats))
+        columns = ['' for _ in range(total_feats)]
+        self.logger.info(f"Extracting tsfel features for '{mode}'...")
+
+        for i in tqdm(range(num_segments), desc=f"Processing '{mode}' segments"):
+
+            for k in range(num_maps):
+                
+                # Assigning sensor data, IMU rotation, or acceleration based on the sensor index
+                if k < self.num_sensors:
+                    signal = extracted_sensor_data[i][:, k]
+                    sensor_name = f"snsr_{k+1}"
+                else:
+                    signal = extracted_imu_rotation[i] if k == self.num_sensors else extracted_imu_acceleration[i]
+                    sensor_name = 'imu_rot' if k == self.num_sensors else 'imu_accltn'
+                
+                try:
+                    features = tsfel.time_series_features_extractor(self.tsfel_cfg, signal, fs=self.sensor_freq, n_jobs=-1, verbose=0)
+                    X_extracted[i, k*num_common_feats: (k+1)*num_common_feats] = features.to_numpy().flatten()
+                    for c in range(num_common_feats):
+                        columns[k*num_common_feats+c] = f"{sensor_name}_tsfel_{c}"
+                except Exception as e:
+                    self.logger.debug(f"Exception occured during tsfel extraction: {e}")
+                    continue
+        
+        return X_extracted, columns
 
     def _extract_features_for_inference(self,
                                         extracted_detections: dict,
-                                        fm_dict: dict):
+                                        fm_dict: dict,                                        
+                                        feat: str = 'crafted'):
         
         threshold = fm_dict['fm_threshold']        
         detections_sensor_data = extracted_detections['detections_sensor_data']
         detections_imu_acceleration = extracted_detections['detections_imu_acceleration']
         detections_imu_rotation = extracted_detections['detections_imu_rotation']
 
-        X_extracted, columns = self._extract_features_of_signal(threshold, detections_sensor_data,
-                                                                detections_imu_acceleration, detections_imu_rotation)
+        if feat == 'crafted':
+            X_extracted, columns = self._extract_features_of_signal(threshold, detections_sensor_data, 
+                                                                    detections_imu_acceleration, detections_imu_rotation)
+        if feat == 'tsfel':
+            X_extracted, columns = self._extract_features_tsfel(detections_sensor_data, detections_imu_acceleration,
+                                                                detections_imu_rotation)
         
         return {
             'features': X_extracted,
@@ -145,7 +206,8 @@ class FeatureExtractor(BaseTransform):
 
     def _extract_features_for_train(self,
                                     extracted_detections: dict,
-                                    fm_dict: dict):
+                                    fm_dict: dict,
+                                    feat: str = 'crafted'):
         
         threshold = fm_dict['fm_threshold']
 
@@ -153,18 +215,26 @@ class FeatureExtractor(BaseTransform):
         tp_detections_sensor_data = extracted_detections['tp_detections_sensor_data']
         tp_detections_imu_acceleration = extracted_detections['tp_detections_imu_acceleration']
         tp_detections_imu_rotation = extracted_detections['tp_detections_imu_rotation']
-
-        X_tpd, columns = self._extract_features_of_signal(threshold, tp_detections_sensor_data,
-                                                          tp_detections_imu_acceleration, tp_detections_imu_rotation)
         
         fp_detections_indices = extracted_detections['fp_detections_indices']
         fp_detections_sensor_data = extracted_detections['fp_detections_sensor_data']
         fp_detections_imu_acceleration = extracted_detections['fp_detections_imu_acceleration']
         fp_detections_imu_rotation = extracted_detections['fp_detections_imu_rotation']
 
-        X_fpd, columns = self._extract_features_of_signal(threshold, fp_detections_sensor_data,
-                                                          fp_detections_imu_acceleration, fp_detections_imu_rotation)
-        
+        if feat == 'crafted':
+            X_tpd, columns = self._extract_features_of_signal(threshold, tp_detections_sensor_data, 
+                                                                tp_detections_imu_acceleration, tp_detections_imu_rotation,
+                                                                mode='TPD')
+            X_fpd, columns = self._extract_features_of_signal(threshold, fp_detections_sensor_data, 
+                                                                fp_detections_imu_acceleration, fp_detections_imu_rotation,
+                                                                mode='FPD')
+        if feat == 'tsfel':
+            X_tpd, columns = self._extract_features_tsfel(tp_detections_sensor_data, 
+                                                            tp_detections_imu_acceleration, tp_detections_imu_rotation,
+                                                            mode='TPD')
+            X_fpd, columns = self._extract_features_tsfel(fp_detections_sensor_data, 
+                                                            fp_detections_imu_acceleration, fp_detections_imu_rotation,
+                                                            mode='FPD')
         X_extracted = np.vstack([X_tpd, X_fpd])
         y_extracted = np.zeros((X_tpd.shape[0] + X_fpd.shape[0], 1))
         y_extracted[:X_tpd.shape[0], 0] = 1  # From here on, label 1 means TPD and label 0 means FPD

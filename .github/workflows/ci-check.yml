@@ -4,6 +4,19 @@ on:
   pull_request:
     branches:
       - main
+      - dev
+    paths:
+      - 'femo/**'
+      - 'configs/*.yaml'
+      - 'tests/**'
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'femo/**'
+      - 'configs/*.yaml'
+      - 'tests/**'
 
 jobs: 
   ci-check:

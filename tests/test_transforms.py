@@ -1,4 +1,5 @@
 import os
+import yaml
 import joblib
 import pytest
 from utils import (
@@ -17,6 +18,8 @@ from femo.data.transforms import (
 
 data_folder = "tests/datafiles"
 folders = list_folders(data_folder)
+with open("tests/dataset-cfg.yaml", 'r') as f:
+    dataset_cfg = yaml.safe_load(f)
 
 
 @pytest.mark.parametrize("folder", folders)
@@ -26,7 +29,7 @@ def test_load_data(folder):
     comparing it with pre-stored expected results.
     """
     
-    data_loader = DataLoader()
+    data_loader = DataLoader(**dataset_cfg['data_pipeline']['load'])
     actual_loaded_data = data_loader(
         os.path.join(data_folder, folder, "raw_data.dat")
     )
@@ -46,7 +49,7 @@ def test_preprocessed_data(folder):
     comparing the actual result with pre-stored expected results.
     """
     
-    data_preprocessor = DataPreprocessor()
+    data_preprocessor = DataPreprocessor(**dataset_cfg['data_pipeline']['preprocess'])
     loaded_data = joblib.load(os.path.join(data_folder, folder, "loaded_data.pkl"))
     actual_preprocessed_data = data_preprocessor(loaded_data=loaded_data)
     desired_preprocessed_data = joblib.load(
@@ -65,7 +68,7 @@ def test_imu_map(folder):
     comparing it with pre-stored expected results.
     """
 
-    data_segmentor = DataSegmentor()
+    data_segmentor = DataSegmentor(**dataset_cfg['data_pipeline']['segment'])
     preprocessed_data = joblib.load(
         os.path.join(data_folder, folder, "preprocessed_data.pkl")
     )
@@ -88,7 +91,7 @@ def test_sensation_map(folder):
     comparing it with pre-stored expected results.
     """
 
-    data_segmentor = DataSegmentor()
+    data_segmentor = DataSegmentor(**dataset_cfg['data_pipeline']['segment'])
     preprocessed_data = joblib.load(
         os.path.join(data_folder, folder, "preprocessed_data.pkl")
     )
@@ -110,7 +113,7 @@ def test_fm_map(folder):
     comparing it with pre-stored expected results.
     """
 
-    data_segmentor = DataSegmentor()
+    data_segmentor = DataSegmentor(**dataset_cfg['data_pipeline']['segment'])
     preprocessed_data = joblib.load(
         os.path.join(data_folder, folder, "preprocessed_data.pkl")
     )
@@ -128,7 +131,7 @@ def test_user_scheme(folder):
     comparing it with pre-stored expected results.
     """
 
-    data_fusion = SensorFusion()
+    data_fusion = SensorFusion(**dataset_cfg['data_pipeline']['fusion'])
     fm_dict = joblib.load(os.path.join(data_folder, folder, "fm_dict.pkl"))
     actual_user_scheme = data_fusion(fm_dict=fm_dict)
     desired_user_scheme = joblib.load(
@@ -148,7 +151,7 @@ def test_detections_for_train(folder):
     comparing it with pre-stored expected results.
     """
     
-    detection_extractor = DetectionExtractor()
+    detection_extractor = DetectionExtractor(**dataset_cfg['data_pipeline']['extract_det'])
 
     preprocessed_data = joblib.load(
         os.path.join(data_folder, folder, "preprocessed_data.pkl")
@@ -174,9 +177,6 @@ def test_detections_for_train(folder):
     )
 
 
-# TODO: test_detections_for_inference
-
-
 @pytest.mark.parametrize("folder", folders)
 def test_features_for_train(folder):
     """
@@ -184,7 +184,7 @@ def test_features_for_train(folder):
     comparing it with pre-stored expected results.
     """
     
-    feature_extractor = FeatureExtractor()
+    feature_extractor = FeatureExtractor(**dataset_cfg['data_pipeline']['extract_feat'])
 
     extracted_detections = joblib.load(
         os.path.join(data_folder, folder, "extracted_detections_train.pkl")
@@ -192,27 +192,23 @@ def test_features_for_train(folder):
     fm_dict = joblib.load(
         os.path.join(data_folder, folder, "fm_dict.pkl")
     )
-    actual_extracted_features = feature_extractor.transform(
-        inference=False,
-        extracted_detections=extracted_detections, fm_dict=fm_dict
-    )
+    actual_extracted_features = dict()
+    for feature_set in ['crafted', 'tsfel']:
+        actual_extracted_features[feature_set] = feature_extractor.transform(
+            inference=False,
+            extracted_detections=extracted_detections, fm_dict=fm_dict,
+            feat=feature_set
+        )
     desired_extracted_features = joblib.load(
         os.path.join(data_folder, folder, "extracted_features_train.pkl")
     )
 
-    compare_elements(
-        key='features',
-        actual=actual_extracted_features['features'],
-        desired=desired_extracted_features['features']
-    )
-    compare_elements(
-        key='labels',
-        actual=actual_extracted_features['labels'],
-        desired=desired_extracted_features['labels']
-    )
-
-
-# TODO: test_features_for_inference
+    for key in actual_extracted_features.keys():
+        compare_dictionaries(
+            actual_dict=actual_extracted_features[key],
+            desired_dict=desired_extracted_features[key],
+            keys=['features', 'labels']
+        )
 
 
 if __name__ == "__main__":

@@ -18,7 +18,6 @@ train_channel_name = 'train'
 
 output_path = os.path.join(prefix, 'output')
 model_path = os.path.join(prefix, 'model')
-model_file_name = 'model.joblib'
 train_path = os.path.join(input_path, train_channel_name)
 output_data_path = os.path.join(output_path, 'data')
 
@@ -37,8 +36,14 @@ def train():
     with open(config_path, 'r') as f:
         train_cfg = json.load(f)
 
+    feature_sets = train_cfg.get('feature_sets', ['crafted'])
+
+    dataset = pd.DataFrame([])
     try:
-        dataset = pd.read_csv(os.path.join(train_path, "dataset.csv"))
+        for key in feature_sets:
+            key_dataset = pd.read_csv(os.path.join(train_path, f"{key}_dataset.csv"))
+            dataset = pd.concat([dataset, key_dataset.iloc[:, :-3]], axis=1)
+        dataset = pd.concat([dataset, key_dataset.iloc[:, -3:]], axis=1)
     except Exception:
         raise ValueError(
             (
@@ -46,10 +51,10 @@ def train():
                 + "This usually indicates that the channel ({}) was incorrectly specified,\n"
                 + "the data specification in S3 was incorrectly specified or the role specified\n"
                 + "does not have permission to access the data."
-            ).format(train_path)
+            ).format(train_path, "train")
         )
 
-    LOGGER.info(f"Loaded dataset from: {os.path.abspath(train_path)}")
+    LOGGER.info(f"Loaded dataset from: {os.path.abspath(train_path)} with shape: {dataset.shape}")
     
     try:
         classifier_type = train_cfg.get('type')
@@ -87,8 +92,10 @@ def train():
     )
     
     try:
-        joblib.dump(classifier, os.path.join(model_path, model_file_name), compress=False)
-        LOGGER.info(f"Model saved to: {os.path.abspath(model_path)}")
+        classifier.save_model(os.path.join(model_path, 'model.joblib'))
+        classifier.model = None
+        joblib.dump(classifier, os.path.join(model_path, 'classifier.joblib'), compress=False)
+        LOGGER.info(f"Classifier and fitted model saved to: {os.path.abspath(model_path)}")
     except Exception:
         raise RuntimeError(
             'Failed to save classifier'
@@ -118,7 +125,7 @@ if __name__ == "__main__":
         trc = traceback.format_exc()
         with open(os.path.join(output_path, 'failure'), 'w') as s:
             s.write('Exception during training: ' + str(e) + '\n' + trc)
-        LOGGER.error(f"Error during training: {e}")
+        LOGGER.error(f"Error during training: {e}\n{trc}")
         sys.exit(255)
 
     sys.exit(0)

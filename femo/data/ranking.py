@@ -7,6 +7,7 @@ For some guidelines, check out [this page](https://scikit-learn.org/stable/modul
 
 import itertools
 import numpy as np
+from typing import Literal
 from ..logger import LOGGER
 from functools import wraps
 from sklearn.neighbors import NeighborhoodComponentsAnalysis
@@ -23,7 +24,7 @@ class FeatureRanker:
         return LOGGER
 
     def __init__(self,
-                 min_common: int = 2,
+                 feature_set: Literal['crafted', 'tsfel'] = 'crafted',
                  feat_ratio: int = 3,
                  param_cfg: dict = {
                      'nca_ranking': {
@@ -56,8 +57,7 @@ class FeatureRanker:
                 'recursive_ranker: {'step': 1}
         """
 
-        assert min_common in range(1, 5), "min_common must be in range(1, 5)"
-        self._min_common = min_common
+        self._min_common = 2 if feature_set == 'crafted' else 3
         self._feature_ratio = feat_ratio
         self._param_cfg = param_cfg
 
@@ -76,7 +76,7 @@ class FeatureRanker:
         n_top_feats = X.shape[1] // self._feature_ratio
         nca = NeighborhoodComponentsAnalysis(init='auto',
                                              tol=1e-5,
-                                             verbose=0,
+                                             verbose=1,
                                              random_state=0,
                                              **self._param_cfg.get('nca_ranking'))
         nca.fit(X, y)
@@ -181,17 +181,19 @@ class FeatureRanker:
     
         def find_common_features(sets, count):
             """Finds features common to at least 'count' feature sets."""
-            common_features = np.concatenate([np.intersect1d(*combo) 
-                                            for combo in itertools.combinations(sets, count)])
-            return common_features
+            common_features = []
+            
+            for combo in itertools.combinations(sets, count):
+                intersection = combo[0]
+                for arr in combo[1:]:  # Iteratively find intersection across multiple sets
+                    intersection = np.intersect1d(intersection, arr)
+                common_features.append(intersection)
+
+            return np.unique(np.concatenate(common_features)) if common_features else recursive_top_n
 
         # Handle different fusion criteria
-        if self._min_common == 4:
-            selected_features = np.intersect1d(nca_top_n, np.intersect1d(xgb_top_n, np.intersect1d(l1_based_top_n, recursive_top_n)))
-        else:
-            selected_features = find_common_features(feature_sets, self._min_common)
-        
-        selected_features = np.unique(selected_features)
+        selected_features = find_common_features(feature_sets, self._min_common)
+
         self.logger.debug(f"Selected top {len(selected_features)} features: {selected_features}\n")
         
         return selected_features
@@ -215,30 +217,8 @@ class FeatureRanker:
     def fit(self):
         # Placeholder method for decorator function
         pass
-        
-        
-# TODO: add example to doctstring
-# if __name__ == '__main__':
-#     # Example usage
-#     X = np.random.rand(100, 10)  # Replace with your dataset
-#     y = np.random.randint(0, 2, 100)  # Replace with your target labels
 
-#     feature_ranker = FeatureRanker(X, y)
-#     n = 5  # Number of top features to select
 
-#     rf_top_n = feature_ranker.random_forest_ranking(n)
-#     pca_top_n = feature_ranker.pca_ranking(n)
-#     nca_top_n = feature_ranker.nca_ranking(n)
-#     xgb_top_n = feature_ranker.xgboost_ranking(n)
-#     lr_top_n = feature_ranker.logistic_regression_ranking(n)
-#     f_classif_top_n = feature_ranker.f_classif_ranking(n)
-
-#     self.logger.debug("Random Forest Top Features:", rf_top_n)
-#     self.logger.debug("PCA Top Features:", pca_top_n)
-#     self.logger.debug("NCA Top Features:", nca_top_n)
-#     self.logger.debug("XGBoost Top Features:", xgb_top_n)
-#     self.logger.debug("Logistic Regression Top Features:", lr_top_n)
-#     self.logger.debug("F-Classif Top Features:", f_classif_top_n)
 
 
 

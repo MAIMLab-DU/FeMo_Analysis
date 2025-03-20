@@ -32,6 +32,8 @@ def main(args):
 
     with open(args.config_path, 'r') as f:
         preproc_cfg = yaml.safe_load(f)
+    
+    feature_sets = preproc_cfg.get('feature_sets', ['crafted'])
 
     # Sagemaker specific
     if args.train_config_path is not None:
@@ -41,29 +43,30 @@ def main(args):
         shutil.move(args.train_config_path, dump_path)
         LOGGER.info(f"Training configuration saved to {os.path.abspath(dump_path)}")
 
-    
-    features = pd.read_csv(os.path.join(args.features_dir, "features.csv"))
-    X, y = features.to_numpy()[:, :-3], features.to_numpy()[:, -1]
-    filename_hash, det_indices = features.to_numpy()[:, -3], features.to_numpy()[:, -2]  # metadata columns
+    for key in feature_sets:  
+        features = pd.read_csv(os.path.join(args.features_dir, f"{key}_features.csv"))
+        X, y = features.to_numpy()[:, :-3], features.to_numpy()[:, -1]
+        filename_hash, det_indices = features.to_numpy()[:, -3], features.to_numpy()[:, -2]  # metadata columns
 
-    if os.path.exists(os.path.join(processor_dir, 'processor.joblib')):
-        data_processor: Processor = joblib.load(os.path.join(args.work_dir, 'processor', 'processor.joblib'))
-        X_pre = data_processor.predict(X)
-    else:
-        data_processor = Processor(preprocess_config=preproc_cfg)
-        X_pre = data_processor.fit(X, y).predict(X)
+        LOGGER.info(f"Processing started for '{key}' features")
+        if os.path.exists(os.path.join(processor_dir, f"{key}_processor.joblib")):
+            data_processor: Processor = joblib.load(os.path.join(processor_dir, f'{key}_processor.joblib'))
+            X_pre = data_processor.predict(X)
+        else:
+            data_processor = Processor(preprocess_config=preproc_cfg, feature_set=key)
+            X_pre = data_processor.fit(X, y).predict(X)
 
-    dataset = data_processor.convert_to_df(
-        np.concatenate([X_pre, filename_hash[:, np.newaxis],
-                        det_indices[:, np.newaxis], y[:, np.newaxis]], axis=1),
-        columns=features.columns
-    )
-    data_processor.save(processor_dir)
+        dataset = data_processor.convert_to_df(
+            np.concatenate([X_pre, filename_hash[:, np.newaxis],
+                            det_indices[:, np.newaxis], y[:, np.newaxis]], axis=1),
+            columns=features.columns
+        )
+        data_processor.save(processor_dir, key)
 
-    dataset.to_csv(os.path.join(dataset_dir, 'dataset.csv'), header=True, index=False)
+        dataset.to_csv(os.path.join(dataset_dir, f'{key}_dataset.csv'), header=True, index=False)
 
-    LOGGER.info(f"Preprocessed dataset saved to {os.path.abspath(dataset_dir)}")
-    LOGGER.info(f"Processor saved to {os.path.abspath(processor_dir)}")
+        LOGGER.info(f"Preprocessed dataset saved to {os.path.abspath(dataset_dir)}")
+        LOGGER.info(f"Processor saved to {os.path.abspath(processor_dir)}")
     
 
 if __name__ == "__main__":

@@ -18,6 +18,8 @@ from sklearn.model_selection import RepeatedStratifiedKFold, GridSearchCV
 
 
 class FeMoEnsembleClassifier(FeMoBaseClassifier):
+
+    model_framework = 'sklearn'
     
     def __init__(self,
                  config = {
@@ -37,32 +39,41 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
     
     def get_classifiers(self, params: dict, y: np.ndarray):
         class_weight = self._update_class_weight(y)
-        return [
-                ('logistic_regression', LogisticRegression(class_weight=class_weight,
-                                                           random_state=0,
-                                                           **params.get('logReg_clf'))),
-                ('random_forest', RandomForestClassifier(class_weight=class_weight,
-                                                         random_state=0,
-                                                         n_jobs=-1,
-                                                         criterion='entropy',
-                                                         **params.get('rf_clf'))),
-                ('adaboost', AdaBoostClassifier(random_state=0,
-                                                **params.get('adaboost_clf'))),
-                ('gradient_boosting', GradientBoostingClassifier(random_state=0,
-                                                                 loss='exponential',
-                                                                 **params.get('gradboost_clf'))),
-                ('svc', SVC(probability=True, class_weight=class_weight, random_state=0)),
-                ('knn', KNeighborsClassifier()),
-                ('extra_trees', ExtraTreesClassifier(class_weight=class_weight, random_state=0,
-                                                     n_jobs=-1, **params.get('extraTrees_clf'))),
-                ('mlp', MLPClassifier(random_state=0, **params.get('mlp_clf')))
-            ]
+
+        classifiers = [
+            ('logistic_regression', LogisticRegression(class_weight=class_weight,
+                                                    random_state=0,
+                                                    n_jobs=-1,
+                                                    **params['logReg_clf'])) if 'logReg_clf' in params else None,
+            ('random_forest', RandomForestClassifier(class_weight=class_weight,
+                                                    random_state=0,
+                                                    n_jobs=-1,
+                                                    criterion='entropy',
+                                                    **params['rf_clf'])) if 'rf_clf' in params else None,
+            ('adaboost', AdaBoostClassifier(random_state=0,
+                                            **params['adaboost_clf'])) if 'adaboost_clf' in params else None,
+            ('gradient_boosting', GradientBoostingClassifier(random_state=0,
+                                                            loss='log_loss',
+                                                            **params['gradboost_clf'])) if 'gradboost_clf' in params else None,
+            ('svc', SVC(probability=True, class_weight=class_weight, random_state=0)) if 'svc_clf' in params else None,
+            ('knn', KNeighborsClassifier(**params['knn_clf'])) if 'knn_clf' in params else None,
+            ('extra_trees', ExtraTreesClassifier(class_weight=class_weight,
+                                                random_state=0,
+                                                n_jobs=-1,
+                                                **params['extraTrees_clf'])) if 'extraTrees_clf' in params else None,
+            ('mlp', MLPClassifier(random_state=0,
+                                **params['mlp_clf'])) if 'mlp_clf' in params else None
+        ]
+
+        # Filter out None values for classifiers that are not included
+        return [clf for clf in classifiers if clf is not None]
+
 
     # TODO: proper hyperparameter tuning - should tune individual classifiers
     # https://stackoverflow.com/questions/46580199/hyperparameter-in-voting-classifier
     def tune(self,
-               train_data: list[np.ndarray],
-               test_data: list[np.ndarray]):
+             train_data: list[np.ndarray],
+             test_data: list[np.ndarray]):
         
         start = time.time()
 

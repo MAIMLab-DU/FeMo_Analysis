@@ -1,6 +1,6 @@
 data_pipeline:
   base: &base
-    description: "Belt 'AC', piezoelectric_large"
+    description: "Belt 'A', all sensors selected"
     sensor_freq: 1024
     sensation_freq: 1024
     sensor_map:
@@ -10,11 +10,13 @@ data_pipeline:
       piezoelectric_large:
         - 'sensor_3'
         - 'sensor_6'
-      other:
+      piezoelectric_small:
         - 'sensor_4'
         - 'sensor_5'
     sensor_selection:
       - 'piezoelectric_large'
+      - 'accelerometer'
+      - 'piezoelectric_small'
   load:
     <<: *base
   preprocess:
@@ -24,8 +26,12 @@ data_pipeline:
   segment:
     <<: *base
     percentile_threshold:
-      sensor_3: 1.5440
-      sensor_6: 1.6106
+      sensor_1: 0.0456
+      sensor_2: 0.0513
+      sensor_3: 1.3608
+      sensor_4: 0.9887
+      sensor_5: 1.1579
+      sensor_6: 1.4781
     num_common_sensors_imu: 2
     imu_acceleration_threshold: 0.675
     imu_rotation_threshold: 1.75
@@ -33,11 +39,11 @@ data_pipeline:
     maternal_dilation_backward: 5.0
     imu_dilation: 5.5
     fm_dilation: 3.0
-    fm_min_sn: 40
+    fm_min_sn: [35, 35, 40, 30, 30, 40]
     fm_signal_cutoff: 0.0001
   fusion:
     <<: *base
-    desired_scheme: ['number', 1]
+    desired_scheme: ['type', 2]
   extract_det:
     <<: *base
   extract_feat:
@@ -51,4 +57,3 @@ data_pipeline:
       - [20, 30]
     feature_sets: ['crafted', 'tsfel']
     add_imu_features: true
-
