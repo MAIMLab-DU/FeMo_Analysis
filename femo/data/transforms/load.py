@@ -96,8 +96,10 @@ class DataLoader(BaseTransform):
         IMU_rotation_quat       = (IMU_all[['rotation_i', 'rotation_j', 'rotation_k', 'rotation_r']]/10000)  
 
         # Ensure quaternions are normalized
-        imu_rot_norm = np.linalg.norm(IMU_rotation_quat,axis=1)
-        IMU_rotation_quat = IMU_rotation_quat / imu_rot_norm[:,None]
+        imu_rot_norm = np.linalg.norm(IMU_rotation_quat, axis=1, keepdims=True)
+        # Avoid division by zero
+        imu_rot_norm[imu_rot_norm == 0] = 1
+        IMU_rotation_quat /= imu_rot_norm
         
         # --------- Quaternion to euler conversion is not possible with zero-magnitude rows -----
         # --------- Converting zero-magnitude rows with the first nonzero-magnitude row values --
