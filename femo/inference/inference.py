@@ -258,7 +258,10 @@ class PredictionService(object):
             X_norm_ranked = np.hstack([x for x in feature_dict.values()])
             
             clf = self.get_model()
-            y_pred = clf.predict(X_norm_ranked)
+            if X_norm_ranked.shape[0] == 0:
+                y_pred = np.array([0])
+            else:
+                y_pred = clf.predict(X_norm_ranked)
 
             data, ml_map = self._pre_hiccup_removal(
                 filename=file_path,

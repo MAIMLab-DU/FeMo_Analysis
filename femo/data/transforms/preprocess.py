@@ -1,4 +1,5 @@
 import time
+import copy
 import numpy as np
 from scipy.signal import butter, sosfiltfilt
 from ._utils import apply_pca
@@ -47,7 +48,7 @@ class DataPreprocessor(BaseTransform):
     
     def transform(self, loaded_data: dict):
         start = time.time()
-        preprocessed_data = loaded_data.copy()
+        preprocessed_data = copy.deepcopy(loaded_data)
         
         # ---------------------------- Filter design -----------------------------#
         # 3 types of filters are designed-
