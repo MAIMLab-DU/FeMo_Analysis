@@ -34,7 +34,7 @@ pip install "$(convert_path "$SCRIPT_DIR/../.[dev]")" -q
 
 # Run Ruff for linting
 echo "Running ruff to check for linting issues"
-ruff check ./**/*.py
+git ls-files "*.py" | xargs ruff check
 
 # Install AWS CLI if needed
 if ! command -v aws &> /dev/null
