@@ -730,13 +730,16 @@ class HiccupAnalysis:
         aclm_and_acstc = np.logical_and(aclm_1_2_or, acstc_1_2_or)
 
         piezo_supremacy = np.logical_or(piezo_1_2_or, np.logical_and(aclm_1_2_or, acstc_1_2_or))
-        # piezo_supremacy = piezo_1_2_or
+        piezo_only = piezo_1_2_or
 
         # Combine the conditions to ensure at least two sensor types are high
         fusion_hiccup_map_TWO = np.logical_or(np.logical_or(piezo_and_aclm, piezo_and_acstc), aclm_and_acstc)
 
         # New Condition: At least three types of sensors should have common high
         fusion_hiccup_map_THREE = np.logical_and(piezo_1_2_or, np.logical_and(aclm_1_2_or, acstc_1_2_or))
+        if self.fusion == 'piezo_only':
+            # For piezo only, use only the piezo sensors for fusion
+            fusion_hiccup_map = piezo_only
         if self.fusion == 'piezo_sup':
             # For piezo supremacy, use only the piezo sensors for fusion
             fusion_hiccup_map = piezo_supremacy

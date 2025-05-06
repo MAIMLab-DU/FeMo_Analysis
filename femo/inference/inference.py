@@ -44,7 +44,7 @@ class PredictionService(object):
         'hiccup_period_distance': 5,
         'y_shift': 0.4,
         'peak_distance': 800,
-        'fusion': 'piezo_sup',
+        'fusion': 'piezo_only',
         'hiccup_continuous_time': 150,
         'exception_per_minute': 2,
         'tolerance_limit': 6,
