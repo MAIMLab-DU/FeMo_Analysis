@@ -3,6 +3,7 @@ import yaml
 import joblib
 import tarfile
 import time
+import pandas as pd
 from typing import Any
 from ..logger import LOGGER
 from .transforms import (
@@ -212,6 +213,39 @@ class Pipeline(object):
         # Return only what was requested
         return {out: results.get(out) for out in outputs}
 
+    def extract_features_batch(self, filename: str) -> dict[str, pd.DataFrame]:
+        """
+        Efficiently extract multiple feature sets without re-running upstream stages.
+
+        Returns:
+            dict[str, pd.DataFrame]: Mapping of feature set names to extracted feature DataFrames
+        """
+        # Run pipeline once up to extract_det
+        intermediate_outputs = self.process(
+            filename=filename,
+            outputs=[
+                'preprocessed_data',
+                'fm_dict',
+                'sensation_map',
+                'scheme_dict',
+                'extracted_detections'
+            ]
+        )
+
+        extract_feat_stage = self.get_stage('extract_feat')
+        results = {}
+
+        for feature_set in extract_feat_stage.feature_sets:
+            feats = extract_feat_stage(
+                inference=self.inference,
+                fm_dict=intermediate_outputs['fm_dict'],
+                extracted_detections=intermediate_outputs['extracted_detections'],
+                feat=feature_set
+            )
+            results[feature_set] = feats
+
+        return results
+    
     def save(self, file_path):
         """Save the pipeline to a joblib file
 
