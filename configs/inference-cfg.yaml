@@ -5,4 +5,5 @@ plot:
   figsize: [16, 15]
   x_unit: 'min'
 hiccup_removal:
-  std_threshold_percentage: 0.25
+  std_threshold_percentage: 0.3
+new_fm_dilation: 3

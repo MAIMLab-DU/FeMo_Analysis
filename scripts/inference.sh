@@ -10,7 +10,7 @@ plot=false
 data_filename=""
 repacked_model=""
 perf_filename="meta_info.xlsx"
-work_dir="$SCRIPT_DIR/../work_dir/inference"
+work_dir="$SCRIPT_DIR/../work_dir/large-piezo-AC_imu-all_hiccups-removed"
 
 # Function to convert paths for Git Bash
 function convert_path {

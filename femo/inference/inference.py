@@ -40,15 +40,15 @@ class PredictionService(object):
     metrics: FeMoMetrics = None
     plotter = FeMoPlotter()
     default_hiccup_cfg = {
-        'std_threshold_percentage': 0.15,
+        'std_threshold_percentage': 0.3,
         'hiccup_period_distance': 5,
-        'y_shift': 0.5,
+        'y_shift': 0.4,
         'peak_distance': 800,
         'fusion': 'piezo_sup',
         'hiccup_continuous_time': 150,
         'exception_per_minute': 2,
         'tolerance_limit': 6,
-        'delta': 2,
+        'delta': 0,
         'fm_dilation': 3
     }
 

@@ -115,7 +115,7 @@ class DataSegmentor(BaseTransform):
     def create_imu_map(self, preprocessed_data: dict):
 
         tic = time.time()
-        preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
+        preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.percentile_threshold.keys()} # {key: preprocessed_data[key] for key in self.sensors}
 
         imu_acceleration_map = self._create_imu_accleration_map(preprocessed_data['imu_acceleration']).astype(int)
         imu_rotation_map = self._create_imu_rotation_map(preprocessed_data['imu_rotation']).astype(int)

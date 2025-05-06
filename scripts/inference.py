@@ -86,7 +86,8 @@ def main(args):
         job_id = str(uuid.uuid4())[:8]
 
         ml_map = pred_output['post_hiccup_removal']['hiccup_removed_ml_map']
-        np.save(os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup_removed_ml_map.npy"), ml_map)
+        # ml_map = pred_output['pre_hiccup_removal']['ml_map']
+        np.save(os.path.join(args.work_dir, f"{base_filename}_{job_id}_with_hiccup_ml_map.npy"), ml_map)
 
         # Prepare meta info
         pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']
