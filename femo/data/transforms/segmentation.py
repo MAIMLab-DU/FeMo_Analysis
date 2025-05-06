@@ -146,6 +146,8 @@ class DataSegmentor(BaseTransform):
         return imu_for_sensors_sums >= self.num_common_sensors_imu
 
     def create_imu_map(self, preprocessed_data: dict):
+
+        self.logger.debug("Creating IMU map")
         tic = time.time()
         preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
 
@@ -236,6 +238,10 @@ class DataSegmentor(BaseTransform):
     def create_fm_map(self, preprocessed_data: dict, imu_map=None):
         if imu_map is None:
             imu_map = self.create_imu_map(preprocessed_data)
+
+        self.logger.debug("Creating Sensor Segmentation map")
+
+        tic = time.time()
         preprocessed_sensor_data = [preprocessed_data[key] for key in self.sensors]
 
         segmented_sensor_data, threshold = self._get_segmented_sensor_data(preprocessed_sensor_data, imu_map)
@@ -275,6 +281,7 @@ class DataSegmentor(BaseTransform):
             segmented_sensor_data[i] = map_final.astype(int)
 
         combined_fm_map = reduce(lambda x, y: x | y, (data for data in segmented_sensor_data))
+        self.logger.info(f"Sensor segmentation map created in {(time.time()-tic)*1000:.2f} ms")
 
         return {
             "fm_map": combined_fm_map,  # sensor_data_sgmntd_cmbd_all_sensors
@@ -286,6 +293,9 @@ class DataSegmentor(BaseTransform):
         if imu_map is None:
             imu_map = self.create_imu_map(preprocessed_data)
 
+        self.logger.debug("Creating Sensation map")
+
+        tic = time.time()
         sensation_data = preprocessed_data["sensation_data"]
 
         # Sample numbers for maternal sensation detection
@@ -315,5 +325,6 @@ class DataSegmentor(BaseTransform):
             if X:
                 # Removes the sensation data from the map
                 maternal_sens_map[L1 : L2 + 1] = 0
-
+        self.logger.info(f"Sensation map created in {(time.time()-tic)*1000:.2f} ms")
+        
         return maternal_sens_map

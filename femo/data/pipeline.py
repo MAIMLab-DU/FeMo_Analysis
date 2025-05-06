@@ -153,7 +153,7 @@ class Pipeline(object):
                 return
             if name in results:
                 return  # already run
-            self.logger.debug(f"Running stage '{name}'")
+            self.logger.info(f"Running stage '{name}'")
             if name == 'load':
                 results['loaded_data'] = self.get_stage("load")(filename=filename)
             elif name == 'preprocess':
