@@ -205,6 +205,45 @@ class FeMoMetrics(object):
 
                 index_window_start = index_window_end + 1
                 index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
+                
+        # Else no ground truth, only TND and FPD calculation allowed
+        else:
+            # ------------------- Determination of TND and FPD  ------------------%    
+            # Removal of the TPD and FND parts from the individual sensor data
+            labeled_ml_detection = label(ml_detection_map)
+            # Non-zero elements give the matching. In sensation_map multiple windows can overlap, which was not the case in the sensation_data
+            curnt_matched_vector = labeled_ml_detection * sensation_map
+            # Gives the label of the matched sensor data segments
+            curnt_matched_label = np.unique(curnt_matched_vector)
+            arb_value = 4  # An arbitrary value
+            
+            
+            if len(curnt_matched_label) > 1:
+                curnt_matched_label = curnt_matched_label[1:]  # Removes the first element, which is 0
+                for m in range(len(curnt_matched_label)):
+                    ml_detection_map[labeled_ml_detection == curnt_matched_label[m]] = arb_value
+                    # Assigns an arbitrary value to the TPD segments of the segmented signal
+
+            # Assigns an arbitrary value to the area under the M_sntn_Map
+            ml_detection_map[sensation_map == 1] = arb_value
+            # Removes all the elements with value = arb_value from the segmented data
+            removed_ml_detection = ml_detection_map[ml_detection_map != arb_value]
+
+            # Calculation of TND and FPD for individual sensors
+            L_removed = len(removed_ml_detection)
+            index_window_start = 0
+            index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
+            while index_window_start < L_removed:
+                indv_window = removed_ml_detection[index_window_start: index_window_end]
+                index_non_zero = np.where(indv_window)[0]
+
+                if len(index_non_zero) >= (min_overlap_time*self._sensor_freq):
+                    false_pos += 1
+                else:
+                    true_neg += 1
+
+                index_window_start = index_window_end + 1
+                index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
 
         return {
             'true_positive': true_pos,
