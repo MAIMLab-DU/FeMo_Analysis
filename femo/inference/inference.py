@@ -103,8 +103,8 @@ class PredictionService(object):
                         binary_map: np.ndarray):
         
         self.logger.info(f"Calculating prediction meta info {filename}")        
-        sensor_freq = self.pipeline.stages[0].sensor_freq
-        fm_dilation = self.pipeline.stages[2].fm_dilation
+        sensor_freq = self.pipeline.stages['load'].sensor_freq
+        fm_dilation = self.pipeline.stages['segment'].fm_dilation
 
         labeled_binary_map = label(binary_map)
         n_movements = np.max(labeled_binary_map)
@@ -175,11 +175,11 @@ class PredictionService(object):
         
         ml_detection_map = np.copy(ml_map)
 
-        if hiccup_analyzer.fm_dilation > self.pipeline.stages[2].fm_dilation:
-            dilation_size = int((hiccup_analyzer.fm_dilation - self.pipeline.stages[2].fm_dilation) * hiccup_analyzer.Fs_sensor)
+        if hiccup_analyzer.fm_dilation > self.pipeline.stages['segment'].fm_dilation:
+            dilation_size = int((hiccup_analyzer.fm_dilation - self.pipeline.stages['segment'].fm_dilation) * hiccup_analyzer.Fs_sensor)
             ml_detection_map = custom_binary_dilation(ml_detection_map, dilation_size)
-        if hiccup_analyzer.fm_dilation < self.pipeline.stages[2].fm_dilation:
-            erosion_size = int((self.pipeline.stages[2].fm_dilation - hiccup_analyzer.fm_dilation) * hiccup_analyzer.Fs_sensor)
+        if hiccup_analyzer.fm_dilation < self.pipeline.stages['segment'].fm_dilation:
+            erosion_size = int((self.pipeline.stages['segment'].fm_dilation - hiccup_analyzer.fm_dilation) * hiccup_analyzer.Fs_sensor)
             ml_detection_map = custom_binary_erosion(ml_detection_map, erosion_size)
 
         reduced_detection_map = ml_detection_map * ml_map
@@ -237,7 +237,7 @@ class PredictionService(object):
 
         if remove_hiccups:
             hiccup_cfg = self.pred_cfg.get('hiccup_removal', self.default_hiccup_cfg)
-            hiccup_analyzer = HiccupAnalysis(Fs_sensor=self.pipeline.stages[0].sensor_freq, **hiccup_cfg)
+            hiccup_analyzer = HiccupAnalysis(Fs_sensor=self.pipeline.stages['load'].sensor_freq, **hiccup_cfg)
             self.logger.info(f"{hiccup_analyzer.config = }")
     
         # Helper function to process the file
@@ -247,7 +247,7 @@ class PredictionService(object):
             pipeline = self.get_pipeline()
 
             feature_dict = defaultdict()
-            for feature_set in pipeline.stages[5].feature_sets:
+            for feature_set in pipeline.stages['extract_feat'].feature_sets:
                 pipeline_output = pipeline.process(filename=file_path, feature_set=feature_set)
                 X_extracted = pipeline_output['extracted_features']['features']
                 processor: Processor = self.get_processor(feature_set)
@@ -327,7 +327,7 @@ class PredictionService(object):
                 i += 1
 
         # TODO: might be better to have this more configurable
-        fusion_stage: SensorFusion = self.pipeline.stages[3]
+        fusion_stage: SensorFusion = self.pipeline.stages['fusion']
         desired_scheme = fusion_stage.desired_scheme
 
         axes = self.plotter.plot_detections(
@@ -358,7 +358,7 @@ class PredictionService(object):
                                    filename: str):
 
         hiccup_cfg = self.pred_cfg.get('hiccup_removal', self.default_hiccup_cfg)
-        hiccup_analyzer = HiccupAnalysis(Fs_sensor=self.pipeline.stages[0].sensor_freq, **hiccup_cfg)
+        hiccup_analyzer = HiccupAnalysis(Fs_sensor=self.pipeline.stages['load'].sensor_freq, **hiccup_cfg)
 
         hiccup_analyzer.plot_hiccup_analysis_v3(
             fltdSignal_aclm1=pipeline_output['preprocessed_data']['sensor_1'],

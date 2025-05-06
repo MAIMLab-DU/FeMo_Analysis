@@ -3,6 +3,7 @@ import yaml
 import joblib
 import tarfile
 import time
+from typing import Any
 from ..logger import LOGGER
 from collections import defaultdict
 from .transforms import (
@@ -39,123 +40,136 @@ class Pipeline(object):
             return yaml.safe_load(file)
 
     def _get_stages(self, pipeline_cfg: dict):
-        stages = defaultdict()
-
-        stages[0] = DataLoader(**pipeline_cfg.get('load', {}))
-        stages[1] = DataPreprocessor(**pipeline_cfg.get('preprocess', {}))
-        stages[2] = DataSegmentor(**pipeline_cfg.get('segment', {}))
-        stages[3] = SensorFusion(**pipeline_cfg.get('fusion', {}))
-        stages[4] = DetectionExtractor(**pipeline_cfg.get('extract_det', {}))
-        stages[5] = FeatureExtractor(**pipeline_cfg.get('extract_feat', {}))
-
-        return stages
-
-    def process(self, filename: str, feature_set: str = 'crafted', outputs: list[str] = [
-        'imu_map', 'fm_dict', 'scheme_dict', 'sensation_map',
-        'extracted_detections', 'extracted_features', 'loaded_data',
-        'preprocessed_data'
-    ]):
-        start = time.time()
-        
-        # Step-0: Load data
-        self.logger.debug(f"Loading data from {filename}")
-        loaded_data = self.stages[0](filename=filename)
-
-        # Step-1: Preprocess data (filter and trimming)
-        self.logger.debug("Preprocessing data...")
-        preprocessed_data = self.stages[1](loaded_data=loaded_data)
-
-        imu_map = fm_dict = sensation_map = scheme_dict = extracted_detections = extracted_features = None
-
-        # Step-2: Get imu_map, fm_dict (fm sensors), and sensation_dict (button)
-        if 'imu_map' in outputs:
-            self.logger.debug("Creating IMU accelerometer map...")
-            imu_map = self.stages[2](
-                map_name='imu',
-                preprocessed_data=preprocessed_data
-            )
-        if 'fm_dict' or 'scheme_dict' in outputs:
-            self.logger.debug("Creating FeMo sensors map...")
-            fm_dict = self.stages[2](
-                map_name='fm_sensor',
-                preprocessed_data=preprocessed_data,
-                imu_map=imu_map
-            )
-        if 'sensation_map' in outputs:
-            self.logger.debug("Creating maternal sensation map...")
-            sensation_map = None
-            if not self.inference:
-                sensation_map = self.stages[2](
-                    map_name='sensation',
-                    preprocessed_data=preprocessed_data,
-                    imu_map=imu_map
-                )
-
-        # Step-3: Sensor fusion
-        if 'scheme_dict' in outputs:
-            self.logger.debug(f"Combining {self.stages[3].num_sensors} sensors map...")
-            scheme_dict = self.stages[3](fm_dict=fm_dict)
-
-        # Step-4: Extract detections (event and non-event) from segmented data
-        def extract_detections(fm_dict, scheme_dict, sensation_map):
-            if fm_dict is None:
-               fm_dict = self.stages[2](
-                map_name='fm_sensor',
-                preprocessed_data=preprocessed_data,
-                imu_map=imu_map
-            )
-            if scheme_dict is None:
-                scheme_dict = self.stages[3](fm_dict=fm_dict)
-            if sensation_map is None:
-                sensation_map = self.stages[2](
-                    map_name='sensation',
-                    preprocessed_data=preprocessed_data,
-                    imu_map=imu_map
-                )
-            out =  self.stages[4](
-                inference=self.inference,
-                preprocessed_data=preprocessed_data,
-                scheme_dict=scheme_dict,
-                sensation_map=sensation_map
-            )
-
-            return out 
-
-        if 'extracted_detections' in outputs:
-            self.logger.debug("Extracting detections...")
-            extracted_detections = extract_detections(
-                fm_dict=fm_dict,
-                scheme_dict=scheme_dict,
-                sensation_map=sensation_map
-            )
-        # Step-5: Extract features of each detection
-        if 'extracted_features' in outputs:
-            self.logger.debug("Extracting features...")
-            if extracted_detections is None:
-                extracted_detections = extract_detections(
-                    fm_dict=fm_dict,
-                    scheme_dict=scheme_dict,
-                    sensation_map=sensation_map
-                )
-            extracted_features = self.stages[5](
-                inference=self.inference,
-                fm_dict=fm_dict,
-                extracted_detections=extracted_detections,
-                feat=feature_set
-            )
-
-        self.logger.info(f"Pipeline process completed in {time.time() - start: 0.3f} seconds.")
-
         return {
-            'loaded_data': loaded_data if 'loaded_data' in outputs else None,
-            'preprocessed_data': preprocessed_data if 'preprocessed_data' in outputs else None,
-            'imu_map': imu_map if 'imu_map' in outputs else None,
-            'fm_dict': fm_dict if 'fm_dict' in outputs else None,
-            'scheme_dict': scheme_dict if 'scheme_dict' in outputs else None,
-            'sensation_map': sensation_map if 'sensation_map' in outputs else None,
-            'extracted_detections': extracted_detections if 'extracted_detections' in outputs else None,
-            'extracted_features': extracted_features if 'extracted_features' in outputs else None
+            'load': DataLoader(**pipeline_cfg.get('load', {})),
+            'preprocess': DataPreprocessor(**pipeline_cfg.get('preprocess', {})),
+            'segment': DataSegmentor(**pipeline_cfg.get('segment', {})),
+            'fusion': SensorFusion(**pipeline_cfg.get('fusion', {})),
+            'extract_det': DetectionExtractor(**pipeline_cfg.get('extract_det', {})),
+            'extract_feat': FeatureExtractor(**pipeline_cfg.get('extract_feat', {})),
         }
+
+    def process(
+        self,
+        filename: str,
+        feature_set: str = 'crafted',
+        outputs: str|list[str] = None
+    ) -> dict[str, Any]:
+        
+        # Define supported outputs and their direct stage dependencies
+        SUPPORTED_OUTPUTS = {
+            'loaded_data': {'load'},
+            'preprocessed_data': {'preprocess'},
+            'imu_map': {'segment'},
+            'fm_dict': {'segment'},
+            'sensation_map': {'segment'},
+            'scheme_dict': {'fusion'},
+            'extracted_detections': {'extract_det'},
+            'extracted_features': {'extract_feat'},
+        }
+        # Define stage→stage prerequisites
+        STAGE_DEPS = {
+            'load': set(),
+            'preprocess': {'load'},
+            'segment': {'preprocess'},
+            'fusion': {'segment'},
+            'extract_det': {'fusion', 'segment', 'preprocess'},
+            'extract_feat': {'extract_det', 'segment'},
+        }
+        # Fixed execution order
+        EXEC_ORDER = ['load','preprocess','segment','fusion','extract_det','extract_feat']
+
+        # Default outputs if none specified
+        if outputs is None or outputs == 'all':
+            outputs = list(SUPPORTED_OUTPUTS.keys())
+
+        # Validate requested outputs
+        outputs = set(outputs)
+        unknown = outputs - set(SUPPORTED_OUTPUTS)
+        if unknown:
+            raise ValueError(f"Unknown outputs requested: {unknown}")
+
+        # Compute all required stages by walking the dependency graph
+        required_stages = set()
+        def add_stage_and_deps(stage):
+            if stage in required_stages:
+                return
+            required_stages.add(stage)
+            for dep in STAGE_DEPS.get(stage, []):
+                add_stage_and_deps(dep)
+
+        for out in outputs:
+            for stage in SUPPORTED_OUTPUTS[out]:
+                add_stage_and_deps(stage)
+
+        # Prepare storage for stage results
+        results: dict[str, Any] = {}
+
+        # Helper: run a stage only if required
+        def run_stage(name: str):
+            if name not in required_stages:
+                return
+            if name in results:
+                return  # already run
+            self.logger.debug(f"Running stage '{name}'")
+            if name == 'load':
+                results['loaded_data'] = self.stages['load'](filename=filename)
+            elif name == 'preprocess':
+                results['preprocessed_data'] = self.stages['preprocess'](
+                    loaded_data=results['loaded_data']
+                )
+            elif name == 'segment':
+                # we might need to create three different maps
+                if 'imu_map' in outputs or 'segment' in required_stages:
+                    results.setdefault('imu_map', 
+                        self.stages['segment'](
+                            map_name='imu',
+                            preprocessed_data=results['preprocessed_data']
+                        )
+                    )
+                if 'fm_dict' in outputs or 'fusion' in required_stages or 'extract_det' in required_stages:
+                    results.setdefault('fm_dict',
+                        self.stages['segment'](
+                            map_name='fm_sensor',
+                            preprocessed_data=results['preprocessed_data'],
+                            imu_map=results.get('imu_map')
+                        )
+                    )
+                if ('sensation_map' in outputs or 'segment' in required_stages) and not self.inference:
+                    results.setdefault('sensation_map',
+                        self.stages['segment'](
+                            map_name='sensation',
+                            preprocessed_data=results['preprocessed_data'],
+                            imu_map=results.get('imu_map')
+                        )
+                    )
+            elif name == 'fusion':
+                results['scheme_dict'] = self.stages['fusion'](
+                    fm_dict=results['fm_dict']
+                )
+            elif name == 'extract_det':
+                results['extracted_detections'] = self.stages['extract_det'](
+                    inference=self.inference,
+                    preprocessed_data=results['preprocessed_data'],
+                    scheme_dict=results['scheme_dict'],
+                    sensation_map=results.get('sensation_map')
+                )
+            elif name == 'extract_feat':
+                results['extracted_features'] = self.stages['extract_feat'](
+                    inference=self.inference,
+                    fm_dict=results['fm_dict'],
+                    extracted_detections=results['extracted_detections'],
+                    feat=feature_set
+                )
+
+        # Execute in correct order
+        start = time.time()
+        for stage in EXEC_ORDER:
+            run_stage(stage)
+        self.logger.info(f"Pipeline finished in {time.time()-start:0.3f}s")
+
+        # Return only what was requested
+        return {out: results.get(out) for out in outputs}
 
     def save(self, file_path):
         """Save the pipeline to a joblib file

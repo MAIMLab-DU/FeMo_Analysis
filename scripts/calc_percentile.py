@@ -72,7 +72,7 @@ def main(args):
     )
 
     sensor_sensation_peaks = {
-        key: [] for key in dataset.pipeline.stages[0].sensors
+        key: [] for key in dataset.pipeline.stages['load'].sensors
     }
 
     for item in tqdm(data_manifest['items'], desc="Calculating segment peaks", unit="file"):
@@ -88,13 +88,13 @@ def main(args):
             dataset.logger.warning(f"Failed to download {data_filename} from {bucket = }, {data_file_key =}")
             continue
 
-        loaded_data = dataset.pipeline.stages[0].transform(data_filename)
-        preprocessed_data = dataset.pipeline.stages[1].transform(loaded_data)
+        loaded_data = dataset.pipeline.stages['load'].transform(data_filename)
+        preprocessed_data = dataset.pipeline.stages['preprocess'].transform(loaded_data)
 
-        for sensor in dataset.pipeline.stages[0].sensors:
+        for sensor in dataset.pipeline.stages['load'].sensors:
             sensor_data = preprocessed_data[sensor]
             sensation_data = preprocessed_data['sensation_data']
-            peaks = calculate_segment_peaks(sensor_data, sensation_data, dataset.pipeline.stages[2])
+            peaks = calculate_segment_peaks(sensor_data, sensation_data, dataset.pipeline.stages['segment'])
             sensor_sensation_peaks[sensor].extend(peaks)
 
     data_manifest['percentiles'] = {
