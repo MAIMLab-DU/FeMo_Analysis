@@ -74,9 +74,10 @@ class DataLoader(BaseTransform):
         max_voltage = 3.3  
 
         selected_sensor_data = selected_sensor_data.copy()
-        for column in selected_sensor_data.columns:
-            if column in FM_sensor_columns:
-                selected_sensor_data.loc[:, column] = (selected_sensor_data[column] / max_sensor_value) * max_voltage
+        for column in FM_sensor_columns:
+            selected_sensor_data[column] = (
+                (selected_sensor_data[column].astype(np.float32) / max_sensor_value) * max_voltage
+            )
 
         # •	contains the rotation vector, which is the most accurate position (based on magnetometer, accelerometer and gyroscope)
         # •	rotation vector is currently in quaternion format
