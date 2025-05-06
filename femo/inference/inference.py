@@ -160,7 +160,7 @@ class PredictionService(object):
                 ml_map[L_min:L_max] = 0
 
         #Now get the reduced detection_map
-        time_of_detection = (len(ml_map))/ (fm_dict['Fs_sensor']*60)  # in minutes
+        time_of_detection = (len(ml_map))/ (1024*60)  # in minutes
         if time_of_detection < 60: # if time is less than 60 minutes
             reduced_detection_map = ml_map * fm_dict['fm_map']  # Reduced, because of the new dilation length
         else:
