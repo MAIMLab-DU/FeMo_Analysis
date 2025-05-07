@@ -81,3 +81,14 @@ def custom_binary_erosion(data, erosion_size):
             eroded_data[indexs] = 0
 
     return eroded_data
+
+
+def str2bool(value):
+    if isinstance(value, bool):
+        return value
+    if value.lower() in {"true", "yes", "1"}:
+        return True
+    elif value.lower() in {"false", "no", "0"}:
+        return False
+    else:
+        raise ValueError(f"Invalid boolean string: {value}")

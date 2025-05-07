@@ -44,6 +44,7 @@ dependencies = [
 # Optional dependencies ------------------------------------------------------------------------------------------------
 [project.optional-dependencies]
 dev = [
+    "pre-commit",
     "ipython",
     "pytest",
     "pytest-cov",

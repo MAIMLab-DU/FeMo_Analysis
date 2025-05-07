@@ -1,0 +1,8 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4  # Use latest stable version if needed
+    hooks:
+      - id: ruff
+        args: [--fix]  # Auto-fix issues where possible
+        pass_filenames: true
+        types: [python]  # Only run on Python files
