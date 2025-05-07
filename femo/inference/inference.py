@@ -251,11 +251,10 @@ class PredictionService(object):
             prediction_output = defaultdict()
 
             pipeline = self.get_pipeline()
+            feature_dict, pipeline_output = pipeline.extract_features_batch(filename=file_path)
 
-            feature_dict = defaultdict()
-            for feature_set in pipeline.get_stage("extract_feat").feature_sets:
-                pipeline_output = pipeline.process(filename=file_path, feature_set=feature_set)
-                X_extracted = pipeline_output["extracted_features"]["features"]
+            for feature_set, extracted in feature_dict.items():
+                X_extracted = extracted["features"]
                 processor: Processor = self.get_processor(feature_set)
                 feature_dict[feature_set] = processor.predict(X_extracted)
 

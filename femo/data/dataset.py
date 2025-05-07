@@ -127,7 +127,7 @@ class FeMoDataset:
                 continue
 
             try:
-                extracted = self.pipeline.extract_features_batch(str(data_filename))
+                extracted, _ = self.pipeline.extract_features_batch(str(data_filename))
             except Exception as e:
                 self.logger.error(f"Feature extraction failed for {data_filename}: {e}")
                 continue

@@ -213,7 +213,7 @@ class Pipeline(object):
         # Return only what was requested
         return {out: results.get(out) for out in outputs}
 
-    def extract_features_batch(self, filename: str) -> dict[str, pd.DataFrame]:
+    def extract_features_batch(self, filename: str) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
         """
         Efficiently extract multiple feature sets without re-running upstream stages.
 
@@ -244,7 +244,7 @@ class Pipeline(object):
             )
             results[feature_set] = feats
 
-        return results
+        return results, intermediate_outputs
     
     def save(self, file_path):
         """Save the pipeline to a joblib file
