@@ -17,6 +17,7 @@ from .feature_utils import (
     get_morphology
 )
 from .base import BaseTransform
+from ._utils import str2bool
 
 
 class FeatureExtractor(BaseTransform):
@@ -60,7 +61,7 @@ class FeatureExtractor(BaseTransform):
         num_segments = len(extracted_sensor_data)
 
         num_common_feats = 53  # i.e. max, mean, sum, sd, percentile, skew, kurtosis, ...
-        num_maps = self.num_sensors + 2 if self.add_imu_features else self.num_sensors
+        num_maps = self.num_sensors + 2 if str2bool(self.add_imu_features) else self.num_sensors
         # +1 feature for segment duration
         total_feats = num_maps * num_common_feats + 1
         
