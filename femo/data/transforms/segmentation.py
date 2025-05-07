@@ -3,7 +3,7 @@ import numpy as np
 import concurrent.futures
 from typing import Literal
 from functools import reduce
-from ._utils import custom_binary_dilation
+from ._utils import custom_binary_dilation, str2bool
 from .base import BaseTransform
 
 
@@ -18,6 +18,9 @@ class DataSegmentor(BaseTransform):
             "sensor_5": 0.0,
             "sensor_6": 0.0,
         },
+        imu_modalities: list[Literal['imu_acceleration', 'imu_rotation', 'imu_sensorbased']] = [
+            'imu_acceleration', 'imu_rotation', 'imu_sensorbased'
+        ],
         num_common_sensors_imu: int = 2,
         imu_acceleration_threshold: float = 0.2,
         imu_rotation_threshold: int = 4,
@@ -27,10 +30,16 @@ class DataSegmentor(BaseTransform):
         fm_dilation: int = 3,
         fm_min_sn: int | list[int] = 40,
         fm_signal_cutoff: float = 0.0001,
+        remove_imu: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
+        # validate imu_modalities
+        assert all(modality in ['imu_acceleration', 'imu_rotation', 'imu_sensorbased'] for modality in imu_modalities), \
+              f"Invalid imu modalities: {imu_modalities}. Should be one of ['imu_acceleration', 'imu_rotation', 'imu_sensorbased']."
+        # validate imu_acceleration_threshold
+        self.imu_modalities = imu_modalities
         self.percentile_threshold = percentile_threshold
         self.num_common_sensors_imu = num_common_sensors_imu
         self.imu_acceleration_threshold = imu_acceleration_threshold
@@ -39,15 +48,10 @@ class DataSegmentor(BaseTransform):
         self.fm_dilation = fm_dilation
         self.maternal_dilation_forward = maternal_dilation_forward
         self.maternal_dilation_backward = maternal_dilation_backward
-        self._fm_min_sn_value = fm_min_sn
-        self._fm_signal_cutoff_value = fm_signal_cutoff
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        if "_fm_min_sn_value" not in self.__dict__:
-            self._fm_min_sn_value = 40
-        if "_fm_signal_cutoff_value" not in self.__dict__:
-            self._fm_signal_cutoff_value = 0.0001
+        self.fm_min_sn = [fm_min_sn for _ in range(self.num_sensors)] if isinstance(fm_min_sn, int) else fm_min_sn
+        assert len(self.fm_min_sn) == self.num_sensors, f"{len(self.fm_min_sn) = } != {self.num_sensors = }"
+        self.segmentation_signal_cutoff = [fm_signal_cutoff for _ in range(self.num_sensors)]
+        self.remove_imu = remove_imu
 
     @property
     def imu_dilation_size(self):
@@ -64,24 +68,6 @@ class DataSegmentor(BaseTransform):
     @property
     def extension_backward(self):
         return round(self.maternal_dilation_backward * self.sensor_freq)
-
-    @property
-    def fm_min_sn(self):
-        if isinstance(self._fm_min_sn_value, int):
-            return [self._fm_min_sn_value for _ in range(self.num_sensors)]
-        return self._fm_min_sn_value
-
-    @fm_min_sn.setter
-    def fm_min_sn(self, value):
-        self._fm_min_sn_value = value
-
-    @property
-    def segmentation_signal_cutoff(self):
-        return [self._fm_signal_cutoff_value for _ in range(self.num_sensors)]
-
-    @segmentation_signal_cutoff.setter
-    def segmentation_signal_cutoff(self, value):
-        self._fm_signal_cutoff_value = value
 
     def transform(self, map_name: Literal["imu", "fm_sensor", "sensation"], *args, **kwargs):
         if map_name == "imu":
@@ -151,9 +137,16 @@ class DataSegmentor(BaseTransform):
         tic = time.time()
         preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
 
-        imu_acceleration_map = self._create_imu_accleration_map(preprocessed_data["imu_acceleration"]).astype(int)
-        imu_rotation_map = self._create_imu_rotation_map(preprocessed_data["imu_rotation"]).astype(int)
-        imu_sensorbased_map = self._create_sensor_based_imu_map(preprocessed_sensor_data).astype(int)
+        imu_acceleration_map = np.zeros_like(preprocessed_data['imu_acceleration'], dtype=bool)
+        imu_rotation_map = np.zeros_like(preprocessed_data['imu_acceleration'], dtype=bool)
+        imu_sensorbased_map = np.zeros_like(preprocessed_data['imu_acceleration'], dtype=bool)
+        if 'imu_acceleration' in self.imu_modalities:
+            imu_acceleration_map = self._create_imu_accleration_map(preprocessed_data['imu_acceleration']).astype(int)
+        if 'imu_rotation' in self.imu_modalities:
+            imu_rotation_map = self._create_imu_rotation_map(preprocessed_data['imu_rotation']).astype(int)
+        if 'imu_sensorbased' in self.imu_modalities:
+            preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
+            imu_sensorbased_map = self._create_sensor_based_imu_map(preprocessed_sensor_data).astype(int)
         map_added = imu_acceleration_map + imu_rotation_map + imu_sensorbased_map
 
         map_added[0] = 0
@@ -290,7 +283,7 @@ class DataSegmentor(BaseTransform):
         }
 
     def create_sensation_map(self, preprocessed_data: dict, imu_map=None):
-        if imu_map is None:
+        if imu_map is None and str2bool(self.remove_imu):
             imu_map = self.create_imu_map(preprocessed_data)
 
         self.logger.debug("Creating Sensation map")
@@ -301,7 +294,7 @@ class DataSegmentor(BaseTransform):
         # Sample numbers for maternal sensation detection
         M_event_index = np.where(sensation_data)[0]
         # Initializing the map with zeros everywhere
-        maternal_sens_map = np.zeros(len(imu_map))
+        maternal_sens_map = np.zeros_like(sensation_data)
 
         # M_event_index contains index of all the maternal sensation detections
         for j in range(len(M_event_index)):
@@ -321,10 +314,12 @@ class DataSegmentor(BaseTransform):
             maternal_sens_map[L1 : L2 + 1] = 1  # Assigns 1 to the locations defined by L1:L2
 
             # Removal of the maternal sensation that has coincided with the body movement
-            X = np.sum(maternal_sens_map[L1 : L2 + 1] * imu_map[L1 : L2 + 1])
-            if X:
-                # Removes the sensation data from the map
-                maternal_sens_map[L1 : L2 + 1] = 0
+            if str2bool(self.remove_imu):
+                X = np.sum(maternal_sens_map[L1 : L2 + 1] * imu_map[L1 : L2 + 1])
+                if X:
+                    self.logger.debug("Removing sensation data due to body movement")
+                    # Removes the sensation data from the map
+                    maternal_sens_map[L1 : L2 + 1] = 0
         self.logger.info(f"Sensation map created in {(time.time()-tic)*1000:.2f} ms")
         
         return maternal_sens_map
