@@ -2,7 +2,7 @@ import time
 import copy
 import numpy as np
 from scipy.signal import butter, sosfiltfilt
-from ._utils import apply_pca
+from ._utils import apply_pca, str2bool
 from .base import BaseTransform
 
 
@@ -138,7 +138,7 @@ class DataPreprocessor(BaseTransform):
 
         try:
             preprocessed_data['sensation_data'] = safe_trim(preprocessed_data['sensation_data'], 'sensation_data')
-            if self.resolve_debounce:
+            if str2bool(self.resolve_debounce):
                 preprocessed_data['sensation_data'] = self._resolve_debouncing(preprocessed_data['sensation_data'])
         except Exception as e:
             self.logger.warning(f"Failed to process sensation_data: {e}")
