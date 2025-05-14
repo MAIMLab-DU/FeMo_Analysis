@@ -15,7 +15,6 @@ from .transforms import (
     FeatureExtractor,
 )
 
-
 class Pipeline(object):
     STAGE_NAME_MAP = {
         "load": 0,
