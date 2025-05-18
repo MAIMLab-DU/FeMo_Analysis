@@ -82,7 +82,7 @@ def main(args):
 
         data_file_key = item.get('datFileKey', None)
         bucket=item.get('bucketName', None)
-        data_filename = os.path.join(dataset.base_dir, data_file_key)
+        data_filename = dataset._resolve_path(data_file_key)
         data_success = dataset._download_from_s3(
             filename=data_filename,
             bucket=bucket,
