@@ -114,6 +114,8 @@ class FeMoDataset:
             bucket = item.get('bucketName')
             data_file_key = item.get('datFileKey')
             feat_file_key = item.get('csvFileKey', item['datFileKey'].replace('.dat', '.csv'))
+            remove_zeros = item.get('removeZeros', False)
+
 
             if not data_file_key or not feat_file_key:
                 self.logger.warning("Skipping item due to missing datFileKey or csvFileKey.")
@@ -145,6 +147,9 @@ class FeMoDataset:
                             self._upload_to_s3(str(feat_filename), bucket, feat_filename.name)
                         except Exception as e:
                             self.logger.warning(f"Upload skipped due to error: {e}")
+
+                if(remove_zeros):
+                    current_features = current_features[current_features["labels"] == 1]
 
                 features_dict[feature_set] = pd.concat(
                     [features_dict[feature_set], current_features], axis=0
