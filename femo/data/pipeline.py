@@ -224,7 +224,9 @@ class Pipeline(object):
         intermediate_outputs = self.process(
             filename=filename,
             outputs=[
+                'loaded_data',
                 'preprocessed_data',
+                'imu_map',
                 'fm_dict',
                 'sensation_map',
                 'scheme_dict',
