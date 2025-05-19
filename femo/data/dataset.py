@@ -90,7 +90,8 @@ class FeMoDataset:
             self.logger.warning(f"S3 download failed: {e}")
             return False
 
-    def _save_features(self, filename: str, data: dict, key: str = None) -> pd.DataFrame:
+    def _save_features(self, filename: str, data: dict, key: str = None, 
+                       is_noise_data: bool = False, remove_zeros:bool = False) -> pd.DataFrame:
         features = data.get('features')
         columns = data.get('columns')
         labels = data.get('labels')
@@ -104,6 +105,9 @@ class FeMoDataset:
         features_df['det_indices'] = det_indices
         features_df['labels'] = labels
 
+        if(not is_noise_data and remove_zeros):
+            features_df = features_df[features_df["label"] == 1]
+
         features_df.to_csv(filename, index=False)
         return features_df
 
@@ -114,6 +118,9 @@ class FeMoDataset:
             bucket = item.get('bucketName')
             data_file_key = item.get('datFileKey')
             feat_file_key = item.get('csvFileKey', item['datFileKey'].replace('.dat', '.csv'))
+            is_noise_data = item.get('noiseData', False)
+            remove_zeros = item.get('removeZeros', False)
+
 
             if not data_file_key or not feat_file_key:
                 self.logger.warning("Skipping item due to missing datFileKey or csvFileKey.")
@@ -138,7 +145,7 @@ class FeMoDataset:
                 if feat_filename.exists() and not force_extract:
                     current_features = pd.read_csv(feat_filename)
                 else:
-                    current_features = self._save_features(str(feat_filename), feat_data, map_key)
+                    current_features = self._save_features(str(feat_filename), feat_data, map_key, is_noise_data, remove_zeros)
 
                     if not skip_upload:
                         try:
