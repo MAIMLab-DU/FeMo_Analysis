@@ -150,10 +150,17 @@ class FeMoDataset:
 
                 if(remove_zeros):
                     current_features = current_features[current_features["labels"] == 1]
+                    current_features = current_features.reset_index(drop=True)
+                
+                if(len(current_features)==0):
+                    self.logger.info("Empty Dataframe: Data file has no data")
+                    continue
 
                 features_dict[feature_set] = pd.concat(
-                    [features_dict[feature_set], current_features], axis=0
+                    [features_dict[feature_set], current_features], axis=0, ignore_index=True
                 )
+
+                features_dict[feature_set].reset_index(drop=True)
 
         if not any(len(df) for df in features_dict.values()):
             msg = (
