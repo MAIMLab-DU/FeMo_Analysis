@@ -76,7 +76,7 @@ class DataLoader(BaseTransform):
         rotation = R.from_quat(IMU_rotation_quat.values)
         IMU_rotation_rpy = pd.DataFrame(rotation.as_euler('xyz', degrees=True), columns=['roll', 'pitch', 'yaw'])
         self.logger.debug(f"Euler angle conversion done. Sample: {IMU_rotation_rpy.iloc[0].to_dict()}")
-
+        
         loaded_data['sensor_1'] = np.linalg.norm(selected_sensor_data[['x1', 'y1', 'z1']], axis=1)
         loaded_data['sensor_2'] = np.linalg.norm(selected_sensor_data[['x2', 'y2', 'z2']], axis=1)
         loaded_data['sensor_3'] = selected_sensor_data['p1'].to_numpy()
@@ -85,6 +85,16 @@ class DataLoader(BaseTransform):
         loaded_data['sensor_6'] = selected_sensor_data['p4'].to_numpy()
         loaded_data['imu_acceleration'] = np.linalg.norm(IMU_aclm, axis=1)
         loaded_data['imu_rotation'] = IMU_rotation_rpy
+        loaded_data['fm_acceleration'] = {
+            'sensor_1': pd.DataFrame(
+                selected_sensor_data[['x1', 'y1', 'z1']].to_numpy(),
+                columns=['x', 'y', 'z']
+            ),
+            'sensor_2': pd.DataFrame(
+                selected_sensor_data[['x2', 'y2', 'z2']].to_numpy(),
+                columns=['x', 'y', 'z']
+            )
+        }
         self.logger.debug("Sensor magnitudes computed for all FM channels and IMU acceleration.")
 
         try:
