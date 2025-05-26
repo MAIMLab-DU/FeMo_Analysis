@@ -135,7 +135,6 @@ class DataSegmentor(BaseTransform):
 
         self.logger.debug("Creating IMU map")
         tic = time.time()
-        preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
 
         imu_acceleration_map = np.zeros_like(preprocessed_data['imu_acceleration'], dtype=bool)
         imu_rotation_map = np.zeros_like(preprocessed_data['imu_acceleration'], dtype=bool)
@@ -145,7 +144,7 @@ class DataSegmentor(BaseTransform):
         if 'imu_rotation' in self.imu_modalities:
             imu_rotation_map = self._create_imu_rotation_map(preprocessed_data['imu_rotation']).astype(int)
         if 'imu_sensorbased' in self.imu_modalities:
-            preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
+            preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.percentile_threshold.keys()}
             imu_sensorbased_map = self._create_sensor_based_imu_map(preprocessed_sensor_data).astype(int)
         map_added = imu_acceleration_map + imu_rotation_map + imu_sensorbased_map
 
