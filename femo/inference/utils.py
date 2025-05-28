@@ -129,12 +129,7 @@ def classify_posture(
         
         # Check component with highest magnitude
         if max_idx == 0:  # x component dominates
-            if x < 0:
-                return 0
-            elif abs(abs(y)-abs(z)) < 0.1:
-                return 1
-            else:
-                return 3 if y < 0 else 2
+            return 0
         if max_idx == 1:  # y component dominates
             return 2 if y < 0 else 3
         if max_idx == 2:  # z component dominates
