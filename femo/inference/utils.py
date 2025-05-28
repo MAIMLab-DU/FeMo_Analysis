@@ -114,7 +114,7 @@ def classify_posture(
         threshold = 45
         if (90-threshold) <= abs(pitch) <= (90+threshold):
             return 0
-        if abs(roll) <= 45:
+        if abs(roll) <= threshold:
             return 1
         if roll > 0:
             return 2
@@ -123,17 +123,22 @@ def classify_posture(
         return 5
 
     if all(coord is not None for coord in (x, y, z)):
-        abs_values = [abs(x), abs(y), abs(z)]
-        max_idx = abs_values.index(max(abs_values))
+        abs_values: list[float] = [abs(x), abs(y), abs(z)]
+        sorted_indices: np.ndarray = np.argsort(abs_values) # ascending order
+        max_idx: int = sorted_indices[-1]
         
         # Check component with highest magnitude
         if max_idx == 0:  # x component dominates
-            return 0 if x < 0 else 5
-        elif max_idx == 1:  # y component dominates
+            if x < 0:
+                return 0
+            elif abs(abs(y)-abs(z)) < 0.1:
+                return 1
+            else:
+                return 3 if y < 0 else 2
+        if max_idx == 1:  # y component dominates
             return 2 if y < 0 else 3
-        else:  # z component dominates
-            return 1 if z < 0 else 5
+        if max_idx == 2:  # z component dominates
+            return 1
     return 5
 
-    
 
