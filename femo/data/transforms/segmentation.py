@@ -86,36 +86,24 @@ class DataSegmentor(BaseTransform):
 
         return imu_acceleration_map
 
-    def _create_imu_rotation_map(self, imu_rotation):
-        # Take the absolute values of the extracted Euler angles
-        imu_rotR_preproc = np.abs(imu_rotation["roll"].values)
-        imu_rotP_preproc = np.abs(imu_rotation["pitch"].values)
-        imu_rotY_preproc = np.abs(imu_rotation["yaw"].values)
+    def _create_imu_rotation_map(self, imu_rotation) -> np.ndarray:
+        """
+        Vectorized rotation-based map: mark True where
+        (|pitch|<1.5 and (|roll|>th or |yaw|>th))
+        or (|pitch|>=1.5 and (|roll|>th or |yaw|>th)),
+        then dilate.
+        """
+        Rabs = np.abs(imu_rotation['roll'].values)
+        Pabs = np.abs(imu_rotation['pitch'].values)
+        Yabs = np.abs(imu_rotation['yaw'].values)
+        th   = self.imu_rotation_threshold
 
-        # Initialize the IMU map with zeros (False)
-        imu_rotation_map = np.zeros_like(imu_rotP_preproc, dtype=bool)
+        # vectorized condition
+        m1 = (Pabs < 1.5) & ((Rabs > th) | (Yabs > th))
+        m2 = (Pabs >= 1.5) & ((Rabs > th) | (Yabs > th))
+        mask = m1 | m2
 
-        # Apply new conditions to modify the IMU map
-        for i in range(len(imu_rotP_preproc)):
-            if imu_rotP_preproc[i] < 1.5:
-                if (
-                    imu_rotR_preproc[i] < self.imu_rotation_threshold
-                    and imu_rotY_preproc[i] < self.imu_rotation_threshold
-                ):
-                    imu_rotation_map[i] = False
-                else:
-                    imu_rotation_map[i] = True
-            else:  # IMU_rotP_preproc[i] >= 1
-                if (
-                    imu_rotR_preproc[i] > self.imu_rotation_threshold
-                    or imu_rotY_preproc[i] > self.imu_rotation_threshold
-                ):
-                    imu_rotation_map[i] = True
-
-        # Dilation of IMU data
-        imu_rotation_map = custom_binary_dilation(imu_rotation_map, self.imu_dilation_size)
-
-        return imu_rotation_map
+        return custom_binary_dilation(mask, self.imu_dilation_size)
 
     def _create_sensor_based_imu_map(self, preprocessed_sensor_data: dict):
         imu_for_sensors = dict()
@@ -131,53 +119,75 @@ class DataSegmentor(BaseTransform):
 
         return imu_for_sensors_sums >= self.num_common_sensors_imu
 
-    def create_imu_map(self, preprocessed_data: dict):
+    def create_imu_map(self, preprocessed_data: dict) -> np.ndarray:
+        """
+        Create a boolean mask of body-movement epochs by combining three IMU modalities:
+        1) acceleration threshold + dilation
+        2) rotation threshold + dilation
+        3) sensor-based threshold + dilation
 
-        self.logger.debug("Creating IMU map")
+        The mask is the logical OR of each modality's dilated map, with the first
+        and last samples forced to False. Finally, contiguous True regions are
+        expanded into full windows (any transition from False→True marks a window
+        start, True→False marks its end).
+
+        Args:
+            preprocessed_data (dict):
+                - 'imu_acceleration': 1D np.ndarray of floats
+                - 'imu_rotation':     pd.DataFrame with columns ['roll','pitch','yaw']
+                - keys in self.sensors if 'imu_sensorbased' enabled
+
+        Returns:
+            np.ndarray (bool): length-N mask where True indicates detected body movement.
+        """
+        import time
+        import numpy as np
+
         tic = time.time()
-        preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
+        N = preprocessed_data['imu_acceleration'].shape[0]
 
-        imu_acceleration_map = np.zeros_like(preprocessed_data['imu_acceleration'], dtype=bool)
-        imu_rotation_map = np.zeros_like(preprocessed_data['imu_acceleration'], dtype=bool)
-        imu_sensorbased_map = np.zeros_like(preprocessed_data['imu_acceleration'], dtype=bool)
+        # 1) initialize a single boolean mask, all False
+        mask = np.zeros(N, dtype=bool)
+
+        # 2) Acceleration modality
         if 'imu_acceleration' in self.imu_modalities:
-            imu_acceleration_map = self._create_imu_accleration_map(preprocessed_data['imu_acceleration']).astype(int)
+            self.logger.debug("Generating acceleration-based map")
+            acc_map = self._create_imu_accleration_map(preprocessed_data['imu_acceleration'])
+            mask |= acc_map
+            del acc_map  # free immediately
+
+        # 3) Rotation modality
         if 'imu_rotation' in self.imu_modalities:
-            imu_rotation_map = self._create_imu_rotation_map(preprocessed_data['imu_rotation']).astype(int)
+            self.logger.debug("Generating rotation-based map")
+            rot_map = self._create_imu_rotation_map(preprocessed_data['imu_rotation'])
+            mask |= rot_map
+            del rot_map
+
+        # 4) Sensor-based modality
         if 'imu_sensorbased' in self.imu_modalities:
-            preprocessed_sensor_data = {key: preprocessed_data[key] for key in self.sensors}
-            imu_sensorbased_map = self._create_sensor_based_imu_map(preprocessed_sensor_data).astype(int)
-        map_added = imu_acceleration_map + imu_rotation_map + imu_sensorbased_map
+            self.logger.debug("Generating sensor-based IMU map")
+            sb_inputs = {k: preprocessed_data[k] for k in self.percentile_threshold.keys()}
+            sb_map = self._create_sensor_based_imu_map(sb_inputs)
+            mask |= sb_map
+            del sb_map
 
-        map_added[0] = 0
-        map_added[-1] = 0
+        # 5) ensure first and last sample are never marked
+        mask[0]  = False
+        mask[-1] = False
 
-        # Find where changes from non-zero to zero or zero to non-zero occur
-        changes = np.where((map_added[:-1] == 0) != (map_added[1:] == 0))[0] + 1
+        # 6) identify transitions to build contiguous windows
+        changes = np.flatnonzero(mask[:-1] != mask[1:]) + 1
+        final = np.zeros_like(mask)
 
-        # Create tuples of every two values
-        windows = []
-        for i in range(0, len(changes), 2):
-            if i < len(changes) - 1:
-                windows.append((changes[i], changes[i + 1]))
-            else:
-                windows.append((changes[i],))
+        # pair up starts and ends; any odd tail extends to the end
+        for start, end in zip(changes[0::2], changes[1::2]):
+            final[start:end] = True
+        if len(changes) % 2 == 1:
+            final[changes[-1]:] = True
 
-        map_final = np.zeros(len(map_added))
-
-        for window in windows:
-            start = window[0]
-
-            if len(window) == 2:
-                end = window[1]
-                if np.any(map_added[start:end] >= 1):
-                    map_final[start:end] = 1
-            else:
-                if np.any(map_added[start:end] >= 1):
-                    map_final[start:] = 1
-
-        self.logger.info(f"IMU map created in {(time.time()-tic)*1000:.2f} ms")
-        return map_final.astype(dtype=bool)
+        elapsed_ms = (time.time() - tic) * 1000
+        self.logger.info(f"IMU map created in {elapsed_ms:.2f} ms")
+        return final
 
     def _get_segmented_sensor_data(self, preprocessed_sensor_data, imu_map):
         low_signal_quantile = 0.25
@@ -282,44 +292,26 @@ class DataSegmentor(BaseTransform):
             "fm_segmented": segmented_sensor_data,  # sensor_data_sgmntd
         }
 
-    def create_sensation_map(self, preprocessed_data: dict, imu_map=None):
+    def create_sensation_map(self, preprocessed_data: dict, imu_map: np.ndarray | None = None) -> np.ndarray:
         if imu_map is None and str2bool(self.remove_imu):
             imu_map = self.create_imu_map(preprocessed_data)
 
-        self.logger.debug("Creating Sensation map")
-
         tic = time.time()
-        sensation_data = preprocessed_data["sensation_data"]
+        sens = preprocessed_data.get("sensation_data", np.array([], dtype=bool))
+        M_idx = np.flatnonzero(sens)
+        out = np.zeros(len(sens), dtype=bool)
 
-        # Sample numbers for maternal sensation detection
-        M_event_index = np.where(sensation_data)[0]
-        # Initializing the map with zeros everywhere
-        maternal_sens_map = np.zeros_like(sensation_data)
+        step = round(self.sensor_freq / self.sensation_freq)
+        fwd = self.extension_forward
+        bwd = self.extension_backward
 
-        # M_event_index contains index of all the maternal sensation detections
-        for j in range(len(M_event_index)):
-            # Getting the index values for the map
-            # Sample no. corresponding to a maternal sensation
-            L = M_event_index[j]
-            # Sample no. for the starting point of this sensation in the map
-            L1 = L * round(self.sensor_freq / self.sensation_freq) - self.extension_backward
-            # Sample no. for the ending point of this sensation in the map
-            L2 = L * round(self.sensor_freq / self.sensation_freq) + self.extension_forward
-            # Just a check so that L1 remains higher than or equal to 0
-            L1 = max(L1, 0)
-            # Just a check so that L1 remains higher than or equal to 0
-            L2 = min(L2, len(maternal_sens_map))
+        for L in M_idx:
+            L1 = max(0, L * step - bwd)
+            L2 = min(len(out), L * step + fwd + 1)
+            out[L1:L2] = True
+            if str2bool(self.remove_imu) and out[L1:L2].any() and imu_map[L1:L2].any():
+                out[L1:L2] = False
 
-            # Generating the map - a single vector with all the sensation data mapping
-            maternal_sens_map[L1 : L2 + 1] = 1  # Assigns 1 to the locations defined by L1:L2
-
-            # Removal of the maternal sensation that has coincided with the body movement
-            if str2bool(self.remove_imu):
-                X = np.sum(maternal_sens_map[L1 : L2 + 1] * imu_map[L1 : L2 + 1])
-                if X:
-                    self.logger.debug("Removing sensation data due to body movement")
-                    # Removes the sensation data from the map
-                    maternal_sens_map[L1 : L2 + 1] = 0
-        self.logger.info(f"Sensation map created in {(time.time()-tic)*1000:.2f} ms")
-        
-        return maternal_sens_map
+        elapsed = (time.time() - tic) * 1000
+        self.logger.info(f"Sensation map created in {elapsed:.2f} ms")
+        return out

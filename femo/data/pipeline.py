@@ -15,7 +15,6 @@ from .transforms import (
     FeatureExtractor,
 )
 
-
 class Pipeline(object):
     STAGE_NAME_MAP = {
         "load": 0,
@@ -224,6 +223,8 @@ class Pipeline(object):
         intermediate_outputs = self.process(
             filename=filename,
             outputs=[
+                'loaded_data',
+                'imu_map',
                 'preprocessed_data',
                 'fm_dict',
                 'sensation_map',
