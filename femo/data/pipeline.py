@@ -1,7 +1,5 @@
-import os
 import yaml
 import joblib
-import tarfile
 import time
 import pandas as pd
 from typing import Any
@@ -176,7 +174,7 @@ class Pipeline(object):
                             imu_map=results.get('imu_map')
                         )
                     )
-                if ('sensation_map' in outputs or 'segment' in required_stages) and not self.inference:
+                if ('sensation_map' in outputs or 'segment' in required_stages):
                     results.setdefault('sensation_map',
                         self.get_stage('segment')(
                             map_name='sensation',
@@ -247,15 +245,139 @@ class Pipeline(object):
 
         return results, intermediate_outputs
     
-    def save(self, file_path):
-        """Save the pipeline to a joblib file
-
+    def save(self, file_path: str) -> None:
+        """Save the pipeline configuration and state to a joblib file.
+        
+        This saves only the configuration and essential state, allowing the
+        pipeline to use updated code when loaded.
+    
         Args:
-            file_path (str): Path to directory for saving the pipeline
+            file_path: Path to joblib file for saving the pipeline
+        """
+        from pathlib import Path
+        
+        # Ensure the directory exists
+        save_path = Path(file_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Collect configuration and minimal state (not the entire object)
+        pipeline_state: dict[str, Any] = {
+            'cfg': self.cfg,
+            'inference': self.inference,
+            'version': getattr(self, '_version', '1.0.0')
+        }
+        
+        # Also save individual stage parameters that might have been modified
+        stage_params: dict[str, dict[str, Any]] = {}
+        for stage_name in self.STAGE_NAME_MAP.keys():
+            stage = self.get_stage(stage_name)
+            # Save only serializable attributes (exclude methods, functions, etc.)
+            stage_dict: dict[str, Any] = {}
+            for attr_name in dir(stage):
+                if not attr_name.startswith('_'):
+                    attr_value = getattr(stage, attr_name)
+                    if not callable(attr_value):
+                        try:
+                            # Test if the attribute is serializable by joblib
+                            joblib.dumps(attr_value)
+                            stage_dict[attr_name] = attr_value
+                        except (TypeError, ValueError, AttributeError):
+                            continue
+            stage_params[stage_name] = stage_dict
+        
+        # Combine everything into a single structure
+        complete_state: dict[str, Any] = {
+            'pipeline_state': pipeline_state,
+            'stage_parameters': stage_params
+        }
+        
+        # Save to joblib file
+        joblib.dump(complete_state, file_path)
+        self.logger.debug(f"Pipeline configuration saved to {file_path}")
+    
+    @classmethod
+    def load(cls, file_path: str) -> 'Pipeline':
+        """Load a pipeline from saved joblib file.
+        
+        This method handles both old format (whole pipeline object) and new format 
+        (configuration-only). For old format, it extracts the configuration and 
+        creates a new instance to ensure current code is used.
+        
+        Args:
+            file_path: Path to joblib file containing saved pipeline
+            
+        Returns:
+            Pipeline instance with saved configuration using current code
         """
         
-        joblib.dump(self, os.path.join(file_path, "pipeline.joblib"))
-        tar = tarfile.open(os.path.join(file_path, "pipeline.tar.gz"), "w:gz")
-        tar.add(os.path.join(file_path, "pipeline.joblib"), arcname="pipeline.joblib")
-        tar.close()
-        self.logger.debug(f"Pipeline saved to {file_path}")
+        # Load data from joblib file
+        loaded_pipeline = joblib.load(file_path)
+        
+        # Check if this is the new format (dict with pipeline_state) or old format (Pipeline object)
+        if isinstance(loaded_pipeline, dict) and 'pipeline_state' in loaded_pipeline:
+            # New format: configuration-only save
+            pipeline_state: dict[str, Any] = loaded_pipeline['pipeline_state']
+            stage_params: dict[str, dict[str, Any]] = loaded_pipeline.get('stage_parameters', {})
+            
+            # Create new pipeline instance (uses current code)
+            pipeline = cls(
+                cfg=pipeline_state['cfg'],
+                inference=pipeline_state['inference']
+            )
+            
+            # Restore any modified stage parameters
+            for stage_name, params in stage_params.items():
+                try:
+                    stage = pipeline.get_stage(stage_name)
+                    for param_name, param_value in params.items():
+                        if hasattr(stage, param_name):
+                            setattr(stage, param_name, param_value)
+                except (KeyError, AttributeError) as e:
+                    pipeline.logger.warning(
+                        f"Could not restore parameter {param_name} for stage {stage_name}: {e}"
+                    )
+            
+        elif hasattr(loaded_pipeline, 'cfg') and hasattr(loaded_pipeline, 'inference'):
+            # Old format: whole pipeline object was saved
+            LOGGER.warning(
+                f"Loading legacy pipeline format from {file_path}. "
+                "Consider re-saving with current format for better compatibility."
+            )
+            
+            # Extract configuration from old pipeline object
+            old_pipeline = loaded_pipeline
+            
+            # Create new pipeline instance with extracted configuration (uses current code)
+            pipeline = cls(
+                cfg=old_pipeline.cfg,
+                inference=old_pipeline.inference
+            )
+            
+            # Try to preserve any modified stage parameters from the old pipeline
+            for stage_name in cls.STAGE_NAME_MAP.keys():
+                try:
+                    old_stage = old_pipeline.get_stage(stage_name)
+                    new_stage = pipeline.get_stage(stage_name)
+                    
+                    # Copy over non-callable attributes that might have been modified
+                    for attr_name in dir(old_stage):
+                        if not attr_name.startswith('_') and not callable(getattr(old_stage, attr_name)):
+                            try:
+                                attr_value = getattr(old_stage, attr_name)
+                                if hasattr(new_stage, attr_name):
+                                    setattr(new_stage, attr_name, attr_value)
+                            except (AttributeError, TypeError):
+                                continue
+                                
+                except (KeyError, AttributeError) as e:
+                    LOGGER.warning(
+                        f"Could not transfer parameters for stage {stage_name}: {e}"
+                    )
+        else:
+            raise ValueError(
+                f"Unrecognized pipeline file format in {file_path}. "
+                "Expected either new format (dict with 'pipeline_state') or old format (Pipeline object)."
+            )
+        
+        LOGGER.debug(f"Pipeline loaded from {file_path}")
+        return pipeline
