@@ -241,11 +241,6 @@ class PredictionService(object):
             remove_hiccups(bool, optional): Wether to remove hiccups for analysis. Defaults to False.
         """
 
-        if remove_hiccups:
-            hiccup_cfg = self.pred_cfg.get("hiccup_removal", self.default_hiccup_cfg)
-            hiccup_analyzer = HiccupAnalysis(Fs_sensor=self.pipeline.get_stage("load").sensor_freq, **hiccup_cfg)
-            self.logger.info(f"{hiccup_analyzer.config = }")
-
         # Helper function to process the file
         def process_file(file_path: str):
             prediction_output = defaultdict()
@@ -278,6 +273,11 @@ class PredictionService(object):
             prediction_output["pre_hiccup_removal"] = {"data": data, "ml_map": ml_map}
 
             if remove_hiccups:
+                # Initialize hiccup_analyzer now that pipeline is loaded
+                hiccup_cfg = self.pred_cfg.get("hiccup_removal", self.default_hiccup_cfg)
+                hiccup_analyzer = HiccupAnalysis(Fs_sensor=pipeline.get_stage("load").sensor_freq, **hiccup_cfg)
+                self.logger.info(f"{hiccup_analyzer.config = }")
+                
                 post_hiccup_dict = self._post_hiccup_removal(
                     filename=filename,
                     hiccup_analyzer=hiccup_analyzer,
