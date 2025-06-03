@@ -1,6 +1,8 @@
 import time
 import numpy as np
 import pandas as pd
+from dataclasses import asdict
+from ._utils import timestamp_to_iso
 from scipy.spatial.transform import Rotation as R
 from .base import BaseTransform, FeMoData
 
@@ -22,12 +24,15 @@ class DataLoader(BaseTransform):
         start = time.time()
         self.logger.debug(f"Started loading from file: {filename}")
 
-        # 1) Read raw arrays
+        # 1) Read raw arrays and header
         fe  = FeMoData(filename)
         raw = fe._arrays
-        N   = raw['button'].shape[0]
+        header = asdict(fe.header)
+        header['start_time'] = timestamp_to_iso(header['start_time'])
+        header['end_time'] = timestamp_to_iso(header['end_time'])  
 
         # 2) Pre‐allocate outputs
+        N   = raw['button'].shape[0]
         sensor_1         = np.zeros(N, dtype=np.float32)
         sensor_2         = np.zeros(N, dtype=np.float32)
         sensor_3         = np.zeros(N, dtype=np.float32)
@@ -127,7 +132,8 @@ class DataLoader(BaseTransform):
             'sensor_6':         sensor_6,
             'imu_acceleration': imu_acceleration,
             'imu_rotation':     imu_rotation_df,
-            'sensation_data':   sensation_data
+            'sensation_data':   sensation_data,
+            'header':           header
         }
 
         duration_ms = (time.time() - start) * 1e3
