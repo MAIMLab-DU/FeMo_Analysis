@@ -79,16 +79,22 @@ class PredictionService(object):
     def get_pipeline(self):
         """Get the pipeline object for this instance, loading it if it's not already loaded."""
         if self.pipeline is None:
-            self.pipeline = joblib.load(self.pipeline_path)
+            self.pipeline = Pipeline.load(self.pipeline_path)
             self.pipeline.inference = True
         return self.pipeline
 
     def get_processor(self, feature_set: str = None):
         """Get the model object for this instance, loading it if it's not already loaded."""
         if self.processor[feature_set] is None and feature_set is not None:
-            self.processor[feature_set] = joblib.load(
-                self.processor_path.replace("processor.joblib", f"{feature_set}_processor.joblib")
-            )
+            try:
+                self.processor[feature_set] = joblib.load(
+                    self.processor_path.replace("processor.joblib", f"{feature_set}_processor.joblib")
+                )
+            except FileNotFoundError:  # legacy processor (only 'crafted' feature set)
+                if os.path.exists(self.processor_path) and feature_set == 'crafted':
+                    self.processor[feature_set] = joblib.load(self.processor_path)
+                    return self.processor[feature_set]
+                return None
         return self.processor[feature_set]
 
     def get_metrics(self):
@@ -248,14 +254,16 @@ class PredictionService(object):
             pipeline = self.get_pipeline()
             feature_dict, pipeline_output = pipeline.extract_features_batch(filename=file_path)
 
-            for feature_set, extracted in feature_dict.items():
-                X_extracted = extracted["features"]
+            feature_arrays = []
+            for feature_set in sorted(feature_dict.keys()):  # ['crafted', 'tsfel'] order
+                X_extracted = feature_dict[feature_set]["features"]
                 processor: Processor = self.get_processor(feature_set)
-                feature_dict[feature_set] = processor.predict(X_extracted)
+                if processor is not None:
+                    feature_arrays.append(processor.predict(X_extracted))
 
             prediction_output["pipeline_output"] = pipeline_output
 
-            X_norm_ranked = np.hstack([x for x in feature_dict.values()])
+            X_norm_ranked = np.hstack(feature_arrays)
 
             clf = self.get_model()
             if X_norm_ranked.shape[0] == 0:
