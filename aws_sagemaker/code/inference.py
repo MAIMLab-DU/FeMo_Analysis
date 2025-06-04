@@ -23,7 +23,7 @@ app = FastAPI()
 class InferenceRequest(BaseModel):
     """Request model for inference requests."""
     jobId: str = Field(..., description="Unique identifier for the inference job")
-    timeStamp: str = Field(..., description="Timestamp when the request was created (ISO format)")
+    requestTime: str = Field(..., description="Timestamp when the request was created (ISO format)")
     s3Key: str = Field(..., description="S3 key path to the input file")
     removeHiccups: bool = Field(False, description="Whether to perform hiccup removal")
     includeFullIntervals: bool = Field(False, description="Whether to include full interval arrays in metadata")
@@ -33,7 +33,7 @@ class InferenceRequest(BaseModel):
         schema_extra = {
             "example": {
                 "jobId": "job-123e4567-e89b-12d3-a456-426614174000",
-                "timeStamp": "2025-06-04T14:30:00.000Z",
+                "requestTime": "2025-06-04T14:30:00.000Z",
                 "s3Key": "input-data/recording-2024-06-04.dat",
                 "removeHiccups": False,
                 "includeFullIntervals": False,
@@ -263,7 +263,7 @@ def process_inference_request(request_data: InferenceRequest) -> str:
     # Prepare complete result
     complete_result = {
         "jobId": request_data.jobId,
-        "timeStamp": request_data.timeStamp,
+        "requestTime": request_data.requestTime,
         "s3Key": request_data.s3Key,
         "parameters": {
             "removeHiccups": request_data.removeHiccups,
@@ -274,7 +274,7 @@ def process_inference_request(request_data: InferenceRequest) -> str:
         "output_type": output_type,
         "result": inference_result,
         "status": "Completed",
-        "completedTimeStamp": datetime.utcnow().isoformat() + "Z"
+        "responseTime": datetime.utcnow().isoformat() + "Z"
     }
     
     LOGGER.info(f"Inference completed for jobId: {request_data.jobId}, "
@@ -321,7 +321,7 @@ async def model(request: Request) -> str:
             request_body = await request.body()
             request_json = json.loads(request_body.decode('utf-8'))
             job_id = request_json.get('jobId', 'unknown')
-            time_stamp = request_json.get('timeStamp', time_stamp)
+            time_stamp = request_json.get('requestTime', time_stamp)
             s3_key = request_json.get('s3Key', 'unknown')
         except Exception:
             pass  # Use defaults if we can't parse the request
@@ -329,11 +329,11 @@ async def model(request: Request) -> str:
         # Return error result as JSON string
         error_result = {
             "jobId": job_id,
-            "timeStamp": time_stamp,
+            "requestTime": time_stamp,
             "s3Key": s3_key,
             "status": "Failed",
             "error": str(e),
-            "completedTimeStamp": datetime.utcnow().isoformat() + "Z"
+            "responseTime": datetime.utcnow().isoformat() + "Z"
         }
         
         return json.dumps(error_result, default=str)
