@@ -1,15 +1,6 @@
+import numpy as np
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
-from decimal import Decimal
-
-
-def convert_floats_to_decimal(data):
-    if isinstance(data, dict):
-        return {k: convert_floats_to_decimal(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [convert_floats_to_decimal(i) for i in data]
-    elif isinstance(data, float):
-        return Decimal(str(data))
-    return data
 
 
 def extract_s3_details(s3_path: str):
@@ -24,3 +15,38 @@ def extract_s3_details(s3_path: str):
         raise ValueError(f"Invalid S3 path: {s3_path}")
     
     return bucket_name, filename
+
+
+def extract_events(arr: np.ndarray, start_time: str,
+                   time_per_sample: float, event_type: str) -> list[dict]:
+    """Extracts events from a numpy array."""
+    if not isinstance(arr, np.ndarray):
+        raise TypeError("Input must be a numpy array.")
+    
+    if arr.ndim != 1:
+        raise ValueError("Input array must be one-dimensional.")
+    if len(np.unique(arr)) > 2:
+        raise ValueError("Input array must contain only binary values (0 or 1).")
+    
+    # Convert start_time string to datetime object
+    if isinstance(start_time, str):
+        # Handle ISO format with 'Z' suffix
+        start_time_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+    elif isinstance(start_time, datetime):
+        start_time_dt = start_time
+    else:
+        raise TypeError("start_time must be a string in ISO format or datetime object")
+    
+    events = []
+    diff = np.diff(np.concatenate(([0], arr, [0])))
+    start_indices, end_indices = np.where(diff == 1)[0], np.where(diff == -1)[0]
+    
+    for start_idx, end_idx in zip(start_indices, end_indices):
+        event_start_time = start_time_dt + timedelta(seconds=start_idx * time_per_sample)
+        event_end_time = start_time_dt + timedelta(seconds=end_idx * time_per_sample)
+        events.append({
+            'event_type': event_type,
+            'start_t': event_start_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z',
+            'end_t': event_end_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+        })
+    return events
