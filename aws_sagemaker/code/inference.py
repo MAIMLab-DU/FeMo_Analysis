@@ -236,6 +236,8 @@ def process_inference_request(request_data: InferenceRequest) -> str:
     
     # Run prediction
     pred_output = pred_service.predict(file_name, bucket_name, request_data.removeHiccups)
+    sensor_freq = pred_service.pipeline.get_stage('load').sensor_freq
+    len_file = len(pred_output['pipeline_output']['loaded_data']) / sensor_freq
     
     # Build response based on request type
     if not request_data.extractEvents:
@@ -251,7 +253,7 @@ def process_inference_request(request_data: InferenceRequest) -> str:
         events = build_inference_events_data(
             pred_output, 
             request_data.removeHiccups,
-            sensor_freq=pred_service.pipeline.get_stage('load').sensor_freq
+            sensor_freq=sensor_freq
         )
         
         inference_result = {
@@ -270,15 +272,16 @@ def process_inference_request(request_data: InferenceRequest) -> str:
             "includeFullIntervals": request_data.includeFullIntervals,
             "extractEvents": request_data.extractEvents
         },
-        "processing_time_seconds": round(time.time() - start_time, 2),
-        "output_type": output_type,
+        "fileDurationSeconds": round(len_file, 3),
+        "processingTimeSeconds": round(time.time() - start_time, 2),
+        "outputType": output_type,
         "result": inference_result,
         "status": "Completed",
         "responseTime": datetime.utcnow().isoformat() + "Z"
     }
     
     LOGGER.info(f"Inference completed for jobId: {request_data.jobId}, "
-               f"processing_time: {complete_result['processing_time_seconds']}s")
+                f"processing_time: {complete_result['processingTimeSeconds']}s")
     
     return json.dumps(complete_result, default=str)
 
