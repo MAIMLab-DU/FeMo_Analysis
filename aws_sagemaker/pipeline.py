@@ -422,7 +422,7 @@ def get_pipeline(
         sagemaker_session=sagemaker_session,
         predictor_cls=Predictor,
         env={
-            "MODEL_SERVER_TIMEOUT": "300"
+            "MODEL_SERVER_TIMEOUT": "4200"
         }
     )
 

@@ -136,7 +136,12 @@ fi
 pip install "$(convert_path "$SCRIPT_DIR/../.")" -q
 
 # Extract repacked model files to the temp directory
-tar -xzf "$repacked_model" -C "$TEMP_DIR"
+if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
+    # Use Windows-compatible tar command with proper path conversion
+    tar -xzf "$(cygpath -u "$repacked_model")" -C "$(cygpath -u "$TEMP_DIR")"
+else
+    tar -xzf "$repacked_model" -C "$TEMP_DIR"
+fi
 echo "Repacked model files extracted to: $TEMP_DIR"
 
 # Run inference script

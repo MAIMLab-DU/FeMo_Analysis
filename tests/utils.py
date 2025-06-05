@@ -33,10 +33,10 @@ def compare_elements(key, actual, desired):
 
 
 def compare_dictionaries(actual_dict: dict, desired_dict: dict, keys: list = None):
-    comparing_keys = keys if keys is not None else actual_dict.keys()
+    comparing_keys = keys if keys is not None else desired_dict.keys()
     for key in comparing_keys:
-        if key not in desired_dict:
-            raise KeyError(f"'{key}' not in {desired_dict.keys()}")
+        if key not in actual_dict:
+            raise KeyError(f"'{key}' not in {actual_dict.keys()}")
 
         print(f"▶ Comparing '{key}'")     # ← new print here
 

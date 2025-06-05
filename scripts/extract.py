@@ -43,8 +43,8 @@ def main(args):
     for key, df in feature_dict.items():
         df.to_csv(os.path.join(args.work_dir, f"features/{key}_features.csv"), header=True, index=False)
 
-    LOGGER.info(f"Features saved to {os.path.abspath(args.work_dir)}")
-    dataset.pipeline.save(os.path.join(args.work_dir, 'pipeline'))
+    LOGGER.info(f"Features saved to {os.path.abspath(os.path.join(args.work_dir, 'features'))}")
+    dataset.pipeline.save(os.path.join(args.work_dir, 'pipeline', 'pipeline.joblib'), save_targz=True)
     LOGGER.info(f"Pipeline saved to {os.path.abspath(os.path.join(args.work_dir, 'pipeline'))}")
 
 if __name__ == "__main__":
