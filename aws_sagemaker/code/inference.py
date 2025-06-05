@@ -237,7 +237,7 @@ def process_inference_request(request_data: InferenceRequest) -> str:
     # Run prediction
     pred_output = pred_service.predict(file_name, bucket_name, request_data.removeHiccups)
     sensor_freq = pred_service.pipeline.get_stage('load').sensor_freq
-    len_file = len(pred_output['pipeline_output']['loaded_data']) / sensor_freq
+    len_file = len(pred_output['pipeline_output']['loaded_data']['sensor_1']) / sensor_freq
     
     # Build response based on request type
     if not request_data.extractEvents:

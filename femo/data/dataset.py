@@ -104,11 +104,16 @@ class FeMoDataset:
         features_df['det_indices'] = det_indices
         features_df['labels'] = labels
 
+        features_df = features_df.reset_index(drop=True)
         features_df.to_csv(filename, index=False)
         return features_df
 
     def build(self, force_extract: bool = False, skip_upload: bool = False) -> dict[str, pd.DataFrame]:
         features_dict = defaultdict(pd.DataFrame)
+        expected_feature_sets = self.pipeline.get_stage('extract_feat').feature_sets
+        self.logger.info(
+            f"{skip_upload = }, {force_extract = }, {expected_feature_sets = }"
+        )
 
         for item in tqdm(self.data_manifest.get('items', []), desc="Processing items", unit="item"):
             bucket = item.get('bucketName')
@@ -126,29 +131,59 @@ class FeMoDataset:
                 self.logger.warning(f"Skipping item due to missing data: {data_filename}")
                 continue
 
-            try:
-                extracted, _ = self.pipeline.extract_features_batch(str(data_filename))
-            except Exception as e:
-                self.logger.error(f"Feature extraction failed for {data_filename}: {e}")
-                continue
-
-            for feature_set, feat_data in extracted.items():
-                feat_filename = self.base_dir / feat_file_key.replace('.csv', f'-{feature_set}.csv')
-
+            # Determine which feature sets need extraction vs which can be loaded
+            feature_sets_to_extract = []
+            existing_feature_sets = []
+            
+            for feature_set in expected_feature_sets:
+                feat_filename: Path = self.base_dir / feat_file_key.replace('.csv', f'-{feature_set}.csv')
+                
                 if feat_filename.exists() and not force_extract:
-                    current_features = pd.read_csv(feat_filename)
+                    existing_feature_sets.append(feature_set)
                 else:
-                    current_features = self._save_features(str(feat_filename), feat_data, map_key)
+                    feature_sets_to_extract.append(feature_set)
 
-                    if not skip_upload:
-                        try:
-                            self._upload_to_s3(str(feat_filename), bucket, feat_filename.name)
-                        except Exception as e:
-                            self.logger.warning(f"Upload skipped due to error: {e}")
+            # Extract only the missing feature sets
+            if feature_sets_to_extract:
+                try:
+                    self.logger.info(f"Extracting '{feature_sets_to_extract}' features for {data_filename}")
+                    extracted_features, _ = self.pipeline.extract_features_batch(
+                        str(data_filename),
+                        feature_sets=feature_sets_to_extract  # Only extract what's needed
+                    )
+                    
+                    # Save and optionally upload extracted feature sets
+                    for feature_set, feat_data in extracted_features.items():
+                        feat_filename = self.base_dir / feat_file_key.replace('.csv', f'-{feature_set}.csv')
+                        current_features = self._save_features(str(feat_filename), feat_data, map_key)
+                        
+                        if not skip_upload:
+                            try:
+                                self._upload_to_s3(str(feat_filename), bucket, feat_filename.name)
+                            except Exception as e:
+                                self.logger.warning(f"Upload skipped due to error: {e}")
+                        
+                        features_dict[feature_set] = pd.concat(
+                            [features_dict[feature_set], current_features], axis=0
+                        )
+                        
+                except Exception as e:
+                    self.logger.error(f"Feature extraction failed for {data_filename}: {e}")
+                    # Skip this file entirely if extraction fails
+                    continue
 
-                features_dict[feature_set] = pd.concat(
-                    [features_dict[feature_set], current_features], axis=0
-                )
+            # Load existing feature files
+            for feature_set in existing_feature_sets:
+                feat_filename = self.base_dir / feat_file_key.replace('.csv', f'-{feature_set}.csv')
+                try:
+                    current_features = pd.read_csv(feat_filename)
+                    self.logger.info(f"Using existing {feature_set} features: {feat_filename}")
+                    
+                    features_dict[feature_set] = pd.concat(
+                        [features_dict[feature_set], current_features], axis=0
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Failed to read existing features {feat_filename}: {e}")
 
         if not any(len(df) for df in features_dict.values()):
             msg = (

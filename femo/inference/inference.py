@@ -252,7 +252,8 @@ class PredictionService(object):
             prediction_output = defaultdict()
 
             pipeline = self.get_pipeline()
-            feature_dict, pipeline_output = pipeline.extract_features_batch(filename=file_path)
+            feature_sets = pipeline.get_stage('extract_feat').feature_sets
+            feature_dict, pipeline_output = pipeline.extract_features_batch(filename=file_path, feature_sets=feature_sets)
 
             feature_arrays = []
             for feature_set in sorted(feature_dict.keys()):  # ['crafted', 'tsfel'] order

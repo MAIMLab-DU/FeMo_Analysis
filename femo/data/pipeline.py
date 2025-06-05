@@ -1,6 +1,8 @@
-import yaml
-import joblib
 import time
+import yaml
+import pickle
+import joblib
+import tarfile
 import pandas as pd
 from typing import Any
 from ..logger import LOGGER
@@ -12,6 +14,7 @@ from .transforms import (
     DetectionExtractor,
     FeatureExtractor,
 )
+
 
 class Pipeline(object):
     STAGE_NAME_MAP = {
@@ -210,7 +213,8 @@ class Pipeline(object):
         # Return only what was requested
         return {out: results.get(out) for out in outputs}
 
-    def extract_features_batch(self, filename: str) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
+    def extract_features_batch(self, filename: str,
+                               feature_sets: str | list[str] = ['crafted', 'tsfel']) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
         """
         Efficiently extract multiple feature sets without re-running upstream stages.
 
@@ -230,11 +234,13 @@ class Pipeline(object):
                 'extracted_detections'
             ]
         )
+        if isinstance(feature_sets, str):
+            feature_sets = [feature_sets]
 
         extract_feat_stage = self.get_stage('extract_feat')
         results = {}
 
-        for feature_set in extract_feat_stage.feature_sets:
+        for feature_set in feature_sets:
             feats = extract_feat_stage(
                 inference=self.inference,
                 fm_dict=intermediate_outputs['fm_dict'],
@@ -245,7 +251,7 @@ class Pipeline(object):
 
         return results, intermediate_outputs
     
-    def save(self, file_path: str) -> None:
+    def save(self, file_path: str, save_targz: bool = False) -> None:
         """Save the pipeline configuration and state to a joblib file.
         
         This saves only the configuration and essential state, allowing the
@@ -255,34 +261,63 @@ class Pipeline(object):
             file_path: Path to joblib file for saving the pipeline
         """
         from pathlib import Path
+        try:
+            from .. import __version__
+        except ImportError:
+            __version__ = "unknown"
         
         # Ensure the directory exists
         save_path = Path(file_path)
+        if not save_path.suffix == '.joblib':            
+            raise ValueError(
+                f"Expected joblib file with '.joblib' extension, got {save_path}"
+            )
         save_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Collect configuration and minimal state (not the entire object)
         pipeline_state: dict[str, Any] = {
             'cfg': self.cfg,
             'inference': self.inference,
-            'version': getattr(self, '_version', '1.0.0')
+            'version': __version__
         }
         
         # Also save individual stage parameters that might have been modified
         stage_params: dict[str, dict[str, Any]] = {}
+
+        # Define attributes to skip during serialization (computed properties, loggers, etc.)
+        # SKIP_ATTRIBUTES = {
+        #     'logger',              # Property that returns shared logger
+        #     'extension_backward',  # Computed property
+        #     'extension_forward',   # Computed property  
+        #     'fm_dilation_size',    # Computed property
+        #     'sensors',             # Computed property
+        #     'num_sensors',         # Computed property
+        #     'sensor_map'           # Static property
+        # }
+
         for stage_name in self.STAGE_NAME_MAP.keys():
             stage = self.get_stage(stage_name)
-            # Save only serializable attributes (exclude methods, functions, etc.)
             stage_dict: dict[str, Any] = {}
+
             for attr_name in dir(stage):
-                if not attr_name.startswith('_'):
-                    attr_value = getattr(stage, attr_name)
-                    if not callable(attr_value):
-                        try:
-                            # Test if the attribute is serializable by joblib
-                            joblib.dumps(attr_value)
-                            stage_dict[attr_name] = attr_value
-                        except (TypeError, ValueError, AttributeError):
-                            continue
+                if attr_name.startswith('__') or attr_name.endswith('__'):
+                    continue
+                # Get the descriptor from the class
+                descriptor = getattr(type(stage), attr_name, None)
+                # Skip properties without a setter (read-only)
+                if isinstance(descriptor, property) and descriptor.fset is None:
+                    continue
+                # Skip callables
+                attr_value = getattr(stage, attr_name)
+                if callable(attr_value):
+                    continue
+                # Try to serialize
+                try:
+                    pickle.dumps(attr_value)
+                    stage_dict[attr_name] = attr_value
+                except (TypeError, ValueError, AttributeError, pickle.PicklingError):
+                    continue
+
             stage_params[stage_name] = stage_dict
         
         # Combine everything into a single structure
@@ -292,8 +327,13 @@ class Pipeline(object):
         }
         
         # Save to joblib file
-        joblib.dump(complete_state, file_path)
-        self.logger.debug(f"Pipeline configuration saved to {file_path}")
+        joblib.dump(complete_state, save_path)
+        if save_targz:
+            tar_path = save_path.with_suffix('.tar.gz')
+            tar = tarfile.open(tar_path, "w:gz")
+            tar.add(save_path, arcname="pipeline.joblib")
+            tar.close()
+        self.logger.debug(f"Pipeline configuration saved to {save_path}")
     
     @classmethod
     def load(cls, file_path: str) -> 'Pipeline':
@@ -311,7 +351,14 @@ class Pipeline(object):
         """
         
         # Load data from joblib file
-        loaded_pipeline = joblib.load(file_path)
+        from pathlib import Path
+
+        load_path = Path(file_path)
+        if not load_path.suffix == '.joblib':
+            raise ValueError(
+                f"Expected joblib file with '.joblib' extension, got {load_path}"
+            )
+        loaded_pipeline = joblib.load(load_path)
         
         # Check if this is the new format (dict with pipeline_state) or old format (Pipeline object)
         if isinstance(loaded_pipeline, dict) and 'pipeline_state' in loaded_pipeline:
@@ -340,7 +387,7 @@ class Pipeline(object):
         elif hasattr(loaded_pipeline, 'cfg') and hasattr(loaded_pipeline, 'inference'):
             # Old format: whole pipeline object was saved
             LOGGER.warning(
-                f"Loading legacy pipeline format from {file_path}. "
+                f"Loading legacy pipeline format from {load_path}. "
                 "Consider re-saving with current format for better compatibility."
             )
             
@@ -375,9 +422,9 @@ class Pipeline(object):
                     )
         else:
             raise ValueError(
-                f"Unrecognized pipeline file format in {file_path}. "
+                f"Unrecognized pipeline file format in {load_path}. "
                 "Expected either new format (dict with 'pipeline_state') or old format (Pipeline object)."
             )
         
-        LOGGER.debug(f"Pipeline loaded from {file_path}")
+        LOGGER.debug(f"Pipeline loaded from {load_path}")
         return pipeline
