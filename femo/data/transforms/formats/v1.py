@@ -1,6 +1,5 @@
 import os
 import struct
-import pandas as pd
 import numpy as np
 import mmap
 from numba import njit
@@ -100,140 +99,92 @@ class FeMoDataV1:
       - counts records
       - allocates exact-size buffers
       - memory-maps + JIT-parses in one pass
-      - slices to actual lengths and builds DataFrames
+      - stores raw arrays for DataLoader consumption
     """
 
-    def __init__(self, inputfile: str):
-        self.inputfile = inputfile
+    def __init__(self, inputfile: str) -> None:
+        self.inputfile: str = inputfile
         self.header: Header = None
-        self.dataframes: dict[str, pd.DataFrame] = {}
         self._arrays: dict[str, np.ndarray] = {}
         self._read()
-        self._build_dataframes()
 
-    def _read(self):
+    def _read(self) -> None:
         # 1) Read header
-        with open(self.inputfile, 'rb') as f:
-            st_sec, st_ms = struct.unpack('<LH', f.read(6))
-            en_sec, en_ms = struct.unpack('<LH', f.read(6))
-            f_pz, = struct.unpack('<H', f.read(2))
-            f_ac, = struct.unpack('<H', f.read(2))
-            f_imu,= struct.unpack('<H', f.read(2))
-            f_f,   = struct.unpack('<H', f.read(2))
-            header_end = f.tell()
+        with open(self.inputfile, 'rb') as file_handle:
+            start_seconds, start_milliseconds = struct.unpack('<LH', file_handle.read(6))
+            end_seconds, end_milliseconds = struct.unpack('<LH', file_handle.read(6))
+            frequency_piezo, = struct.unpack('<H', file_handle.read(2))
+            frequency_accel, = struct.unpack('<H', file_handle.read(2))
+            frequency_imu, = struct.unpack('<H', file_handle.read(2))
+            frequency_force, = struct.unpack('<H', file_handle.read(2))
+            header_end_offset = file_handle.tell()
 
         self.header = Header(
-            start_time=st_sec*1000 + st_ms,
-            end_time=en_sec*1000   + en_ms,
-            freqpiezo=f_pz,
-            freqaccel=f_ac,
-            freqimu=f_imu,
-            freqforce=f_f
+            start_time=start_seconds * 1000 + start_milliseconds,
+            end_time=end_seconds * 1000 + end_milliseconds,
+            freqpiezo=frequency_piezo,
+            freqaccel=frequency_accel,
+            freqimu=frequency_imu,
+            freqforce=frequency_force
         )
 
         # 2) Count total records
-        with open(self.inputfile, 'rb') as f:
-            total_recs = self._count_records(f, header_end)
+        with open(self.inputfile, 'rb') as file_handle:
+            total_record_count = self._count_records(file_handle, header_end_offset)
 
         # 3) Allocate exact buffers
-        piezo_buf = np.empty((total_recs, 5),  dtype=np.int32)
-        accel_buf = np.empty((total_recs, 7),  dtype=np.int32)
-        imu_buf   = np.empty((total_recs,11),  dtype=np.int32)
-        force_buf = np.empty((total_recs, 2),  dtype=np.int32)
-        ts_buf    = np.empty((total_recs, 3),  dtype=np.int64)
-        btn_buf   = np.empty((total_recs, 2),  dtype=np.int32)
+        piezo_buffer = np.empty((total_record_count, 5), dtype=np.int32)
+        accel_buffer = np.empty((total_record_count, 7), dtype=np.int32)
+        imu_buffer = np.empty((total_record_count, 11), dtype=np.int32)
+        force_buffer = np.empty((total_record_count, 2), dtype=np.int32)
+        timestamp_buffer = np.empty((total_record_count, 3), dtype=np.int64)
+        button_buffer = np.empty((total_record_count, 2), dtype=np.int32)
 
         # 4) Memory-map and copy into a NumPy array
-        with open(self.inputfile, 'rb') as f:
-            mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-            buf = np.frombuffer(mm, dtype=np.uint8).copy()
-            mm.close()
+        with open(self.inputfile, 'rb') as file_handle:
+            memory_map = mmap.mmap(file_handle.fileno(), 0, access=mmap.ACCESS_READ)
+            file_buffer = np.frombuffer(memory_map, dtype=np.uint8).copy()
+            memory_map.close()
 
         # 5) JIT-parse all records
-        pi, ai, ii, fi, ti, rec = parse_records(
-            buf, header_end,
-            piezo_buf, accel_buf, imu_buf, force_buf, ts_buf, btn_buf
+        (actual_piezo_count, actual_accel_count, actual_imu_count, 
+         actual_force_count, actual_timestamp_count, actual_record_count) = parse_records(
+            file_buffer, header_end_offset,
+            piezo_buffer, accel_buffer, imu_buffer, force_buffer, timestamp_buffer, button_buffer
         )
 
-        # 6) Slice to actual lengths
+        # 6) Slice to actual lengths and store arrays
         self._arrays = {
-            'piezo':          piezo_buf[:pi],
-            'accel': accel_buf[:ai],
-            'imu':            imu_buf[:ii],
-            'force':          force_buf[:fi],
-            'timestamp':      ts_buf[:ti],
-            'button':         btn_buf[:rec],
+            'piezo': piezo_buffer[:actual_piezo_count],
+            'accel': accel_buffer[:actual_accel_count],
+            'imu': imu_buffer[:actual_imu_count],
+            'force': force_buffer[:actual_force_count],
+            'timestamp': timestamp_buffer[:actual_timestamp_count],
+            'button': button_buffer[:actual_record_count],
         }
 
-    def _count_records(self, f, offset: int) -> int:
-        f.seek(offset)
-        cnt = 0
+    def _count_records(self, file_handle, offset: int) -> int:
+        """Count the total number of records in the file."""
+        file_handle.seek(offset)
+        record_count = 0
         while True:
-            b = f.read(1)
-            if not b:
+            byte_data = file_handle.read(1)
+            if not byte_data:
                 break
-            d = b[0]
-            cnt += 1
-            if d & 0x80:
-                f.seek(8, os.SEEK_CUR)
-            if d & 0x40:
-                f.seek(12, os.SEEK_CUR)
-            if d & 0x20:
-                f.seek(20, os.SEEK_CUR)
-            if d & 0x10:
-                f.seek(2, os.SEEK_CUR)
-            if d & 0x08:
-                f.seek(6, os.SEEK_CUR)
-        return cnt
-
-    def _build_dataframes(self):
-        a = self._arrays
-        self.dataframes['piezos'] = (
-            pd.DataFrame(a['piezo'],
-                         columns=['measurement_index','p1','p2','p3','p4'])
-             .set_index('measurement_index')
-        )
-        self.dataframes['accel'] = (
-            pd.DataFrame(a['accel'],
-                         columns=['measurement_index','x1','y1','z1','x2','y2','z2'])
-             .set_index('measurement_index')
-        )
-        self.dataframes['imu'] = (
-            pd.DataFrame(a['imu'],
-                         columns=[
-                             'measurement_index',
-                             'rotation_r','rotation_i','rotation_j','rotation_k',
-                             'magnet_x','magnet_y','magnet_z',
-                             'accel_x','accel_y','accel_z'
-                         ])
-             .set_index('measurement_index')
-        )
-        self.dataframes['force'] = (
-            pd.DataFrame(a['force'],
-                         columns=['measurement_index','f'])
-             .set_index('measurement_index')
-        )
-        self.dataframes['timestamp'] = (
-            pd.DataFrame(a['timestamp'],
-                         columns=['measurement_index','sec','millis'])
-             .set_index('measurement_index')
-        )
-        self.dataframes['push_button'] = (
-            pd.DataFrame(a['button'],
-                         columns=['measurement_index','button'])
-             .set_index('measurement_index')
-        )
-
-    def get(self, name: str) -> pd.DataFrame | None:
-        return self.dataframes.get(name)
-
-    def to_parquet(self, folder: str = '') -> None:
-        if not folder:
-            folder = os.path.join(os.getcwd(), self.inputfile + '_parquet')
-        os.makedirs(folder, exist_ok=True)
-        for key, df in self.dataframes.items():
-            df.to_parquet(os.path.join(folder, f"{key}.parquet"))
-
+            descriptor_byte = byte_data[0]
+            record_count += 1
+            if descriptor_byte & 0x80:
+                file_handle.seek(8, os.SEEK_CUR)
+            if descriptor_byte & 0x40:
+                file_handle.seek(12, os.SEEK_CUR)
+            if descriptor_byte & 0x20:
+                file_handle.seek(20, os.SEEK_CUR)
+            if descriptor_byte & 0x10:
+                file_handle.seek(2, os.SEEK_CUR)
+            if descriptor_byte & 0x08:
+                file_handle.seek(6, os.SEEK_CUR)
+        return record_count
+    
 '''    
 Byte Ordering (Endianness):
 On Windows, the default byte order might match the format expected by your data structure, but on Linux (Ubuntu), 
