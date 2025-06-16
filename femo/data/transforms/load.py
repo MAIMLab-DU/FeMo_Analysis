@@ -4,7 +4,8 @@ import pandas as pd
 from dataclasses import asdict
 from ._utils import timestamp_to_iso
 from scipy.spatial.transform import Rotation as R
-from .base import BaseTransform, FeMoData
+from .base import BaseTransform
+from .formats import FeMoDataV1
 
 
 class DataLoader(BaseTransform): 
@@ -25,7 +26,7 @@ class DataLoader(BaseTransform):
         self.logger.debug(f"Started loading from file: {filename}")
 
         # 1) Read raw arrays and header
-        fe  = FeMoData(filename)
+        fe  = FeMoDataV1(filename)
         raw = fe._arrays
         header = asdict(fe.header)
         header['start_time'] = timestamp_to_iso(header['start_time'])

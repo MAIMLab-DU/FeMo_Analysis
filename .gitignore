@@ -228,3 +228,6 @@ configs/*
 !configs/inference-cfg.yaml
 !configs/preprocess-cfg.yaml
 !configs/train-cfg.yaml
+!femo/data/
+!femo/data/transforms/
+!femo/data/transforms/formats/
