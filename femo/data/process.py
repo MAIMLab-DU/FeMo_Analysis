@@ -82,13 +82,34 @@ class Processor(BaseEstimator):
         """Convert the input data to pandas Dataframe
 
         Args:
-            data (np.ndarray): Input data array of shape (n_samples, n_features_new + 3)
+            data (np.ndarray): Input data array of shape (n_samples, n_features_new + 4)
             columns (list[str]): Column names of features
         """
 
         if self.top_feat_indices is not None:
-            columns = columns[self.top_feat_indices].tolist() + ['filename_hash', 'det_indices', 'labels']
-        return pd.DataFrame(data, columns=columns)
+            columns = columns[self.top_feat_indices].tolist() + ['dat_file_key', 'start_indices', 'end_indices', 'labels']
+        
+        # Create DataFrame
+        df = pd.DataFrame(data, columns=columns)
+        
+        # Ensure proper data types
+        if 'dat_file_key' in df.columns:
+            df['dat_file_key'] = df['dat_file_key'].astype(str)
+        
+        # Convert last three columns to int
+        if 'start_indices' in df.columns:
+            df['start_indices'] = df['start_indices'].astype(int)
+        if 'end_indices' in df.columns:
+            df['end_indices'] = df['end_indices'].astype(int)
+        if 'labels' in df.columns:
+            df['labels'] = df['labels'].astype(int)
+        
+        # Ensure all feature columns are float (exclude metadata columns)
+        feature_columns = [col for col in df.columns if col not in ['dat_file_key', 'start_indices', 'end_indices', 'labels']]
+        for col in feature_columns:
+            df[col] = df[col].astype(float)
+        
+        return df
     
     def save(self, file_path, key: str = 'crafted'):
         """Save the processor to a joblib file and append it to an existing tar.gz archive.

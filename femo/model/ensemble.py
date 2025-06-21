@@ -85,8 +85,8 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         best_accuracy = -1
 
         for k in tqdm(range(num_folds), desc="Hyperparameter tuning..."):
-            X_train, y_train = train_data[k][:, :-3], train_data[k][:, -1]
-            X_val, y_val = test_data[k][:, :-3], test_data[k][:, -1]
+            X_train, y_train = train_data[k][:, :-4], train_data[k][:, -1].astype(int)
+            X_val, y_val = test_data[k][:, :-4], test_data[k][:, -1].astype(int)
 
             classifiers = self.get_classifiers(hyperparams, y_train)
             voting_clf = VotingClassifier(estimators=classifiers, voting='soft', n_jobs=-1)
@@ -140,16 +140,17 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         best_model = None
         predictions = []
         prediction_scores = []
-        det_indices = []
-        filename_hash = []
+        start_indices = []
+        end_indices = []
+        dat_file_keys = []
         accuracy_scores = {
             'train_accuracy': [],
             'test_accuracy': []
         }
 
         for i in range(num_iterations):
-            X_train, y_train = train_data[i][:, :-3], train_data[i][:, -1]
-            X_test, y_test = test_data[i][:, :-3], test_data[i][:, -1]
+            X_train, y_train = train_data[i][:, :-4], train_data[i][:, -1].astype(int)
+            X_test, y_test = test_data[i][:, :-4], test_data[i][:, -1].astype(int)
 
             if 'estimators' in hyperparams:
                 classifiers = hyperparams['estimators']
@@ -179,8 +180,9 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
                 best_accuracy = current_test_accuracy
                 best_model = estimator
 
-            det_indices.append(test_data[i][:, -2])
-            filename_hash.append(test_data[i][:, -3])
+            start_indices.append(test_data[i][:, -3])
+            end_indices.append(test_data[i][:, -2])
+            dat_file_keys.append(test_data[i][:, -4])
 
             self.logger.info(f"Iteration {i+1}:")
             self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
@@ -195,8 +197,9 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         self.result.accuracy_scores = accuracy_scores
         self.result.preds = predictions
         self.result.pred_scores = prediction_scores
-        self.result.det_indices = det_indices
-        self.result.filename_hash = filename_hash
+        self.result.start_indices = start_indices
+        self.result.end_indices = end_indices
+        self.result.dat_file_key = dat_file_keys
 
     def predict(self, X):
         

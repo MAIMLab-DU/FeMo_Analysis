@@ -212,12 +212,14 @@ class FeatureExtractor(BaseTransform):
         
         threshold = fm_dict['fm_threshold']
 
-        tp_detections_indices = extracted_detections['tp_detections_indices']
+        tp_detections_start_indices = extracted_detections['tp_detections_start_indices']
+        tp_detections_end_indices = extracted_detections['tp_detections_end_indices']
         tp_detections_sensor_data = extracted_detections['tp_detections_sensor_data']
         tp_detections_imu_acceleration = extracted_detections['tp_detections_imu_acceleration']
         tp_detections_imu_rotation = extracted_detections['tp_detections_imu_rotation']
         
-        fp_detections_indices = extracted_detections['fp_detections_indices']
+        fp_detections_start_indices = extracted_detections['fp_detections_start_indices']
+        fp_detections_end_indices = extracted_detections['fp_detections_end_indices']
         fp_detections_sensor_data = extracted_detections['fp_detections_sensor_data']
         fp_detections_imu_acceleration = extracted_detections['fp_detections_imu_acceleration']
         fp_detections_imu_rotation = extracted_detections['fp_detections_imu_rotation']
@@ -237,15 +239,17 @@ class FeatureExtractor(BaseTransform):
                                                             fp_detections_imu_acceleration, fp_detections_imu_rotation,
                                                             mode='FPD')
         X_extracted = np.vstack([X_tpd, X_fpd])
-        y_extracted = np.zeros((X_tpd.shape[0] + X_fpd.shape[0], 1))
+        y_extracted = np.zeros((X_tpd.shape[0] + X_fpd.shape[0], 1), dtype=int)
         y_extracted[:X_tpd.shape[0], 0] = 1  # From here on, label 1 means TPD and label 0 means FPD
         y_extracted = np.ravel(y_extracted)
-        det_indices = np.hstack([tp_detections_indices, fp_detections_indices])
+        start_indices = np.hstack([tp_detections_start_indices, fp_detections_start_indices], dtype=int)
+        end_indices = np.hstack([tp_detections_end_indices, fp_detections_end_indices], dtype=int)
 
         return {
             'features': X_extracted,
             'labels': y_extracted,
-            'det_indices': det_indices,
+            'start_indices': start_indices,
+            'end_indices': end_indices,
             'columns': columns
         }
  

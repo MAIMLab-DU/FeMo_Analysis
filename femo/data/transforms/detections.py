@@ -46,16 +46,16 @@ class DetectionExtractor(BaseTransform):
         
         num_dets = scheme_dict['num_labels']
         labeled_user_scheme = scheme_dict['labeled_user_scheme']
-        num_tp_dets = len(np.unique(labeled_user_scheme * sensation_map)) - 1
-        num_dets - num_tp_dets
         preprocessed_sensor_data = [preprocessed_data[key] for key in self.sensors]
 
-        tp_detections_indices = []
+        tp_detections_start_indices = []
+        tp_detections_end_indices = []
         tp_detections_sensor_data = []
         tp_detections_imu_acceleration = []
         tp_detections_imu_rotation = []
 
-        fp_detections_indices = []
+        fp_detections_start_indices = []
+        fp_detections_end_indices = []
         fp_detections_sensor_data = []
         fp_detections_imu_acceleration = []
         fp_detections_imu_rotation = []
@@ -78,22 +78,26 @@ class DetectionExtractor(BaseTransform):
             # Check overlap with sensation map, non-zero values indicate overlap
             intersection = np.sum(indv_window * sensation_map)
             if intersection:
-                tp_detections_indices.append(i)  # Index of the detected label in the labeled_user_scheme array
+                tp_detections_start_indices.append(label_start)
+                tp_detections_end_indices.append(label_end)
                 tp_detections_sensor_data.append(detections_data)
                 tp_detections_imu_acceleration.append(preprocessed_data['imu_acceleration'][label_start:label_end])
                 tp_detections_imu_rotation.append(preprocessed_data['imu_rotation_1D'][label_start:label_end])
             else:
-                fp_detections_indices.append(i)  # Index of the detected label in the labeled_user_scheme array
+                fp_detections_start_indices.append(label_start)
+                fp_detections_end_indices.append(label_end)
                 fp_detections_sensor_data.append(detections_data)
                 fp_detections_imu_acceleration.append(preprocessed_data['imu_acceleration'][label_start:label_end])
                 fp_detections_imu_rotation.append(preprocessed_data['imu_rotation_1D'][label_start:label_end])
 
         return {
-            'tp_detections_indices': tp_detections_indices,
+            'tp_detections_start_indices': tp_detections_start_indices,
+            'tp_detections_end_indices': tp_detections_end_indices,
             'tp_detections_sensor_data': tp_detections_sensor_data,
             'tp_detections_imu_acceleration': tp_detections_imu_acceleration,
             'tp_detections_imu_rotation': tp_detections_imu_rotation,
-            'fp_detections_indices': fp_detections_indices,
+            'fp_detections_start_indices': fp_detections_start_indices,
+            'fp_detections_end_indices': fp_detections_end_indices,
             'fp_detections_sensor_data': fp_detections_sensor_data,
             'fp_detections_imu_acceleration': fp_detections_imu_acceleration,
             'fp_detections_imu_rotation': fp_detections_imu_rotation

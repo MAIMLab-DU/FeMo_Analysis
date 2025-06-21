@@ -16,8 +16,9 @@ class Result:
     accuracy_scores: dict = None
     preds: list[np.ndarray]|np.ndarray = None
     pred_scores: list[np.ndarray]|np.ndarray = None
-    det_indices: list[np.ndarray]|np.ndarray = None
-    filename_hash: list[np.ndarray]|np.ndarray = None
+    start_indices: list[np.ndarray]|np.ndarray = None
+    end_indices: list[np.ndarray]|np.ndarray = None
+    dat_file_key: list[np.ndarray]|np.ndarray = None
 
     @staticmethod
     def process_attributes(attribute,
@@ -71,10 +72,12 @@ class Result:
     
     def save(self, filename: str):
         results_df = {
-            'filename_hash': [item for fold in self.filename_hash for item in fold] 
-                            if isinstance(self.filename_hash, list) else np.squeeze(self.filename_hash).tolist(),
-            'det_indices': [item for fold in self.det_indices for item in fold] 
-                            if isinstance(self.det_indices, list) else np.squeeze(self.det_indices).tolist(),
+            'dat_file_key': [item for fold in self.dat_file_key for item in fold] 
+                            if isinstance(self.dat_file_key, list) else np.squeeze(self.dat_file_key).tolist(),
+            'start_indices': [item for fold in self.start_indices for item in fold] 
+                            if isinstance(self.start_indices, list) else np.squeeze(self.start_indices).tolist(),
+            'end_indices': [item for fold in self.end_indices for item in fold]
+                            if isinstance(self.end_indices, list) else np.squeeze(self.end_indices).tolist(),
             'predictions': [item for fold in self.preds for item in fold] 
                             if isinstance(self.preds, list) else np.squeeze(self.preds).tolist(),
             'prediction_scores': [item for fold in self.pred_scores for item in fold] 
@@ -88,17 +91,19 @@ class Result:
                         threshold: float = 0.5,
                         results_path: str|None = None,
                         metadata_path: str|None = None):
-        self._assert_no_none_fields()
+        # self._assert_no_none_fields()
 
-        preds = self.process_attributes(self.preds, metadata, preds=True, thresh=threshold)
-        pred_scores = self.process_attributes(self.pred_scores, metadata, thresh=threshold)
-        det_indices = self.process_attributes(self.det_indices, metadata, thresh=threshold)
-        filename_hash = self.process_attributes(self.filename_hash, metadata, thresh=threshold)
+        # preds = self.process_attributes(self.preds, metadata, preds=True, thresh=threshold)
+        # pred_scores = self.process_attributes(self.pred_scores, metadata, thresh=threshold)
+        # start_indices = self.process_attributes(self.start_indices, metadata, thresh=threshold)
+        # end_indices = self.process_attributes(self.end_indices, metadata, thresh=threshold)
+        # dat_file_key = self.process_attributes(self.dat_file_key, metadata, thresh=threshold)
 
-        self.preds = preds.astype(float)
-        self.pred_scores = pred_scores.astype(float)
-        self.det_indices = det_indices.astype(int)
-        self.filename_hash = filename_hash.astype(int)
+        # self.preds = preds.astype(float)
+        # self.pred_scores = pred_scores.astype(float)
+        # self.start_indices = start_indices.astype(int)
+        # self.end_indices = end_indices.astype(int)
+        # self.dat_file_key = dat_file_key.astype(str)
 
         if results_path is not None:
             results_path = os.path.join(results_path, "results.csv")
@@ -156,7 +161,7 @@ class FeMoBaseClassifier(ABC):
                    custom_ratio: int|None = None,
                    num_folds: int = 5):
 
-        X, y = data[:, :-1], data[:, -1]
+        X, y = data[:, :-1], data[:, -1].astype(int)
         train, test = [], []
         metadata = defaultdict()
 

@@ -46,8 +46,8 @@ class FeMoRFClassifier(FeMoBaseClassifier):
         best_accuracy = -1
         
         for k in tqdm(range(num_folds), desc="Hyperparameter tuning..."):
-            X_train, y_train = train_data[k][:, :-3], train_data[k][:, -1]
-            X_val, y_val = test_data[k][:, :-3], test_data[k][:, -1]
+            X_train, y_train = train_data[k][:, :-4], train_data[k][:, -1]
+            X_val, y_val = test_data[k][:, :-4], test_data[k][:, -1]
 
             estimator = RandomForestClassifier(
                 class_weight=self._update_class_weight(y_train),
@@ -157,8 +157,8 @@ class FeMoRFClassifier(FeMoBaseClassifier):
         self.result.accuracy_scores = accuracy_scores
         self.result.preds = predictions
         self.result.pred_scores = prediction_scores
-        self.result.det_indices = det_indices
-        self.result.filename_hash = filename_hash
+        self.result.start_indices = det_indices
+        self.result.dat_file_key = filename_hash
 
     def predict(self, X):
         

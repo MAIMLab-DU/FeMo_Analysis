@@ -45,8 +45,8 @@ def main(args):
 
     for key in feature_sets:  
         features = pd.read_csv(os.path.join(args.features_dir, f"{key}_features.csv"))
-        X, y = features.to_numpy()[:, :-3], features.to_numpy()[:, -1]
-        filename_hash, det_indices = features.to_numpy()[:, -3], features.to_numpy()[:, -2]  # metadata columns
+        X, y = features.iloc[:, :-4].to_numpy(), features.iloc[:, -1].to_numpy()  # second to last 4 columns are metadata
+        filename_hash, start_indices, end_indices = features.iloc[:, -4].to_numpy(), features.iloc[:, -3].to_numpy(), features.iloc[:, -2].to_numpy()  # metadata columns
 
         LOGGER.info(f"Processing started for '{key}' features")
         if os.path.exists(os.path.join(processor_dir, f"{key}_processor.joblib")):
@@ -58,7 +58,7 @@ def main(args):
 
         dataset = data_processor.convert_to_df(
             np.concatenate([X_pre, filename_hash[:, np.newaxis],
-                            det_indices[:, np.newaxis], y[:, np.newaxis]], axis=1),
+                            start_indices[:, np.newaxis], end_indices[:, np.newaxis], y[:, np.newaxis]], axis=1),
             columns=features.columns
         )
         data_processor.save(processor_dir, key)
