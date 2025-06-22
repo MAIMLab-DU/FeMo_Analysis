@@ -41,8 +41,8 @@ class FeMoAdaBoostClassifier(FeMoBaseClassifier):
         best_accuracy = -1
         
         for k in tqdm(range(num_folds), desc="Hyperparameter tuning..."):
-            X_train, y_train = train_data[k][:, :-4], train_data[k][:, -1]
-            X_val, y_val = test_data[k][:, :-4], test_data[k][:, -1]
+            X_train, y_train = train_data[k][:, :-5], train_data[k][:, -1]
+            X_val, y_val = test_data[k][:, :-5], test_data[k][:, -1]
 
             base_estimator = GradientBoostingClassifier(n_estimators = 50, subsample = 0.75,
                                                         max_depth = 1, random_state = 42,

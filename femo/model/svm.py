@@ -42,8 +42,8 @@ class FeMoSVClassifier(FeMoBaseClassifier):
         best_accuracy = -1
         
         for k in tqdm(range(num_folds), desc="Hyperparameter tuning..."):
-            X_train, y_train = train_data[k][:, :-4], train_data[k][:, -1]
-            X_val, y_val = test_data[k][:, :-4], test_data[k][:, -1]
+            X_train, y_train = train_data[k][:, :-5], train_data[k][:, -1]
+            X_val, y_val = test_data[k][:, :-5], test_data[k][:, -1]
 
             estimator = SVC(
                 class_weight=self._update_class_weight(y_train),

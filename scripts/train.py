@@ -46,7 +46,7 @@ def main(args):
     try:
         for key in feature_sets:
             key_dataset = pd.read_csv(os.path.join(args.train, f"{key}_dataset.csv"))
-            dataset = pd.concat([dataset, key_dataset.iloc[:, :-4]], axis=1)
+            dataset = pd.concat([dataset, key_dataset.iloc[:, :-5]], axis=1)
         dataset = pd.concat([dataset, key_dataset.iloc[:, -4:]], axis=1)
     except Exception:
         raise ValueError(
@@ -77,7 +77,7 @@ def main(args):
 
     split_cfg = train_cfg.get('split_config', {'strategy': 'kfold', 'num_folds': 5})
     LOGGER.info(f"Splitting dataset with config: {split_cfg}")
-    train_data, test_data, metadata = classifier.split_data(
+    train_data, test_data, metadata, non_fm_preg_data = classifier.split_data(
         dataset.to_numpy(),
         **split_cfg
     )
@@ -92,6 +92,7 @@ def main(args):
     classifier.fit(
         train_data,
         test_data,
+        non_fm_preg_data,
         **train_params
     )
     

@@ -161,6 +161,16 @@ class FeMoBaseClassifier(ABC):
                    custom_ratio: int|None = None,
                    num_folds: int = 5):
 
+
+        # print data shape
+        print(f"Initial data shape: {data.shape}")
+        # non_fm_preg = data where -2 column is True, i.e. non-fetal movement pregnancy
+        non_fm_preg = data[data[:, -5] == 1 & data[:, -1] == 0]
+        data = data[data[:, -5] == 0 | data[:, -1] == 1]  # Filter out non-fetal movement pregnancy data
+
+        # print shapes of data and non_fm_preg
+        print(f"Data shape: {data.shape}, Non-fetal movement pregnancy data shape: {non_fm_preg.shape}")
+
         X, y = data[:, :-1], data[:, -1].astype(int)
         train, test = [], []
         metadata = defaultdict()
@@ -188,7 +198,7 @@ class FeMoBaseClassifier(ABC):
             if key not in ('X_K_fold', 'Y_K_fold'):
                 metadata[key] = val
         
-        return train, test, metadata
+        return train, test, metadata, non_fm_preg
         
     def save_model(self,
                    model_filename: str):

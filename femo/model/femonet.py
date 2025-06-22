@@ -122,8 +122,8 @@ class FeMoNNClassifier(FeMoBaseClassifier):
             val_accuracies = []
             train_accuracies = []
             for k in range(num_folds):
-                X_train, y_train = train_data[k][:, :-4], train_data[k][:, -1]
-                X_val, y_val = test_data[k][:, :-4], test_data[k][:, -1]
+                X_train, y_train = train_data[k][:, :-5], train_data[k][:, -1]
+                X_val, y_val = test_data[k][:, :-5], test_data[k][:, -1]
 
                 model = FeMoNeuralNet(**self.hyperparams).compile_model(
                     input_shape=(X_train.shape[1], )

@@ -4,7 +4,7 @@ import copy
 import numpy as np
 from tqdm import tqdm
 from .base import FeMoBaseClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -85,8 +85,8 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         best_accuracy = -1
 
         for k in tqdm(range(num_folds), desc="Hyperparameter tuning..."):
-            X_train, y_train = train_data[k][:, :-4], train_data[k][:, -1].astype(int)
-            X_val, y_val = test_data[k][:, :-4], test_data[k][:, -1].astype(int)
+            X_train, y_train = train_data[k][:, :-5], train_data[k][:, -1].astype(int)
+            X_val, y_val = test_data[k][:, :-5], test_data[k][:, -1].astype(int)
 
             classifiers = self.get_classifiers(hyperparams, y_train)
             voting_clf = VotingClassifier(estimators=classifiers, voting='soft', n_jobs=-1)
@@ -129,7 +129,8 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
     
     def fit(self,
             train_data: list[np.ndarray],
-            test_data: list[np.ndarray]):
+            test_data: list[np.ndarray],
+            non_fm_preg_data: list[np.ndarray] = None):
         start = time.time()
 
         num_iterations = len(train_data)
@@ -137,6 +138,7 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         hyperparams = copy.deepcopy(self.hyperparams)
 
         best_accuracy = -1
+        best_f1_score = -1
         best_model = None
         predictions = []
         prediction_scores = []
@@ -149,8 +151,8 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         }
 
         for i in range(num_iterations):
-            X_train, y_train = train_data[i][:, :-4], train_data[i][:, -1].astype(int)
-            X_test, y_test = test_data[i][:, :-4], test_data[i][:, -1].astype(int)
+            X_train, y_train = train_data[i][:, :-5], train_data[i][:, -1].astype(int)
+            X_test, y_test = test_data[i][:, :-5], test_data[i][:, -1].astype(int)
 
             if 'estimators' in hyperparams:
                 classifiers = hyperparams['estimators']
@@ -173,12 +175,25 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
                 y_pred=y_test_pred,
                 y_true=y_test
             )
+            current_train_f1_score = f1_score(
+                y_true=y_train, 
+                y_pred=y_train_pred
+            )
+            current_test_f1_score = f1_score(
+                y_true=y_test, 
+                y_pred=y_test_pred
+            )
             accuracy_scores['train_accuracy'].append(current_train_accuracy)
             accuracy_scores['test_accuracy'].append(current_test_accuracy)
+            accuracy_scores['train_f1_score'] = current_train_f1_score
+            accuracy_scores['test_f1_score'] = current_test_f1_score
+
+            if current_test_f1_score > best_f1_score:
+                best_f1_score = current_test_f1_score
+                best_model = estimator
 
             if current_test_accuracy > best_accuracy:
                 best_accuracy = current_test_accuracy
-                best_model = estimator
 
             start_indices.append(test_data[i][:, -3])
             end_indices.append(test_data[i][:, -2])
@@ -186,12 +201,51 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
 
             self.logger.info(f"Iteration {i+1}:")
             self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
+            self.logger.info(f"Training F1 Score: {current_train_f1_score:.3f}")
             self.logger.info(f"Test Accuracy: {current_test_accuracy:.3f}")
+            self.logger.info(f"Test F1 Score: {current_test_f1_score:.3f}")
             self.logger.info(f"Best Test Accuracy: {best_accuracy:.3f}")
+            self.logger.info(f"Best F1 Score: {best_f1_score:.3f}")
+
+
         
         self.logger.info(f"Fitting model with train data took: {time.time() - start: 0.2f} seconds")
         self.logger.info(f"Average training accuracy: {np.mean(accuracy_scores['train_accuracy'])}")
         self.logger.info(f"Average testing accuracy: {np.mean(accuracy_scores['test_accuracy'])}")
+        self.logger.info(f"Average training F1 score: {np.mean(accuracy_scores['train_f1_score'])}")
+        self.logger.info(f"Average testing F1 score: {np.mean(accuracy_scores['test_f1_score'])}")
+        
+        # TODO: save model perfomance metrics to a file
+        # create json file with model performance metrics
+        with open('model_performance.json', 'w') as f:
+            performance_metrics = {
+                'train_accuracy': accuracy_scores['train_accuracy'],
+                'test_accuracy': accuracy_scores['test_accuracy'],
+                'train_f1_score': accuracy_scores['train_f1_score'],
+                'test_f1_score': accuracy_scores['test_f1_score'],
+                'average_train_accuracy': np.mean(accuracy_scores['train_accuracy']),
+                'average_test_accuracy': np.mean(accuracy_scores['test_accuracy']),
+                'average_train_f1_score': np.mean(accuracy_scores['train_f1_score']),
+                'average_test_f1_score': np.mean(accuracy_scores['test_f1_score']),
+                'best_test_accuracy': best_accuracy,
+                'best_f1_score': best_f1_score,
+                'hyperparams': hyperparams
+            }
+            f.write(str(performance_metrics))
+
+
+        # TODO: pred, pred_scores, start_indices, end_indices, dat_file_keys for non_fm_preg_data
+        if non_fm_preg_data is not None:
+            X_non_fm = non_fm_preg_data[:, :-5]
+            y_non_fm = non_fm_preg_data[:, -1].astype(int)
+            y_non_fm_pred = best_model.predict(X_non_fm)
+            y_non_fm_pred_score = best_model.predict_proba(X_non_fm)[:, 1]
+
+            predictions.append(y_non_fm_pred)
+            prediction_scores.append(y_non_fm_pred_score)
+            start_indices.append(non_fm_preg_data[:, -4])
+            end_indices.append(non_fm_preg_data[:, -3])
+            dat_file_keys.append(non_fm_preg_data[:, -5])
         
         self.model = best_model
         self.result.accuracy_scores = accuracy_scores

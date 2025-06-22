@@ -45,7 +45,7 @@ def main(args):
 
     for key in feature_sets:  
         features = pd.read_csv(os.path.join(args.features_dir, f"{key}_features.csv"))
-        X, y = features.iloc[:, :-4].to_numpy(), features.iloc[:, -1].to_numpy()  # second to last 4 columns are metadata
+        X, y = features.iloc[:, :-5].to_numpy(), features.iloc[:, -1].to_numpy()  # second to last 4 columns are metadata
         filename_hash, start_indices, end_indices = features.iloc[:, -4].to_numpy(), features.iloc[:, -3].to_numpy(), features.iloc[:, -2].to_numpy()  # metadata columns
 
         LOGGER.info(f"Processing started for '{key}' features")

@@ -89,7 +89,7 @@ class FeMoDataset:
             self.logger.warning(f"S3 download failed: {e}")
             return False
 
-    def _save_features(self, filename: str, data: dict, key: str = None) -> pd.DataFrame:
+    def _save_features(self, filename: str, data: dict, key: str = None, remove_in_train: bool = False) -> pd.DataFrame:
         features = data.get('features')
         columns = data.get('columns')
         labels = data.get('labels')
@@ -100,6 +100,7 @@ class FeMoDataset:
             raise ValueError("No features in extracted data.")
 
         features_df = pd.DataFrame(features, columns=columns)
+        features_df['remove_in_train'] = remove_in_train
         features_df['dat_file_key'] = key
         features_df['start_indices'] = start_indices
         features_df['end_indices'] = end_indices
@@ -120,6 +121,7 @@ class FeMoDataset:
             bucket = item.get('bucketName')
             data_file_key = item.get('datFileKey')
             feat_file_key = item.get('csvFileKey', item['datFileKey'].replace('.dat', '.csv'))
+            remove_in_train = item.get('removeZeros', False)
 
             if not data_file_key or not feat_file_key:
                 self.logger.warning("Skipping item due to missing datFileKey or csvFileKey.")
@@ -156,7 +158,7 @@ class FeMoDataset:
                     # Save and optionally upload extracted feature sets
                     for feature_set, feat_data in extracted_features.items():
                         feat_filename = self.base_dir / feat_file_key.replace('.csv', f'-{feature_set}.csv')
-                        current_features = self._save_features(str(feat_filename), feat_data, map_key)
+                        current_features = self._save_features(str(feat_filename), feat_data, map_key, remove_in_train)
                         
                         if not skip_upload:
                             try:
