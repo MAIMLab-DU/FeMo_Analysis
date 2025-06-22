@@ -49,6 +49,7 @@ def main(args):
         filename_hash, start_indices, end_indices = features.iloc[:, -4].to_numpy(), features.iloc[:, -3].to_numpy(), features.iloc[:, -2].to_numpy()  # metadata columns
 
         LOGGER.info(f"Processing started for '{key}' features")
+        LOGGER.info(f"Number of samples: {X.shape[0]}, Number of features: {X.shape[1]}")
         if os.path.exists(os.path.join(processor_dir, f"{key}_processor.joblib")):
             data_processor: Processor = joblib.load(os.path.join(processor_dir, f'{key}_processor.joblib'))
             X_pre = data_processor.predict(X)
