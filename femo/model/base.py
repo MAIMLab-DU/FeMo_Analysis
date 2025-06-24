@@ -164,12 +164,16 @@ class FeMoBaseClassifier(ABC):
 
         # print data shape
         print(f"Initial data shape: {data.shape}")
+        # log
+        LOGGER.info(f"Initial data shape: {data.shape}")
         # non_fm_preg = data where -2 column is True, i.e. non-fetal movement pregnancy
-        non_fm_preg = data[data[:, -5] == 1 & data[:, -1] == 0]
-        data = data[data[:, -5] == 0 | data[:, -1] == 1]  # Filter out non-fetal movement pregnancy data
+        non_fm_preg_cond = (data[:, -5] == 1) & (data[:, -1] == 0)
+        non_fm_preg = data[non_fm_preg_cond]  # Non-fetal movement pregnancy data
+        data = data[~non_fm_preg_cond]
 
         # print shapes of data and non_fm_preg
         print(f"Data shape: {data.shape}, Non-fetal movement pregnancy data shape: {non_fm_preg.shape}")
+        LOGGER.info(f"Data shape: {data.shape}, Non-fetal movement pregnancy data shape: {non_fm_preg.shape}")
 
         X, y = data[:, :-1], data[:, -1].astype(int)
         train, test = [], []

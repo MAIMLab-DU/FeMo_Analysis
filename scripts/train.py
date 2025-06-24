@@ -47,7 +47,7 @@ def main(args):
         for key in feature_sets:
             key_dataset = pd.read_csv(os.path.join(args.train, f"{key}_dataset.csv"))
             dataset = pd.concat([dataset, key_dataset.iloc[:, :-5]], axis=1)
-        dataset = pd.concat([dataset, key_dataset.iloc[:, -4:]], axis=1)
+        dataset = pd.concat([dataset, key_dataset.iloc[:, -5:]], axis=1)
     except Exception:
         raise ValueError(
             (
@@ -83,12 +83,12 @@ def main(args):
     )
 
     LOGGER.info(f"Training started with {classifier}")
-    if args.tune:
-        classifier.tune(
-            train_data,
-            test_data,
-            **tune_params
-        )
+    # if args.tune:
+    #     classifier.tune(
+    #         train_data,
+    #         test_data,
+    #         **tune_params
+    #     )
     classifier.fit(
         train_data,
         test_data,

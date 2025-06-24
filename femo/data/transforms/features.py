@@ -242,8 +242,8 @@ class FeatureExtractor(BaseTransform):
         y_extracted = np.zeros((X_tpd.shape[0] + X_fpd.shape[0], 1), dtype=int)
         y_extracted[:X_tpd.shape[0], 0] = 1  # From here on, label 1 means TPD and label 0 means FPD
         y_extracted = np.ravel(y_extracted)
-        start_indices = np.hstack([tp_detections_start_indices, fp_detections_start_indices], dtype=int)
-        end_indices = np.hstack([tp_detections_end_indices, fp_detections_end_indices], dtype=int)
+        start_indices = np.hstack([tp_detections_start_indices, fp_detections_start_indices])
+        end_indices = np.hstack([tp_detections_end_indices, fp_detections_end_indices])
 
         return {
             'features': X_extracted,

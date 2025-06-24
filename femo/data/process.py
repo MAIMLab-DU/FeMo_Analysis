@@ -134,7 +134,7 @@ class Processor(BaseEstimator):
         """
 
         if self.top_feat_indices is not None:
-            columns = columns[self.top_feat_indices].tolist() + ['dat_file_key', 'start_indices', 'end_indices', 'labels']
+            columns = columns[self.top_feat_indices].tolist() + ['remove_in_train', 'dat_file_key', 'start_indices', 'end_indices', 'labels']
         
         # Create DataFrame
         df = pd.DataFrame(data, columns=columns)
@@ -144,6 +144,8 @@ class Processor(BaseEstimator):
             df['dat_file_key'] = df['dat_file_key'].astype(str)
         
         # Convert last three columns to int
+        if 'remove_in_train' in df.columns:
+            df['remove_in_train'] = df['remove_in_train'].astype(int)
         if 'start_indices' in df.columns:
             df['start_indices'] = df['start_indices'].astype(int)
         if 'end_indices' in df.columns:
@@ -152,7 +154,7 @@ class Processor(BaseEstimator):
             df['labels'] = df['labels'].astype(int)
         
         # Ensure all feature columns are float (exclude metadata columns)
-        feature_columns = [col for col in df.columns if col not in ['dat_file_key', 'start_indices', 'end_indices', 'labels']]
+        feature_columns = [col for col in df.columns if col not in ['remove_in_train', 'dat_file_key', 'start_indices', 'end_indices', 'labels']]
         for col in feature_columns:
             df[col] = df[col].astype(float)
         

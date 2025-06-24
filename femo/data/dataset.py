@@ -122,6 +122,9 @@ class FeMoDataset:
             data_file_key = item.get('datFileKey')
             feat_file_key = item.get('csvFileKey', item['datFileKey'].replace('.dat', '.csv'))
             remove_in_train = item.get('removeZeros', False)
+            
+            # log the item being processed
+            self.logger.info(f"Processing item dat file: {data_file_key}")
 
             if not data_file_key or not feat_file_key:
                 self.logger.warning("Skipping item due to missing datFileKey or csvFileKey.")
@@ -130,9 +133,9 @@ class FeMoDataset:
             map_key = data_file_key
             data_filename = self._resolve_path(data_file_key)
 
-            if not self._download_from_s3(str(data_filename), bucket, data_file_key):
-                self.logger.warning(f"Skipping item due to missing data: {data_filename}")
-                continue
+            # if not self._download_from_s3(str(data_filename), bucket, data_file_key):
+            #     self.logger.warning(f"Skipping item due to missing data: {data_filename}")
+            #     continue
 
             # Determine which feature sets need extraction vs which can be loaded
             feature_sets_to_extract = []
@@ -148,32 +151,32 @@ class FeMoDataset:
 
             # Extract only the missing feature sets
             if feature_sets_to_extract:
-                try:
-                    self.logger.info(f"Extracting '{feature_sets_to_extract}' features for {data_filename}")
-                    extracted_features, _ = self.pipeline.extract_features_batch(
-                        str(data_filename),
-                        feature_sets=feature_sets_to_extract  # Only extract what's needed
-                    )
+                # try:
+                self.logger.info(f"Extracting '{feature_sets_to_extract}' features for {data_filename}")
+                extracted_features, _ = self.pipeline.extract_features_batch(
+                    str(data_filename),
+                    feature_sets=feature_sets_to_extract  # Only extract what's needed
+                )
+                
+                # Save and optionally upload extracted feature sets
+                for feature_set, feat_data in extracted_features.items():
+                    feat_filename = self.base_dir / feat_file_key.replace('.csv', f'-{feature_set}.csv')
+                    current_features = self._save_features(str(feat_filename), feat_data, map_key, remove_in_train)
                     
-                    # Save and optionally upload extracted feature sets
-                    for feature_set, feat_data in extracted_features.items():
-                        feat_filename = self.base_dir / feat_file_key.replace('.csv', f'-{feature_set}.csv')
-                        current_features = self._save_features(str(feat_filename), feat_data, map_key, remove_in_train)
+                    if not skip_upload:
+                        try:
+                            self._upload_to_s3(str(feat_filename), bucket, feat_filename.name)
+                        except Exception as e:
+                            self.logger.warning(f"Upload skipped due to error: {e}")
+                    
+                    features_dict[feature_set] = pd.concat(
+                        [features_dict[feature_set], current_features], axis=0
+                    )
                         
-                        if not skip_upload:
-                            try:
-                                self._upload_to_s3(str(feat_filename), bucket, feat_filename.name)
-                            except Exception as e:
-                                self.logger.warning(f"Upload skipped due to error: {e}")
-                        
-                        features_dict[feature_set] = pd.concat(
-                            [features_dict[feature_set], current_features], axis=0
-                        )
-                        
-                except Exception as e:
-                    self.logger.error(f"Feature extraction failed for {data_filename}: {e}")
-                    # Skip this file entirely if extraction fails
-                    continue
+                # except Exception as e:
+                #     self.logger.error(f"Feature extraction failed for {data_filename}: {e}")
+                #     # Skip this file entirely if extraction fails
+                #     continue
 
             # Load existing feature files
             for feature_set in existing_feature_sets:
@@ -197,4 +200,6 @@ class FeMoDataset:
             raise RuntimeError(msg)
 
         self.logger.info("FeMoDataset build completed.")
+        for feature_set, df in features_dict.items():
+            self.logger.info(f"Feature set '{feature_set}' has {len(df)} samples.")
         return dict(features_dict)
