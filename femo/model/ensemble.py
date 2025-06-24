@@ -145,9 +145,11 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         start_indices = []
         end_indices = []
         dat_file_keys = []
-        accuracy_scores = {
+        perf_metrics = {
             'train_accuracy': [],
-            'test_accuracy': []
+            'test_accuracy': [],
+            'train_f1_score': [],
+            'test_f1_score': []
         }
 
         for i in range(num_iterations):
@@ -183,10 +185,10 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
                 y_true=y_test, 
                 y_pred=y_test_pred
             )
-            accuracy_scores['train_accuracy'].append(current_train_accuracy)
-            accuracy_scores['test_accuracy'].append(current_test_accuracy)
-            accuracy_scores['train_f1_score'] = current_train_f1_score
-            accuracy_scores['test_f1_score'] = current_test_f1_score
+            perf_metrics['train_accuracy'].append(current_train_accuracy)
+            perf_metrics['test_accuracy'].append(current_test_accuracy)
+            perf_metrics['train_f1_score'].append(current_train_f1_score)
+            perf_metrics['test_f1_score'].append(current_test_f1_score)
 
             if current_test_f1_score > best_f1_score:
                 best_f1_score = current_test_f1_score
@@ -206,35 +208,13 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
             self.logger.info(f"Test F1 Score: {current_test_f1_score:.3f}")
             self.logger.info(f"Best Test Accuracy: {best_accuracy:.3f}")
             self.logger.info(f"Best F1 Score: {best_f1_score:.3f}")
-
-
         
         self.logger.info(f"Fitting model with train data took: {time.time() - start: 0.2f} seconds")
-        self.logger.info(f"Average training accuracy: {np.mean(accuracy_scores['train_accuracy'])}")
-        self.logger.info(f"Average testing accuracy: {np.mean(accuracy_scores['test_accuracy'])}")
-        self.logger.info(f"Average training F1 score: {np.mean(accuracy_scores['train_f1_score'])}")
-        self.logger.info(f"Average testing F1 score: {np.mean(accuracy_scores['test_f1_score'])}")
-        
-        # TODO: save model perfomance metrics to a file
-        # create json file with model performance metrics
-        with open('model_performance.json', 'w') as f:
-            performance_metrics = {
-                'train_accuracy': accuracy_scores['train_accuracy'],
-                'test_accuracy': accuracy_scores['test_accuracy'],
-                'train_f1_score': accuracy_scores['train_f1_score'],
-                'test_f1_score': accuracy_scores['test_f1_score'],
-                'average_train_accuracy': np.mean(accuracy_scores['train_accuracy']),
-                'average_test_accuracy': np.mean(accuracy_scores['test_accuracy']),
-                'average_train_f1_score': np.mean(accuracy_scores['train_f1_score']),
-                'average_test_f1_score': np.mean(accuracy_scores['test_f1_score']),
-                'best_test_accuracy': best_accuracy,
-                'best_f1_score': best_f1_score,
-                'hyperparams': hyperparams
-            }
-            f.write(str(performance_metrics))
+        self.logger.info(f"Average training accuracy: {np.mean(perf_metrics['train_accuracy'])}")
+        self.logger.info(f"Average testing accuracy: {np.mean(perf_metrics['test_accuracy'])}")
+        self.logger.info(f"Average training F1 score: {np.mean(perf_metrics['train_f1_score'])}")
+        self.logger.info(f"Average testing F1 score: {np.mean(perf_metrics['test_f1_score'])}")
 
-
-        # TODO: pred, pred_scores, start_indices, end_indices, dat_file_keys for non_fm_preg_data
         if non_fm_preg_data is not None:
             X_non_fm = non_fm_preg_data[:, :-5]
             y_non_fm = non_fm_preg_data[:, -1].astype(int)
@@ -243,17 +223,19 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
 
             predictions.append(y_non_fm_pred)
             prediction_scores.append(y_non_fm_pred_score)
-            start_indices.append(non_fm_preg_data[:, -4])
-            end_indices.append(non_fm_preg_data[:, -3])
-            dat_file_keys.append(non_fm_preg_data[:, -5])
+            start_indices.append(non_fm_preg_data[:, -3])
+            end_indices.append(non_fm_preg_data[:, -2])
+            dat_file_keys.append(non_fm_preg_data[:, -4])
         
         self.model = best_model
-        self.result.accuracy_scores = accuracy_scores
+        self.result.accuracy_scores = perf_metrics
         self.result.preds = predictions
         self.result.pred_scores = prediction_scores
         self.result.start_indices = start_indices
         self.result.end_indices = end_indices
         self.result.dat_file_key = dat_file_keys
+
+        return perf_metrics
 
     def predict(self, X):
         

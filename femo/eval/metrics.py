@@ -71,18 +71,24 @@ class FeMoMetrics(object):
         }
     
     def calc_tpfp(self,
-              sensation_map: np.ndarray,
-              scheme_dict: dict,
-              pred_results: pd.DataFrame):
+                preprocessed_data: dict,
+                imu_map: np.ndarray,
+                sensation_map: np.ndarray,
+                scheme_dict: dict,
+                pred_results: pd.DataFrame):
+        
+        # window size is equal to the window size used to create the maternal sensation map
+        matching_window_size = self.maternal_dilation_forward + self.maternal_dilation_backward 
+        # Minimum overlap in second
+        min_overlap_time = self.fm_dilation / 2
+        sensation_data = preprocessed_data['sensation_data']
     
         # Get user scheme data
         user_scheme = scheme_dict['user_scheme']
-        labeled_user_scheme = scheme_dict['labeled_user_scheme'] 
         num_labels = scheme_dict['num_labels']
         
         # Initialize ML prediction map with same length as other maps
-        ml_prediction_map = np.zeros(len(user_scheme))
-        
+        ml_prediction_map = np.zeros(len(user_scheme))        
         # Populate ML prediction map using pred_results DataFrame
         if not pred_results.empty:
             for idx, row in pred_results.iterrows():
@@ -95,72 +101,123 @@ class FeMoMetrics(object):
                     ml_prediction_map[start_idx:end_idx] = 1
         
         # Get sensation data for ground truth
-        num_maternal_sensed = len(np.unique(label(sensation_map))) - 1
         num_ml_detections = len(np.unique(label(ml_prediction_map))) - 1
+        ml_detection_map = np.copy(ml_prediction_map)
         
-        # Variable declaration for confusion matrix
-        true_pos = 0   # True FM detections
-        false_neg = 0  # Missed FM detections  
-        true_neg = 0   # True Non-FM detections
-        false_pos = 0  # False FM detections
-        
-        # ------------------ Calculate TP and FN (FM Detection Performance) ------------------
-        if num_maternal_sensed > 0:  # When there are maternal sensations
-            # ------------------ Simple Binary Map Matching ------------------
-            # Process each segment in the user_scheme
-            if num_labels > 0:
-                for k in range(1, num_labels + 1):
-                    # Get segment boundaries
-                    segment_indices = np.where(labeled_user_scheme == k)[0]
-                    segment_start = segment_indices[0]
-                    segment_end = segment_indices[-1] + 1
-                    
-                    # Check overlap with each map for this segment
-                    ml_overlap = np.sum(ml_prediction_map[segment_start:segment_end])
-                    sensation_overlap = np.sum(sensation_map[segment_start:segment_end])
-                    
-                    # Convert overlaps to binary (any overlap = 1, no overlap = 0)
-                    ml_present = 1 if ml_overlap > 0 else 0
-                    sensation_present = 1 if sensation_overlap > 0 else 0
-                    
-                    # Calculate TP, FP, TN, FN based on the three binary maps
-                    if sensation_present and ml_present:
-                        # Ground truth FM + ML detected FM
-                        true_pos += 1
-                    elif sensation_present and not ml_present:
-                        # Ground truth FM + ML missed FM
-                        false_neg += 1
-                    elif not sensation_present and ml_present:
-                        # No ground truth FM + ML detected FM
-                        false_pos += 1
-                    elif not sensation_present and not ml_present:
-                        # No ground truth FM + ML correctly identified no FM
-                        true_neg += 1
-            
-            else:
-                # No segments detected by user_scheme but maternal sensations exist
-                # This means sensor system missed all maternal sensations
-                false_neg = num_maternal_sensed
+        # Variable declaration
+        true_pos = 0  # True positive ML detection
+        false_neg = 0  # False negative detection
+        true_neg = 0  # True negative detection
+        false_pos = 0  # False positive detection
 
-        else:
-            # No maternal sensations - only calculate TN and FP
-            if num_labels > 0:
-                for k in range(1, num_labels + 1):
-                    # Get segment boundaries
-                    segment_indices = np.where(labeled_user_scheme == k)[0]
-                    segment_start = segment_indices[0]
-                    segment_end = segment_indices[-1] + 1
-                    
-                    # Check ML prediction for this segment
-                    ml_overlap = np.sum(ml_prediction_map[segment_start:segment_end])
-                    ml_present = 1 if ml_overlap > 0 else 0
-                    
-                    if ml_present:
-                        # ML detected FM where there was no maternal sensation
-                        false_pos += 1
+        # Labeling sensation data and determining the number of maternal sensation detection
+        labeled_sensation_data = label(sensation_data)
+        num_maternal_sensed = len(np.unique(labeled_sensation_data)) - 1
+
+        # ------------------ Determination of True Positive Prediction and False Negative Prediction ----------------%    
+        if num_maternal_sensed:  # When there is a detection by the mother
+            for k in range(1, num_maternal_sensed + 1):
+                L_min = np.where(labeled_sensation_data == k)[0][0]  # Sample no. corresponding to the start of the label
+                L_max = np.where(labeled_sensation_data == k)[0][-1] # Sample no. corresponding to the end of the label
+
+                # sample no. for the starting point of this sensation in the map
+                L1 = L_min * round(self._sensor_freq / self._sensation_freq) - self.extension_backward
+                L1 = max(L1, 0)  # Just a check so that L1 remains higher than 1st data sample
+
+                # sample no. for the ending point of this sensation in the map
+                L2 = L_max * round(self._sensor_freq / self._sensation_freq) + self.extension_forward
+                L2 = min(L2, len(ml_detection_map))  # Just a check so that L2 remains lower than the last data sample
+
+                indv_sensation_map = np.zeros(len(ml_detection_map))  # Need to be initialized before every detection matching
+                indv_sensation_map[L1:L2+1] = 1  # mapping individual sensation data
+
+                # this is non-zero if there is a coincidence with maternal body movement
+                overlap = np.sum(indv_sensation_map * imu_map)
+
+                if not overlap:  # true when there is no coincidence, meaning FM
+                    # TPP and FNP calculation
+                    # Non-zero value gives the matching
+                    Y = np.sum(ml_detection_map * indv_sensation_map)
+                    if Y:  # true if there is a coincidence
+                        true_pos += 1  # TPP incremented
                     else:
-                        # ML correctly identified no FM
-                        true_neg += 1
+                        false_neg += 1  # FNP incremented
+
+            # ------------------- Determination of True Negative Prediction and False Positive Prediction  ------------------%    
+            # Removal of the TPD and FND parts from the individual sensor data
+            labeled_ml_detection = label(ml_detection_map)
+            # Non-zero elements give the matching. In sensation_map multiple windows can overlap, which was not the case in the sensation_data
+            curnt_matched_vector = labeled_ml_detection * sensation_map
+            # Gives the label of the matched sensor data segments
+            curnt_matched_label = np.unique(curnt_matched_vector)
+            arb_value = 4  # An arbitrary value
+            
+            
+            if len(curnt_matched_label) > 1:
+                curnt_matched_label = curnt_matched_label[1:]  # Removes the first element, which is 0
+                for m in range(len(curnt_matched_label)):
+                    ml_detection_map[labeled_ml_detection == curnt_matched_label[m]] = arb_value
+                    # Assigns an arbitrary value to the TPD segments of the segmented signal
+
+            # Assigns an arbitrary value to the area under the M_sntn_Map
+            ml_detection_map[sensation_map == 1] = arb_value
+            # Removes all the elements with value = arb_value from the segmented data
+            removed_ml_detection = ml_detection_map[ml_detection_map != arb_value]
+
+            # Calculation of TND and FPD for individual sensors
+            L_removed = len(removed_ml_detection)
+            index_window_start = 0
+            index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
+            while index_window_start < L_removed:
+                indv_window = removed_ml_detection[index_window_start: index_window_end]
+                index_non_zero = np.where(indv_window)[0]
+
+                if len(index_non_zero) >= (min_overlap_time*self._sensor_freq):
+                    false_pos += 1
+                else:
+                    true_neg += 1
+
+                index_window_start = index_window_end + 1
+                index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
+                
+        # Else no ground truth, only True Negative Prediction and False Positive Prediction calculation allowed
+        else:
+            # ------------------- Determination of TND and FPD  ------------------%    
+            # Removal of the TPD and FND parts from the individual sensor data
+            labeled_ml_detection = label(ml_detection_map)
+            # Non-zero elements give the matching. In sensation_map multiple windows can overlap, which was not the case in the sensation_data
+            curnt_matched_vector = labeled_ml_detection * sensation_map
+            # Gives the label of the matched sensor data segments
+            curnt_matched_label = np.unique(curnt_matched_vector)
+            arb_value = 4  # An arbitrary value
+            
+            
+            if len(curnt_matched_label) > 1:
+                curnt_matched_label = curnt_matched_label[1:]  # Removes the first element, which is 0
+                for m in range(len(curnt_matched_label)):
+                    ml_detection_map[labeled_ml_detection == curnt_matched_label[m]] = arb_value
+                    # Assigns an arbitrary value to the TPD segments of the segmented signal
+
+            # Assigns an arbitrary value to the area under the M_sntn_Map
+            ml_detection_map[sensation_map == 1] = arb_value
+            # Removes all the elements with value = arb_value from the segmented data
+            removed_ml_detection = ml_detection_map[ml_detection_map != arb_value]
+
+            # Calculation of TND and FPD for individual sensors
+            L_removed = len(removed_ml_detection)
+            index_window_start = 0
+            index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
+            while index_window_start < L_removed:
+                indv_window = removed_ml_detection[index_window_start: index_window_end]
+                index_non_zero = np.where(indv_window)[0]
+
+                if len(index_non_zero) >= (min_overlap_time*self._sensor_freq):
+                    false_pos += 1
+                else:
+                    true_neg += 1
+
+                index_window_start = index_window_end + 1
+                index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
         
         return {
             'true_positive': true_pos,

@@ -89,7 +89,7 @@ def main(args):
     #         test_data,
     #         **tune_params
     #     )
-    classifier.fit(
+    perf_metrics = classifier.fit(
         train_data,
         test_data,
         non_fm_preg_data,
@@ -97,6 +97,11 @@ def main(args):
     )
     
     try:
+        # save performance metrics as json
+        perf_metrics_path = os.path.join(args.model_dir, 'performance_metrics.json')
+        with open(perf_metrics_path, 'w') as f:
+            json.dump(perf_metrics, f, indent=4)
+        LOGGER.info(f"Performance metrics saved to: {os.path.abspath(perf_metrics_path)}")
         classifier.save_model(os.path.join(args.model_dir, 'model.joblib'))
         classifier.model = None
         joblib.dump(classifier, os.path.join(args.model_dir, 'classifier.joblib'), compress=False)
