@@ -86,11 +86,13 @@ def main(args):
 
         pipeline_output = dataset.pipeline.process(
             filename=os.path.join(args.data_dir, data_file_key),
-            outputs=['sensation_map', 'scheme_dict']
+            outputs=['sensation_map', 'scheme_dict', 'preprocessed_data', 'imu_map']
         )
         prediction_results = results_df[results_df['dat_file_key'] == data_file_key]
 
         tpfp_dict = metrics.calc_tpfp(
+            preprocessed_data=pipeline_output['preprocessed_data'],
+            imu_map=pipeline_output['imu_map'],
             sensation_map=pipeline_output['sensation_map'],
             scheme_dict=pipeline_output['scheme_dict'],
             pred_results=prediction_results,
