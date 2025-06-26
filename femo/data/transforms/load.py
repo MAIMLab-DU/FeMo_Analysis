@@ -2,10 +2,10 @@ import time
 import numpy as np
 import pandas as pd
 from dataclasses import asdict
-from ._utils import timestamp_to_iso
+from ._utils import timestamp_to_iso, check_file_format
 from scipy.spatial.transform import Rotation as R
 from .base import BaseTransform
-from .formats import FeMoDataV1
+from .formats import FeMoDataV1, FeMoDataV2
 
 
 class DataLoader(BaseTransform): 
@@ -17,7 +17,7 @@ class DataLoader(BaseTransform):
         """
         Load a .dat file and return a dict with:
         - sensor_1…sensor_6: FM channel magnitudes or voltages (float32)
-        - imu_acceleration:    interpolated & exact L2‐norm (float32)
+        - imu_acceleration:    interpolated & exact L2-norm (float32)
         - imu_rotation:        interpolated & exact Euler angles DataFrame
         - sensation_data:      button presses (int8)
         """
@@ -25,12 +25,24 @@ class DataLoader(BaseTransform):
         start = time.time()
         self.logger.debug(f"Started loading from file: {filename}")
 
+        # 0) Check file format
+        file_format = check_file_format(filename)
+
         # 1) Read raw arrays and header
-        fe  = FeMoDataV1(filename)
+        if file_format == 'v1':
+            self.logger.info("Detected V1 file format")
+            fe  = FeMoDataV1(filename)
+        elif file_format == 'v2':
+            self.logger.info("Detected V2 file format")
+            fe  = FeMoDataV2(filename)
+        else:
+            self.logger.error(f"Unsupported file format: {file_format}")
+            raise ValueError(f"Unsupported file format: {file_format}")
         raw = fe._arrays
         header = asdict(fe.header)
         header['start_time'] = timestamp_to_iso(header['start_time'])
         header['end_time'] = timestamp_to_iso(header['end_time'])  
+        header['file_format'] = file_format
 
         # 2) Pre‐allocate outputs
         N   = raw['button'].shape[0]
@@ -46,6 +58,7 @@ class DataLoader(BaseTransform):
 
         # 3) Scaling factors
         scale_voltage = 3.3 / (2**16 - 1)
+        # TODO: Confirm scaling factors for FeMoDataV2
         scale_accel   = 1.0 / 1000.0
         scale_quat    = 1.0 / 10000.0
 
@@ -57,10 +70,19 @@ class DataLoader(BaseTransform):
 
         idx_pz  = raw['piezo'][:, 0].astype(int)
         pz_vals = raw['piezo'][:, 1:].astype(np.float32) * scale_voltage
-        sensor_3[idx_pz] = pz_vals[:, 0]
-        sensor_4[idx_pz] = pz_vals[:, 1]
-        sensor_5[idx_pz] = pz_vals[:, 2]
-        sensor_6[idx_pz] = pz_vals[:, 3]
+        if file_format == 'v1':
+            # V1 format with 4 piezo channels
+            sensor_3[idx_pz] = pz_vals[:, 0]
+            sensor_4[idx_pz] = pz_vals[:, 1]
+            sensor_5[idx_pz] = pz_vals[:, 2]
+            sensor_6[idx_pz] = pz_vals[:, 3]
+        elif file_format == 'v2':
+            # V2 format with 2 piezo channels
+            sensor_3[idx_pz] = pz_vals[:, 0]
+            sensor_6[idx_pz] = pz_vals[:, 1]
+        else:
+            self.logger.error(f"Unexpected piezo data shape: {pz_vals.shape[1]} columns")
+            raise ValueError("Unexpected piezo data shape")
 
         # 5) Prepare IMU raw data for interpolation (use float64 for accuracy)
         idx_imu  = raw['imu'][:, 0].astype(int)

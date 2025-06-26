@@ -203,6 +203,7 @@ logs/
 
 # Data files
 data/
+*.bin
 *.dat
 *.npz
 *.pkl
