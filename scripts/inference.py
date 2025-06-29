@@ -123,16 +123,15 @@ def main(args):
     with open(args.config_path, "r") as f:
         pred_cfg = yaml.safe_load(f)
 
-    if args.data_file.endswith(".dat"):
+    if not args.data_file.endswith(".txt"):
         # If it's a .dat file, store it in a list
         filenames = [args.data_file]
     elif args.data_file.endswith(".txt"):
         # If it's a .txt file, read each line and store filenames in a list
         with open(args.data_file, "r") as file:
             filenames = [line.strip() for line in file if line.strip()]  # Strips newlines and empty lines
-            filenames = [line for line in filenames if line.endswith(".dat")]
     else:
-        raise ValueError("Unsupported file format. Please provide a .dat or .txt file.")
+        raise ValueError("Unsupported file format. Please provide a binary file ('.dat') or '.txt' file.")
 
     try:
         pred_service = PredictionService(
