@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import datetime
 from tqdm import tqdm
 from femo.logger import LOGGER
+from femo.data.transforms._utils import str2bool
 from femo.inference import PredictionService, InferenceMetaInfo
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -74,6 +75,18 @@ def parse_args():
     )
     parser.add_argument("--plot", type=str, default="False", help="Generate and save detection plots")
     parser.add_argument(
+        "--plot-all-sensors",
+        type=str,
+        default="False",
+        help="Plot all sensors in the output plots",
+    )
+    parser.add_argument(
+        "--plot-preprocessed",
+        type=str,
+        default="False",
+        help="Plot preprocessed data (default: plot loaded data)",
+    )
+    parser.add_argument(
         "--set-stage-param",
         type=str,
         nargs="*",
@@ -82,13 +95,10 @@ def parse_args():
     )
     args = parser.parse_args()
 
-    if isinstance(args.remove_hiccups, str) and args.remove_hiccups.lower() in (
-        "false",
-        "f",
-    ):
-        args.remove_hiccups = False
-    if isinstance(args.plot, str) and args.plot.lower() in ("false", "f"):
-        args.plot = False
+    args.remove_hiccups = str2bool(args.remove_hiccups)
+    args.plot = str2bool(args.plot)
+    args.plot_all_sensors = str2bool(args.plot_all_sensors)
+    args.plot_preprocessed = str2bool(args.plot_preprocessed)
 
     return args
 
@@ -252,6 +262,8 @@ def main(args):
                 pred_output["pipeline_output"],
                 pred_output["pre_hiccup_removal"]["ml_map"],
                 os.path.join(args.work_dir, f"{base_filename}_{job_id}_ml.png"),
+                plot_all_sensors=args.plot_all_sensors,
+                plot_preprocessed=args.plot_preprocessed,
             )
 
             if args.remove_hiccups:
@@ -260,11 +272,16 @@ def main(args):
                     pred_output["post_hiccup_removal"]["hiccup_map"],
                     os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup.png"),
                     det_type="Hiccup regions",
+                    plot_all_sensors=args.plot_all_sensors,
+                    plot_preprocessed=args.plot_preprocessed,
                 )
                 pred_service.save_pred_plots(
                     pred_output["pipeline_output"],
                     pred_output["post_hiccup_removal"]["hiccup_removed_ml_map"],
                     os.path.join(args.work_dir, f"{base_filename}_{job_id}_post-removal.png"),
+                    det_type="Hiccup removed ML Predicted Fetal Movement",
+                    plot_all_sensors=args.plot_all_sensors,
+                    plot_preprocessed=args.plot_preprocessed,
                 )
                 pred_service.save_hiccup_analysis_plots(
                     pred_output["pipeline_output"],

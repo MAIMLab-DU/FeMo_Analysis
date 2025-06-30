@@ -7,6 +7,8 @@ VIRTUAL_ENV=.venv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 remove_hiccups=false
 plot=false
+all_sensors=false
+plot_preprocessed=false
 stage_params=()
 data_filename=""
 repacked_model=""
@@ -31,10 +33,13 @@ function show_help {
   echo "                             Path to log data file(s) (.dat or .txt)."
   echo "  -z, --remove-hiccups       Remove hiccups for analysis."
   echo "  -p, --plot                 Generate plots."
+  echo "  -a, --all-sensors          Plot all sensors in the output plots."
+  echo "  -s, --plot-preprocessed    Plot preprocessed data."
+  echo "                             (Default: plot loaded data)."
   echo "  -m <repacked_model>, --repacked-model"
   echo "                             Path to repacked model file (.tar.gz)."
-  echo "  -f <perf_filename>, --perf-filename"
-  echo "                             Performance csv filename."
+  echo "  -o <perf_filename>, --perf-filename"
+  echo "                             Performance csv/xlsx filename."
   echo "  -w <work_dir>, --work-dir"
   echo "                             Project working directory."
   echo "  -r <run_name>, --run-name"
@@ -55,6 +60,14 @@ while [[ $# -gt 0 ]]; do
       plot=true
       shift
       ;;
+    -a|--all-sensors)
+      all_sensors=true
+      shift
+      ;;
+    -s|--plot-preprocessed)
+      plot_preprocessed=true
+      shift
+      ;;
     -d|--data-filename)
       data_filename="$2"
       shift
@@ -65,7 +78,7 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
-    -p|--perf-filename)
+    -o|--perf-filename)
       perf_filename="$2"
       shift
       shift
@@ -156,6 +169,8 @@ python "$(convert_path "$SCRIPT_DIR/inference.py")" \
   --outfile "$(convert_path "$perf_filename")" \
   --remove-hiccups "$remove_hiccups" \
   --plot "$plot" \
+  --plot-all-sensors "$all_sensors" \
+  --plot-preprocessed "$plot_preprocessed" \
   $(for param in "${stage_params[@]}"; do echo --set-stage-param "$param"; done)
 
 # Record the end time

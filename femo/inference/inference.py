@@ -11,10 +11,18 @@ from ..model.base import FeMoBaseClassifier
 from ..logger import LOGGER
 from ..data.pipeline import Pipeline
 from ..eval.metrics import FeMoMetrics
-from ..plot.plotter import FeMoPlotter
 from ..data.process import Processor
 from ..data.transforms import SensorFusion
 from ..data.transforms._utils import custom_binary_dilation, custom_binary_erosion
+from .plot_utils import (
+    create_figure,
+    save_figure,
+    plot_imu_rotation,
+    plot_imu_acceleration,
+    plot_sensor_data,
+    plot_sensation_map,
+    plot_detections
+)
 
 
 @dataclass
@@ -35,7 +43,6 @@ class PredictionService(object):
     pipeline: Pipeline = None
     processor: defaultdict = {"crafted": None, "tsfel": None}
     metrics: FeMoMetrics = None
-    plotter = FeMoPlotter()
     default_hiccup_cfg = {
         "std_threshold_percentage": 0.15,
         "hiccup_period_distance": 5,
@@ -314,9 +321,11 @@ class PredictionService(object):
     def save_pred_plots(
         self,
         pipeline_output: dict,
-        ml_map: np.ndarray,
+        detection_map: np.ndarray,
         filename: str,
-        det_type: str = "Fetal movement",
+        det_type: str = "ML Predicted Fetal Movement",
+        plot_all_sensors: bool = False,
+        plot_preprocessed: bool = False,
     ) -> None:
         """Save prediction plots including IMU data, sensor data, and detection maps.
         
@@ -326,118 +335,119 @@ class PredictionService(object):
             filename: Filename for saving the plot
             det_type: Type of detection for labeling
         """
-        plt_config: dict = {"figsize": [16, 15], "x_unit": "min"}
+        plt_config: dict = {"figsize": [16, 15]}
+        plot_key: str = "preprocessed_data" if plot_preprocessed else "loaded_data"
         
-        # Calculate total number of subplots needed
+        # Calculate total number of subplots needed by checking actual data availability
         num_subplots: int = 0
+        plot_types = ["imu_rotation", "imu_acceleration"]
+        if plot_all_sensors:
+            sensors = self.pipeline.get_stage("load").sensor_map.values()
+            plot_types.extend([item for values in sensors for item in values])
+        else:
+            plot_types.extend(self.pipeline.get_stage("load").sensors)
         
-        # Count IMU plots
-        if "imu_rotation" in pipeline_output["preprocessed_data"]:
-            num_subplots += 1
-        if "imu_acceleration" in pipeline_output["preprocessed_data"]:
-            num_subplots += 1
-        
-        # Count sensor plots
-        for sensor_type in self.plotter.sensor_map.keys():
-            num_subplots += len(self.plotter.sensor_map[sensor_type])
-        
+        num_subplots += len(plot_types)  # Add number of sensor plots        
+        # Add sensation map if present and has data
+        if "sensation_map" in pipeline_output and np.sum(pipeline_output["sensation_map"]) > 0:
+            num_subplots += 1        
         # Add 2 for detection plots
         num_subplots += 2
-        if np.sum(pipeline_output["sensation_map"]):
-            # Add 1 for sensation map plot
-            num_subplots += 1
+        self.logger.info(f"Total number of subplots to create: {num_subplots}")
         
         # Create figure with correct number of subplots
-        fig, axes = self.plotter.create_figure(figsize=plt_config["figsize"], num_subplots=num_subplots)
-        axis_index: int = 0
+        fig, axes = create_figure(figsize=plt_config["figsize"], num_subplots=num_subplots)
+        current_axis_index: int = 0
+        
+        # Get sensor frequency for time axis calculations
+        sensor_freq: int = self.pipeline.get_stage("load").sensor_freq
         
         # Plot IMU rotation data (roll, pitch, yaw) in the first subplot
-        if "imu_rotation" in pipeline_output["preprocessed_data"]:
-            imu_rotation_data = pipeline_output["preprocessed_data"]["imu_rotation"]
-            
-            # Create time axis for IMU data
-            sensor_frequency: int = self.pipeline.get_stage("load").sensor_freq
-            time_axis: np.ndarray = np.arange(len(imu_rotation_data)) / sensor_frequency
-            if plt_config.get("x_unit") == "min":
-                time_axis = time_axis / 60
-            
-            # Plot roll, pitch, yaw on the same subplot with different colors
-            axes[axis_index].plot(time_axis, imu_rotation_data['roll'].values, 
-                                color='red', label='Roll', linewidth=1)
-            axes[axis_index].plot(time_axis, imu_rotation_data['pitch'].values, 
-                                color='green', label='Pitch', linewidth=1)
-            axes[axis_index].plot(time_axis, imu_rotation_data['yaw'].values, 
-                                color='blue', label='Yaw', linewidth=1)
-            
-            axes[axis_index].set_ylabel('IMU Rotation (°)')
-            axes[axis_index].set_title('IMU Rotation Data')
-            axes[axis_index].legend(loc='upper right')
-            axes[axis_index].grid(True, alpha=0.3)
-            axis_index += 1
+        if "imu_rotation" in pipeline_output[plot_key]:
+            imu_rotation_data: np.ndarray = pipeline_output[plot_key]["imu_rotation"]
+            self.logger.info(f"Plotting IMU rotation data with shape {imu_rotation_data.shape}")
+            axes = plot_imu_rotation(
+                axes=axes,
+                axis_idx=current_axis_index,
+                imu_rotation_data=imu_rotation_data,
+                sensor_freq=sensor_freq,
+                preprocessed=plot_preprocessed
+            )
+            current_axis_index += 1
         
         # Plot IMU acceleration data in the second subplot
-        if "imu_acceleration" in pipeline_output["preprocessed_data"]:
-            imu_acceleration_data: np.ndarray = pipeline_output["preprocessed_data"]["imu_acceleration"]
-            
-            # Create time axis for IMU acceleration data
-            sensor_frequency: int = self.pipeline.get_stage("load").sensor_freq
-            time_axis: np.ndarray = np.arange(len(imu_acceleration_data)) / sensor_frequency
-            if plt_config.get("x_unit") == "min":
-                time_axis = time_axis / 60
-            
-            axes[axis_index].plot(time_axis, imu_acceleration_data, 
-                                color='purple', linewidth=1)
-            axes[axis_index].set_ylabel('IMU Acceleration (g)')
-            axes[axis_index].set_title('IMU Acceleration Data')
-            axes[axis_index].grid(True, alpha=0.3)
-            axis_index += 1
-        
-        # Plot sensor data
-        for sensor_type in self.plotter.sensor_map.keys():
-            for j in range(len(self.plotter.sensor_map[sensor_type])):
-                sensor_name: str = f"{sensor_type}_{j+1}"
-                axes = self.plotter.plot_sensor_data(
-                    axes=axes,
-                    axis_idx=axis_index,
-                    data=pipeline_output["preprocessed_data"][self.plotter.sensor_map[sensor_type][j]],
-                    sensor_name=sensor_name,
-                    x_unit=plt_config.get("x_unit", "min"),
-                )
-                axis_index += 1
-        if np.sum(pipeline_output["sensation_map"]):
-            axes = self.plotter.plot_sensor_data(
+        if "imu_acceleration" in pipeline_output[plot_key]:
+            imu_acceleration_data: np.ndarray = pipeline_output[plot_key]["imu_acceleration"]
+            self.logger.info(f"Plotting IMU acceleration data with shape {imu_acceleration_data.shape}")
+            axes = plot_imu_acceleration(
                 axes=axes,
-                axis_idx=axis_index,
-                data=pipeline_output["sensation_map"],
-                sensor_name="Sensation",
-                x_unit=plt_config.get("x_unit", "min"),
+                axis_idx=current_axis_index,
+                imu_acceleration_data=imu_acceleration_data,
+                sensor_freq=sensor_freq,
+                preprocessed=plot_preprocessed
             )
-            axis_index += 1
+            current_axis_index += 1
+        
+        # Plot sensor data - only plot those with actual data
+        for sensor in plot_types[2:]:  # Skip IMU rotation and acceleration
+            if sensor in pipeline_output[plot_key]:
+                sensor_data = pipeline_output[plot_key][sensor]
+                if np.sum(sensor_data) == 0:
+                    self.logger.warning(f"No data for sensor {sensor}, skipping plot.")
+                    continue
+                self.logger.info(f"Plotting sensor data for {sensor} with shape {sensor_data.shape}")
+                axes = plot_sensor_data(
+                    axes=axes,
+                    axis_idx=current_axis_index,
+                    sensor_data=sensor_data,
+                    sensor_name=sensor,
+                    sensor_freq=sensor_freq,
+                    preprocessed=plot_preprocessed
+                )
+                current_axis_index += 1
+        
+        # Plot sensation map if present and has data
+        if "sensation_map" in pipeline_output and np.sum(pipeline_output["sensation_map"]) > 0:
+            self.logger.info("Plotting sensation map.")
+            axes = plot_sensation_map(
+                axes=axes,
+                axis_idx=current_axis_index,
+                sensation_data=pipeline_output["sensation_map"],
+                sensor_freq=sensor_freq
+            )
+            current_axis_index += 1
 
-        # TODO: might be better to have this more configurable
+        # Plot detection maps
         fusion_stage: SensorFusion = self.pipeline.get_stage("fusion")
-        desired_scheme = fusion_stage.desired_scheme
+        desired_scheme_tuple = fusion_stage.desired_scheme
 
-        axes = self.plotter.plot_detections(
+        # Plot detection map from desired scheme
+        self.logger.info(f"Plotting detection map for scheme: {desired_scheme_tuple}")
+        axes = plot_detections(
             axes=axes,
-            axis_idx=axis_index,
+            axis_idx=current_axis_index,
             detection_map=pipeline_output["scheme_dict"]["user_scheme"],
-            det_type=f"At least {desired_scheme[1]} {desired_scheme[0]} Sensor Events",
+            det_type=f"At least {desired_scheme_tuple[1]} {desired_scheme_tuple[0]} Sensor Events",
             ylabel="Detection",
             xlabel="",
-            x_unit=plt_config.get("x_unit", "min"),
+            sensor_freq=sensor_freq
         )
-        axes = self.plotter.plot_detections(
+        current_axis_index += 1
+        
+        # Plot detection map from ML predictions
+        self.logger.info(f"Plotting detection map for {det_type}")
+        axes = plot_detections(
             axes=axes,
-            axis_idx=axis_index + 1,
-            detection_map=ml_map,
+            axis_idx=current_axis_index,
+            detection_map=detection_map,
             det_type=det_type,
             ylabel="Detection",
-            xlabel=f"Time ({plt_config.get('x_unit', 'min')})",
-            x_unit=plt_config.get("x_unit", "min"),
+            xlabel="",
+            sensor_freq=sensor_freq
         )
 
-        self.plotter.save_figure(fig, filename)
+        save_figure(fig, filename)
+        self.logger.info(f"Saved figure to {os.path.abspath(filename)}")
 
     def save_hiccup_analysis_plots(
         self,
