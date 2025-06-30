@@ -40,10 +40,11 @@ class FeMoPlotter(object):
         self.fig, self.ax = None, None
 
     def create_figure(self,
-                      figsize: tuple = (16, 15)):
+                      figsize: tuple = (16, 15),
+                      num_subplots: int = 8) -> tuple:
         
         # Plot num_sensors and 2 more rows (detections) of subplots
-        fig, axes = plt.subplots(self.num_sensors + 2, 1,
+        fig, axes = plt.subplots(num_subplots, 1,
                                figsize=figsize, sharex=True)
         return fig, axes
     

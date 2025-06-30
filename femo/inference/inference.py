@@ -317,21 +317,102 @@ class PredictionService(object):
         ml_map: np.ndarray,
         filename: str,
         det_type: str = "Fetal movement",
-    ):
-        plt_cfg = {"figsize": [16, 15], "x_unit": "min"}
-        fig, axes = self.plotter.create_figure(figsize=plt_cfg["figsize"])
-        i = 0
+    ) -> None:
+        """Save prediction plots including IMU data, sensor data, and detection maps.
+        
+        Args:
+            pipeline_output: Dictionary containing preprocessed data and other pipeline outputs
+            ml_map: Machine learning detection map
+            filename: Filename for saving the plot
+            det_type: Type of detection for labeling
+        """
+        plt_config: dict = {"figsize": [16, 15], "x_unit": "min"}
+        
+        # Calculate total number of subplots needed
+        num_subplots: int = 0
+        
+        # Count IMU plots
+        if "imu_rotation" in pipeline_output["preprocessed_data"]:
+            num_subplots += 1
+        if "imu_acceleration" in pipeline_output["preprocessed_data"]:
+            num_subplots += 1
+        
+        # Count sensor plots
+        for sensor_type in self.plotter.sensor_map.keys():
+            num_subplots += len(self.plotter.sensor_map[sensor_type])
+        
+        # Add 2 for detection plots
+        num_subplots += 2
+        if np.sum(pipeline_output["sensation_map"]):
+            # Add 1 for sensation map plot
+            num_subplots += 1
+        
+        # Create figure with correct number of subplots
+        fig, axes = self.plotter.create_figure(figsize=plt_config["figsize"], num_subplots=num_subplots)
+        axis_index: int = 0
+        
+        # Plot IMU rotation data (roll, pitch, yaw) in the first subplot
+        if "imu_rotation" in pipeline_output["preprocessed_data"]:
+            imu_rotation_data = pipeline_output["preprocessed_data"]["imu_rotation"]
+            
+            # Create time axis for IMU data
+            sensor_frequency: int = self.pipeline.get_stage("load").sensor_freq
+            time_axis: np.ndarray = np.arange(len(imu_rotation_data)) / sensor_frequency
+            if plt_config.get("x_unit") == "min":
+                time_axis = time_axis / 60
+            
+            # Plot roll, pitch, yaw on the same subplot with different colors
+            axes[axis_index].plot(time_axis, imu_rotation_data['roll'].values, 
+                                color='red', label='Roll', linewidth=1)
+            axes[axis_index].plot(time_axis, imu_rotation_data['pitch'].values, 
+                                color='green', label='Pitch', linewidth=1)
+            axes[axis_index].plot(time_axis, imu_rotation_data['yaw'].values, 
+                                color='blue', label='Yaw', linewidth=1)
+            
+            axes[axis_index].set_ylabel('IMU Rotation (°)')
+            axes[axis_index].set_title('IMU Rotation Data')
+            axes[axis_index].legend(loc='upper right')
+            axes[axis_index].grid(True, alpha=0.3)
+            axis_index += 1
+        
+        # Plot IMU acceleration data in the second subplot
+        if "imu_acceleration" in pipeline_output["preprocessed_data"]:
+            imu_acceleration_data: np.ndarray = pipeline_output["preprocessed_data"]["imu_acceleration"]
+            
+            # Create time axis for IMU acceleration data
+            sensor_frequency: int = self.pipeline.get_stage("load").sensor_freq
+            time_axis: np.ndarray = np.arange(len(imu_acceleration_data)) / sensor_frequency
+            if plt_config.get("x_unit") == "min":
+                time_axis = time_axis / 60
+            
+            axes[axis_index].plot(time_axis, imu_acceleration_data, 
+                                color='purple', linewidth=1)
+            axes[axis_index].set_ylabel('IMU Acceleration (g)')
+            axes[axis_index].set_title('IMU Acceleration Data')
+            axes[axis_index].grid(True, alpha=0.3)
+            axis_index += 1
+        
+        # Plot sensor data
         for sensor_type in self.plotter.sensor_map.keys():
             for j in range(len(self.plotter.sensor_map[sensor_type])):
-                sensor_name = f"{sensor_type}_{j+1}"
+                sensor_name: str = f"{sensor_type}_{j+1}"
                 axes = self.plotter.plot_sensor_data(
                     axes=axes,
-                    axis_idx=i,
+                    axis_idx=axis_index,
                     data=pipeline_output["preprocessed_data"][self.plotter.sensor_map[sensor_type][j]],
                     sensor_name=sensor_name,
-                    x_unit=plt_cfg.get("x_unit", "min"),
+                    x_unit=plt_config.get("x_unit", "min"),
                 )
-                i += 1
+                axis_index += 1
+        if np.sum(pipeline_output["sensation_map"]):
+            axes = self.plotter.plot_sensor_data(
+                axes=axes,
+                axis_idx=axis_index,
+                data=pipeline_output["sensation_map"],
+                sensor_name="Sensation",
+                x_unit=plt_config.get("x_unit", "min"),
+            )
+            axis_index += 1
 
         # TODO: might be better to have this more configurable
         fusion_stage: SensorFusion = self.pipeline.get_stage("fusion")
@@ -339,21 +420,21 @@ class PredictionService(object):
 
         axes = self.plotter.plot_detections(
             axes=axes,
-            axis_idx=i,
+            axis_idx=axis_index,
             detection_map=pipeline_output["scheme_dict"]["user_scheme"],
             det_type=f"At least {desired_scheme[1]} {desired_scheme[0]} Sensor Events",
             ylabel="Detection",
             xlabel="",
-            x_unit=plt_cfg.get("x_unit", "min"),
+            x_unit=plt_config.get("x_unit", "min"),
         )
         axes = self.plotter.plot_detections(
             axes=axes,
-            axis_idx=i + 1,
+            axis_idx=axis_index + 1,
             detection_map=ml_map,
             det_type=det_type,
             ylabel="Detection",
-            xlabel=f"Time ({plt_cfg.get('x_unit', 'min')})",
-            x_unit=plt_cfg.get("x_unit", "min"),
+            xlabel=f"Time ({plt_config.get('x_unit', 'min')})",
+            x_unit=plt_config.get("x_unit", "min"),
         )
 
         self.plotter.save_figure(fig, filename)
