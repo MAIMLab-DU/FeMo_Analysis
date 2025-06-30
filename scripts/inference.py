@@ -172,127 +172,132 @@ def main(args):
             pipeline.set_stage_params(stage_name, **attrs)
 
     for data_filename in tqdm(filenames, desc=f"Performing inference on {len(filenames)} files..."):
-        LOGGER.info(f"Performing inference for {data_filename}")
+        try:
+            LOGGER.info(f"Performing inference for {data_filename}")
 
-        pred_output = pred_service.predict(data_filename, remove_hiccups=args.remove_hiccups)
-        job_id = str(uuid.uuid4())[:8]
+            pred_output = pred_service.predict(data_filename, remove_hiccups=args.remove_hiccups)
+            job_id = str(uuid.uuid4())[:8]
 
-        # Prepare meta info
-        pre_removal_data: InferenceMetaInfo = pred_output["pre_hiccup_removal"]["data"]
-        metainfo_dict = {
-            "Timestamp": [timestamp],
-            "JobId": [job_id],
-            "File Name": [data_filename],
-            "Number of bouts per hour - pre_hiccup": [
-                (pre_removal_data.numKicks * 60)
-                / (pre_removal_data.totalFMDuration + pre_removal_data.totalNonFMDuration)
-            ],
-            "Mean duration of fetal movement (seconds) - pre_hiccup": [
-                (
-                    pre_removal_data.totalFMDuration * 60 / pre_removal_data.numKicks
-                    if pre_removal_data.numKicks > 0
-                    else 0
-                )
-            ],
-            "Median onset interval (seconds) - pre_hiccup": [np.median(pre_removal_data.onsetInterval)],
-            "Active time of fetal movement (%) - pre_hiccup": [
-                (
-                    pre_removal_data.totalFMDuration
+            # Prepare meta info
+            pre_removal_data: InferenceMetaInfo = pred_output["pre_hiccup_removal"]["data"]
+            metainfo_dict = {
+                "Timestamp": [timestamp],
+                "JobId": [job_id],
+                "File Name": [data_filename],
+                "Number of bouts per hour - pre_hiccup": [
+                    (pre_removal_data.numKicks * 60)
                     / (pre_removal_data.totalFMDuration + pre_removal_data.totalNonFMDuration)
-                )
-                * 100
-            ],
-        }
-
-        if args.remove_hiccups:
-            post_removal_data: InferenceMetaInfo = pred_output["post_hiccup_removal"]["data"]
-            metainfo_dict.update(
-                {
-                    "Number of bouts per hour - post_hiccup": [
-                        (post_removal_data.numKicks * 60)
-                        / (post_removal_data.totalFMDuration + post_removal_data.totalNonFMDuration)
-                    ],
-                    "Mean duration of fetal movement (seconds) - post_hiccup": [
-                        (
-                            post_removal_data.totalFMDuration * 60 / post_removal_data.numKicks
-                            if post_removal_data.numKicks > 0
-                            else 0
-                        )
-                    ],
-                    "Median onset interval (seconds) - post_hiccup": [np.median(post_removal_data.onsetInterval)],
-                    "Active time of fetal movement (%) - post_hiccup": [
-                        (
-                            post_removal_data.totalFMDuration
-                            / (post_removal_data.totalFMDuration + post_removal_data.totalNonFMDuration)
-                        )
-                        * 100
-                    ],
-                }
-            )
-            del post_removal_data  # Free memory
-
-        del pre_removal_data  # Free memory
-
-        # Write meta info to Excel
-        output_file = os.path.join(args.work_dir, args.outfile)
-        df_new = pd.DataFrame(metainfo_dict)
-
-        if os.path.exists(output_file):
-            df_existing = pd.read_excel(output_file)
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-        else:
-            df_combined = df_new
-
-        with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
-            df_combined.to_excel(writer, index=False)
-
-        LOGGER.info(f"Meta info saved to {os.path.realpath(output_file)}")
-
-        # Delete unused DataFrame variables
-        del df_new, df_combined
-        if "df_existing" in locals():
-            del df_existing
-
-        # Plot results if required
-        if args.plot:
-            LOGGER.info("Plotting the results. It may take some time....")
-            base_filename = os.path.basename(data_filename).split(".dat")[0]
-
-            pred_service.save_pred_plots(
-                pred_output["pipeline_output"],
-                pred_output["pre_hiccup_removal"]["ml_map"],
-                os.path.join(args.work_dir, f"{base_filename}_{job_id}_ml.png"),
-                plot_all_sensors=args.plot_all_sensors,
-                plot_preprocessed=args.plot_preprocessed,
-            )
+                ],
+                "Mean duration of fetal movement (seconds) - pre_hiccup": [
+                    (
+                        pre_removal_data.totalFMDuration * 60 / pre_removal_data.numKicks
+                        if pre_removal_data.numKicks > 0
+                        else 0
+                    )
+                ],
+                "Median onset interval (seconds) - pre_hiccup": [np.median(pre_removal_data.onsetInterval)],
+                "Active time of fetal movement (%) - pre_hiccup": [
+                    (
+                        pre_removal_data.totalFMDuration
+                        / (pre_removal_data.totalFMDuration + pre_removal_data.totalNonFMDuration)
+                    )
+                    * 100
+                ],
+            }
 
             if args.remove_hiccups:
+                post_removal_data: InferenceMetaInfo = pred_output["post_hiccup_removal"]["data"]
+                metainfo_dict.update(
+                    {
+                        "Number of bouts per hour - post_hiccup": [
+                            (post_removal_data.numKicks * 60)
+                            / (post_removal_data.totalFMDuration + post_removal_data.totalNonFMDuration)
+                        ],
+                        "Mean duration of fetal movement (seconds) - post_hiccup": [
+                            (
+                                post_removal_data.totalFMDuration * 60 / post_removal_data.numKicks
+                                if post_removal_data.numKicks > 0
+                                else 0
+                            )
+                        ],
+                        "Median onset interval (seconds) - post_hiccup": [np.median(post_removal_data.onsetInterval)],
+                        "Active time of fetal movement (%) - post_hiccup": [
+                            (
+                                post_removal_data.totalFMDuration
+                                / (post_removal_data.totalFMDuration + post_removal_data.totalNonFMDuration)
+                            )
+                            * 100
+                        ],
+                    }
+                )
+                del post_removal_data  # Free memory
+
+            del pre_removal_data  # Free memory
+
+            # Write meta info to Excel
+            output_file = os.path.join(args.work_dir, args.outfile)
+            df_new = pd.DataFrame(metainfo_dict)
+
+            if os.path.exists(output_file):
+                df_existing = pd.read_excel(output_file)
+                df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+            else:
+                df_combined = df_new
+
+            with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
+                df_combined.to_excel(writer, index=False)
+
+            LOGGER.info(f"Meta info saved to {os.path.realpath(output_file)}")
+
+            # Delete unused DataFrame variables
+            del df_new, df_combined
+            if "df_existing" in locals():
+                del df_existing
+
+            # Plot results if required
+            if args.plot:
+                LOGGER.info("Plotting the results. It may take some time....")
+                base_filename = os.path.basename(data_filename).split(".dat")[0]
+
                 pred_service.save_pred_plots(
                     pred_output["pipeline_output"],
-                    pred_output["post_hiccup_removal"]["hiccup_map"],
-                    os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup.png"),
-                    det_type="Hiccup regions",
-                    plot_all_sensors=args.plot_all_sensors,
-                    plot_preprocessed=args.plot_preprocessed,
-                )
-                pred_service.save_pred_plots(
-                    pred_output["pipeline_output"],
-                    pred_output["post_hiccup_removal"]["hiccup_removed_ml_map"],
-                    os.path.join(args.work_dir, f"{base_filename}_{job_id}_post-removal.png"),
-                    det_type="Hiccup removed ML Predicted Fetal Movement",
-                    plot_all_sensors=args.plot_all_sensors,
-                    plot_preprocessed=args.plot_preprocessed,
-                )
-                pred_service.save_hiccup_analysis_plots(
-                    pred_output["pipeline_output"],
-                    pred_output["post_hiccup_removal"],
                     pred_output["pre_hiccup_removal"]["ml_map"],
-                    os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup-analysis.png"),
+                    os.path.join(args.work_dir, f"{base_filename}_{job_id}_ml.png"),
+                    plot_all_sensors=args.plot_all_sensors,
+                    plot_preprocessed=args.plot_preprocessed,
                 )
 
-        # Free memory by deleting variables
-        del pred_output
-        gc.collect()  # Force garbage collection
+                if args.remove_hiccups:
+                    pred_service.save_pred_plots(
+                        pred_output["pipeline_output"],
+                        pred_output["post_hiccup_removal"]["hiccup_map"],
+                        os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup.png"),
+                        det_type="Hiccup regions",
+                        plot_all_sensors=args.plot_all_sensors,
+                        plot_preprocessed=args.plot_preprocessed,
+                    )
+                    pred_service.save_pred_plots(
+                        pred_output["pipeline_output"],
+                        pred_output["post_hiccup_removal"]["hiccup_removed_ml_map"],
+                        os.path.join(args.work_dir, f"{base_filename}_{job_id}_post-removal.png"),
+                        det_type="Hiccup removed ML Predicted Fetal Movement",
+                        plot_all_sensors=args.plot_all_sensors,
+                        plot_preprocessed=args.plot_preprocessed,
+                    )
+                    pred_service.save_hiccup_analysis_plots(
+                        pred_output["pipeline_output"],
+                        pred_output["post_hiccup_removal"],
+                        pred_output["pre_hiccup_removal"]["ml_map"],
+                        os.path.join(args.work_dir, f"{base_filename}_{job_id}_hiccup-analysis.png"),
+                    )
+
+            # Free memory by deleting variables
+            del pred_output
+            gc.collect()  # Force garbage collection
+        
+        except Exception as e:
+            LOGGER.error(f"Error processing file {data_filename}: {e}")
+            continue
 
 
 if __name__ == "__main__":
