@@ -122,7 +122,7 @@ class FeMoDataV2:
         # IMU data: [record_index, quat_r, quat_i, quat_j, quat_k, mag_x, mag_y, mag_z, accel_x, accel_y, accel_z] - matching V1 format
         # Need confirmation on scaling factors
         imu_buffer = np.column_stack([
-            np.arange(num_packets * 8, dtype=np.int32),
+            np.arange(0, num_packets * 64, 8, dtype=np.int32),
             (self.raw_result.quat_r),   # quat_r
             (self.raw_result.quat_i),   # quat_i
             (self.raw_result.quat_j),   # quat_j
