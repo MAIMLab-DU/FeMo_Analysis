@@ -28,6 +28,7 @@ class InferenceMetaInfo:
     totalFMDuration: float
     totalNonFMDuration: float
     onsetInterval: list
+    matchWithSensationMap: dict = None
 
 
 class PredictionService(object):
@@ -103,8 +104,10 @@ class PredictionService(object):
             self.metrics = joblib.load(self.metrics_path)
         return self.metrics
 
-    def _calc_meta_info(self, filename: str, preprocessed_data: dict, binary_map: np.ndarray):
+    def _calc_meta_info(self, filename: str, pipeline_output: dict, binary_map: np.ndarray):
         self.logger.info(f"Calculating prediction meta info {filename}")
+
+        preprocessed_data = pipeline_output["preprocessed_data"]
         sensor_freq = self.pipeline.get_stage("load").sensor_freq
         fm_dilation = self.pipeline.get_stage("segment").fm_dilation
 
@@ -125,24 +128,133 @@ class PredictionService(object):
         duration_trimmed_data_files = len(preprocessed_data["sensor_1"]) / 1024 / 60  # in minutes
         # Time fetus was not moving
         total_nonFM_duration = duration_trimmed_data_files - total_FM_duration
+
+        # Match with sensation map if available
+        matched_dict = None
+        if np.sum(pipeline_output["sensation_map"]):
+            sensation_map = pipeline_output["sensation_map"]
+            imu_map = pipeline_output["imu_map"]
+            matched_dict = self._match_with_sensation_map(
+                preprocessed_data=pipeline_output["preprocessed_data"],
+                imu_map=imu_map,
+                sensation_map=sensation_map,
+                ml_detection_map=binary_map,
+            )
+
         data = InferenceMetaInfo(
             fileName=os.path.basename(filename),
             numKicks=n_movements,
             totalFMDuration=total_FM_duration,
             totalNonFMDuration=total_nonFM_duration,
             onsetInterval=onset_interval,
+            matchWithSensationMap=matched_dict
         )
         return data
+
+    def _match_with_sensation_map(self,
+                                  preprocessed_data: dict,
+                                  imu_map: np.ndarray,
+                                  sensation_map: np.ndarray,
+                                  ml_detection_map: np.ndarray):
+
+        # window size is equal to the window size used to create the maternal sensation map
+        matching_window_size = self.metrics.maternal_dilation_forward + self.metrics.maternal_dilation_backward 
+        # Minimum overlap in second
+        min_overlap_time = self.metrics.fm_dilation / 2
+
+        sensation_data = preprocessed_data['sensation_data']
+
+        # Variable declaration
+        true_pos = 0  # True positive ML detection
+        false_neg = 0  # False negative detection
+        true_neg = 0  # True negative detection
+        false_pos = 0  # False positive detection
+
+        # Labeling sensation data and determining the number of maternal sensation detection
+        labeled_sensation_data = label(sensation_data)
+        num_maternal_sensed = len(np.unique(labeled_sensation_data)) - 1
+
+        # ------------------ Determination of TPD and FND ----------------%    
+        if num_maternal_sensed:  # When there is a detection by the mother
+            for k in range(1, num_maternal_sensed + 1):
+                L_min = np.where(labeled_sensation_data == k)[0][0]  # Sample no. corresponding to the start of the label
+                L_max = np.where(labeled_sensation_data == k)[0][-1] # Sample no. corresponding to the end of the label
+
+                # sample no. for the starting point of this sensation in the map
+                L1 = L_min * round(self.metrics._sensor_freq / self.metrics._sensation_freq) - self.metrics.extension_backward
+                L1 = max(L1, 0)  # Just a check so that L1 remains higher than 1st data sample
+
+                # sample no. for the ending point of this sensation in the map
+                L2 = L_max * round(self.metrics._sensor_freq / self.metrics._sensation_freq) + self.metrics.extension_forward
+                L2 = min(L2, len(ml_detection_map))  # Just a check so that L2 remains lower than the last data sample
+
+                indv_sensation_map = np.zeros(len(ml_detection_map))  # Need to be initialized before every detection matching
+                indv_sensation_map[L1:L2+1] = 1  # mapping individual sensation data
+
+                # this is non-zero if there is a coincidence with maternal body movement
+                overlap = np.sum(indv_sensation_map * imu_map)
+
+                if not overlap:  # true when there is no coincidence, meaning FM
+                    # TPD and FND calculation
+                    # Non-zero value gives the matching
+                    Y = np.sum(ml_detection_map * indv_sensation_map)
+                    if Y:  # true if there is a coincidence
+                        true_pos += 1  # TPD incremented
+                    else:
+                        false_neg += 1  # FND incremented
+
+            # ------------------- Determination of TND and FPD  ------------------%    
+            # Removal of the TPD and FND parts from the individual sensor data
+            labeled_ml_detection = label(ml_detection_map)
+            # Non-zero elements give the matching. In sensation_map multiple windows can overlap, which was not the case in the sensation_data
+            curnt_matched_vector = labeled_ml_detection * sensation_map
+            # Gives the label of the matched sensor data segments
+            curnt_matched_label = np.unique(curnt_matched_vector)
+            arb_value = 4  # An arbitrary value
+            
+            
+            if len(curnt_matched_label) > 1:
+                curnt_matched_label = curnt_matched_label[1:]  # Removes the first element, which is 0
+                for m in range(len(curnt_matched_label)):
+                    ml_detection_map[labeled_ml_detection == curnt_matched_label[m]] = arb_value
+                    # Assigns an arbitrary value to the TPD segments of the segmented signal
+
+            # Assigns an arbitrary value to the area under the M_sntn_Map
+            ml_detection_map[sensation_map == 1] = arb_value
+            # Removes all the elements with value = arb_value from the segmented data
+            removed_ml_detection = ml_detection_map[ml_detection_map != arb_value]
+
+            # Calculation of TND and FPD for individual sensors
+            L_removed = len(removed_ml_detection)
+            index_window_start = 0
+            index_window_end = int(min(index_window_start+self.metrics._sensor_freq*matching_window_size, L_removed))
+            while index_window_start < L_removed:
+                indv_window = removed_ml_detection[index_window_start: index_window_end]
+                index_non_zero = np.where(indv_window)[0]
+
+                if len(index_non_zero) >= (min_overlap_time*self.metrics._sensor_freq):
+                    false_pos += 1
+                else:
+                    true_neg += 1
+
+                index_window_start = index_window_end + 1
+                index_window_end = int(min(index_window_start+self.metrics._sensor_freq*matching_window_size, L_removed))
+        
+        return {
+            "num_maternally_sensed_kicks": true_pos+false_neg,
+            "num_detected_kicks": true_pos+false_pos,
+            "num_sensor_events": true_pos + false_neg + true_neg + false_pos,
+        }
 
     def _pre_hiccup_removal(
         self,
         filename: str,
         y_pred: np.ndarray,
-        preprocessed_data: dict,
-        fm_dict: dict,
-        scheme_dict: dict,
+        pipeline_output: dict,
     ):
         self.logger.info(f"Generating pre-hiccup removal map for {filename}")
+        fm_dict = pipeline_output["fm_dict"]
+        scheme_dict = pipeline_output["scheme_dict"]
 
         ones = np.sum(y_pred)
         self.logger.info(f"Number of bouts: {ones}")
@@ -161,7 +273,7 @@ class PredictionService(object):
 
         # Now get the reduced detection_map
         reduced_detection_map = ml_map * fm_dict["fm_map"]  # Reduced, because of the new dilation length
-        data = self._calc_meta_info(filename, preprocessed_data, reduced_detection_map)
+        data = self._calc_meta_info(filename, pipeline_output, reduced_detection_map)
 
         return data, ml_map
 
@@ -170,9 +282,11 @@ class PredictionService(object):
         filename: str,
         hiccup_analyzer: HiccupAnalysis,
         ml_map: np.ndarray,
-        preprocessed_data: dict,
-        imu_map: np.ndarray,
+        pipeline_output: dict,
     ):
+        self.logger.info(f"Generating post-hiccup removal map from {filename}")
+        preprocessed_data = pipeline_output["preprocessed_data"]
+        imu_map = pipeline_output["imu_map"]
         ml_detection_map = np.copy(ml_map)
 
         if hiccup_analyzer.fm_dilation > self.pipeline.get_stage("segment").fm_dilation:
@@ -225,7 +339,7 @@ class PredictionService(object):
             acstc_1_or_2 = np.zeros_like(ml_map)
 
         hiccup_removed_ml_map = np.clip(ml_map - hiccup_map, 0, 1)
-        data = self._calc_meta_info(filename, preprocessed_data, hiccup_removed_ml_map)
+        data = self._calc_meta_info(filename, pipeline_output, hiccup_removed_ml_map)
 
         return {
             "data": data,
@@ -249,7 +363,10 @@ class PredictionService(object):
 
         # Helper function to process the file
         def process_file(file_path: str):
-            prediction_output = defaultdict()
+            prediction_output = {
+                "pre_hiccup_removal": None,
+                "post_hiccup_removal": None
+            }
 
             pipeline = self.get_pipeline()
             feature_sets = pipeline.get_stage('extract_feat').feature_sets
@@ -275,9 +392,7 @@ class PredictionService(object):
             data, ml_map = self._pre_hiccup_removal(
                 filename=file_path,
                 y_pred=y_pred,
-                preprocessed_data=pipeline_output["preprocessed_data"],
-                fm_dict=pipeline_output["fm_dict"],
-                scheme_dict=pipeline_output["scheme_dict"],
+                pipeline_output=pipeline_output,
             )
             prediction_output["pre_hiccup_removal"] = {"data": data, "ml_map": ml_map}
 
@@ -291,8 +406,7 @@ class PredictionService(object):
                     filename=filename,
                     hiccup_analyzer=hiccup_analyzer,
                     ml_map=ml_map,
-                    preprocessed_data=pipeline_output["preprocessed_data"],
-                    imu_map=pipeline_output["imu_map"],
+                    pipeline_output=pipeline_output,
                 )
                 prediction_output["post_hiccup_removal"] = post_hiccup_dict
 
