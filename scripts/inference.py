@@ -194,6 +194,20 @@ def main(args):
                 * 100
             ],
         }
+        if pre_removal_data.matchWithSensationMap is not None:
+            metainfo_dict.update(
+                {
+                    "Num maternal sensed kicks - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]
+                    ],
+                    "Num detected kicks - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap["num_detected_kicks"]
+                    ],
+                    "Num sensor events - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap["num_sensor_events"]
+                    ]
+                }
+            )
 
         if args.remove_hiccups:
             post_removal_data: InferenceMetaInfo = pred_output["post_hiccup_removal"]["data"]
@@ -220,6 +234,20 @@ def main(args):
                     ],
                 }
             )
+            if post_removal_data.matchWithSensationMap is not None:
+                metainfo_dict.update(
+                    {
+                        "Num maternal sensed kicks - post_hiccup": [
+                            post_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]
+                        ],
+                        "Num detected kicks - post_hiccup": [
+                            post_removal_data.matchWithSensationMap["num_detected_kicks"]
+                        ],
+                        "Num sensor events - post_hiccup": [
+                            post_removal_data.matchWithSensationMap["num_sensor_events"]
+                        ]
+                    }
+                )
             del post_removal_data  # Free memory
 
         del pre_removal_data  # Free memory
