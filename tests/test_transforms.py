@@ -186,8 +186,21 @@ def test_features_for_train(folder):
     
     feature_extractor = FeatureExtractor(**dataset_cfg['data_pipeline']['extract_feat'])
 
-    extracted_detections = joblib.load(
-        os.path.join(data_folder, folder, "extracted_detections_train.pkl")
+    detection_extractor = DetectionExtractor(**dataset_cfg['data_pipeline']['extract_det'])
+
+    preprocessed_data = joblib.load(
+        os.path.join(data_folder, folder, "preprocessed_data.pkl")
+    )
+    scheme_dict = joblib.load(
+        os.path.join(data_folder, folder, "scheme_dict.pkl")
+    )
+    sensation_map = joblib.load(
+        os.path.join(data_folder, folder, "sensation_map.pkl")
+    )
+    extracted_detections = detection_extractor.transform(
+        inference=False,
+        preprocessed_data=preprocessed_data, scheme_dict=scheme_dict,
+        sensation_map=sensation_map
     )
     fm_dict = joblib.load(
         os.path.join(data_folder, folder, "fm_dict.pkl")
