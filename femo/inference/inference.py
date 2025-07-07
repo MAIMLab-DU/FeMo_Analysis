@@ -241,6 +241,10 @@ class PredictionService(object):
                 index_window_end = int(min(index_window_start+self.metrics._sensor_freq*matching_window_size, L_removed))
         
         return {
+            "true_positive": true_pos,
+            "false_positive": false_pos,
+            "true_negative": true_neg,
+            "false_negative": false_neg,
             "num_maternally_sensed_kicks": true_pos+false_neg,
             "num_detected_kicks": true_pos+false_pos,
             "num_sensor_events": true_pos + false_neg + true_neg + false_pos,

@@ -197,6 +197,18 @@ def main(args):
         if pre_removal_data.matchWithSensationMap is not None:
             metainfo_dict.update(
                 {
+                    "True positive - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap["true_positive"]
+                    ],
+                    "False positive - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap["false_positive"]
+                    ],
+                    "True negative - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap["true_negative"]
+                    ],
+                    "False negative - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap["false_negative"]
+                    ],
                     "Num maternal sensed kicks - pre_hiccup": [
                         pre_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]
                     ],
@@ -237,6 +249,18 @@ def main(args):
             if post_removal_data.matchWithSensationMap is not None:
                 metainfo_dict.update(
                     {
+                        "True positive - post_hiccup": [
+                            post_removal_data.matchWithSensationMap["true_positive"]
+                        ],
+                        "False positive - post_hiccup": [
+                            post_removal_data.matchWithSensationMap["false_positive"]
+                        ],
+                        "True negative - post_hiccup": [
+                            post_removal_data.matchWithSensationMap["true_negative"]
+                        ],
+                        "False negative - post_hiccup": [
+                            post_removal_data.matchWithSensationMap["false_negative"]
+                        ],
                         "Num maternal sensed kicks - post_hiccup": [
                             post_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]
                         ],

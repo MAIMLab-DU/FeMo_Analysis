@@ -228,6 +228,10 @@ def build_match_pred_with_sensation(pred_output: dict, remove_hiccups: bool) -> 
     pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']    
     result = {
         "pre_hiccup": {
+            "true_positive": int(pre_removal_data.matchWithSensationMap["true_positive"]),
+            "false_positive": int(pre_removal_data.matchWithSensationMap["false_positive"]),
+            "true_negative": int(pre_removal_data.matchWithSensationMap["true_negative"]),
+            "false_negative": int(pre_removal_data.matchWithSensationMap["false_negative"]),
             "num_maternally_sensed_kicks": int(pre_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]),
             "num_ml_matched_kicks": int(pre_removal_data.matchWithSensationMap["num_detected_kicks"]),
             "num_sensor_events": int(pre_removal_data.matchWithSensationMap["num_sensor_events"]),
