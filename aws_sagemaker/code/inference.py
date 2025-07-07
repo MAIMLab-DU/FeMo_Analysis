@@ -135,7 +135,7 @@ def build_inference_metainfo_data(pred_output: dict, remove_hiccups: bool, inclu
         result["pre_hiccup"]["onsetInterval_sec"] = [float(x) for x in pre_removal_data.onsetInterval]
     
     # Only include post-hiccup data if hiccup removal was performed
-    if remove_hiccups and 'post_hiccup_removal' in pred_output:
+    if remove_hiccups and pred_output.get('post_hiccup_removal', None) is not None:
         post_removal_data: InferenceMetaInfo = pred_output['post_hiccup_removal']['data']
         
         post_onset_intervals = post_removal_data.onsetInterval
@@ -201,7 +201,7 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
             post_hiccup = pred_output.get('post_hiccup_removal', {})
             hiccup_map = post_hiccup.get('hiccup_map')
             if hiccup_map is not None:
-                event_types['other'] = np.array(hiccup_map)
+                event_types['fetal_hiccups'] = np.array(hiccup_map)
         
         # Add maternally sensed kicks if available
         sensation_map = pipeline_output.get('sensation_map')
@@ -220,6 +220,30 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
     except Exception as e:
         LOGGER.error(f"Error building inference events data: {e}")
         raise ValueError(f"Failed to build inference events data: {e}")
+
+
+def build_match_pred_with_sensation(pred_output: dict, remove_hiccups: bool) -> dict:
+    """Build match with sensation map from prediction output."""
+
+    pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']    
+    result = {
+        "pre_hiccup": {
+            "num_maternally_sensed_kicks": int(pre_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]),
+            "num_ml_matched_kicks": int(pre_removal_data.matchWithSensationMap["num_detected_kicks"]),
+            "num_sensor_events": int(pre_removal_data.matchWithSensationMap["num_sensor_events"]),
+        }
+    }    
+    
+    # Only include post-hiccup data if hiccup removal was performed
+    if remove_hiccups and pred_output.get('post_hiccup_removal', None) is not None:
+        post_removal_data: InferenceMetaInfo = pred_output['post_hiccup_removal']['data']
+        result["post_hiccup"] = {
+            "num_maternally_sensed_kicks": int(post_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]),
+            "num_ml_matched_kicks": int(post_removal_data.matchWithSensationMap["num_detected_kicks"]),
+            "num_sensor_events": int(post_removal_data.matchWithSensationMap["num_sensor_events"]),
+        }
+    
+    return result  
 
 
 def process_inference_request(request_data: InferenceRequest) -> str:
@@ -261,6 +285,14 @@ def process_inference_request(request_data: InferenceRequest) -> str:
             "events": events
         }
         output_type = "events"
+    
+    if np.sum(pred_output["pipeline_output"]["sensation_map"]) > 0:
+        LOGGER.info(f"Detected maternally sensed kicks in jobId: {request_data.jobId}")
+        matched_dict = build_match_pred_with_sensation(
+            pred_output, 
+            request_data.removeHiccups
+        )
+        inference_result["match_pred_with_sensation"] = matched_dict
     
     # Prepare complete result
     complete_result = {
