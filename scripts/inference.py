@@ -195,29 +195,42 @@ def main(args):
             ],
         }
         if pre_removal_data.matchWithSensationMap is not None:
+            tp = pre_removal_data.matchWithSensationMap.true_positive
+            fp = pre_removal_data.matchWithSensationMap.false_positive
+            tn = pre_removal_data.matchWithSensationMap.true_negative
+            fn = pre_removal_data.matchWithSensationMap.false_negative
             metainfo_dict.update(
                 {
                     "True positive - pre_hiccup": [
-                        pre_removal_data.matchWithSensationMap["true_positive"]
+                        tp
                     ],
                     "False positive - pre_hiccup": [
-                        pre_removal_data.matchWithSensationMap["false_positive"]
+                        fp
                     ],
                     "True negative - pre_hiccup": [
-                        pre_removal_data.matchWithSensationMap["true_negative"]
+                        tn
                     ],
                     "False negative - pre_hiccup": [
-                        pre_removal_data.matchWithSensationMap["false_negative"]
+                        fn
                     ],
-                    "Num maternal sensed kicks - pre_hiccup": [
-                        pre_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]
+                    "Num sensation label - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap.num_maternal_sensed
                     ],
-                    "Num detected kicks - pre_hiccup": [
-                        pre_removal_data.matchWithSensationMap["num_detected_kicks"]
+                    "Num sensation calc - pre_hiccup": [
+                        tp + fn
                     ],
-                    "Num sensor events - pre_hiccup": [
-                        pre_removal_data.matchWithSensationMap["num_sensor_events"]
-                    ]
+                    "Num sensor label - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap.num_sensor_detections
+                    ],
+                    "Num sensor calc - pre_hiccup": [
+                        tp + fp + tn + fn
+                    ],
+                    "Num ML label - pre_hiccup": [
+                        pre_removal_data.matchWithSensationMap.num_ml_detections
+                    ],
+                    "Num ML calc - pre_hiccup": [
+                        tp + fp
+                    ],
                 }
             )
 
@@ -247,29 +260,42 @@ def main(args):
                 }
             )
             if post_removal_data.matchWithSensationMap is not None:
+                post_tp = post_removal_data.matchWithSensationMap.true_positive
+                post_fp = post_removal_data.matchWithSensationMap.false_positive
+                post_tn = post_removal_data.matchWithSensationMap.true_negative
+                post_fn = post_removal_data.matchWithSensationMap.false_negative
                 metainfo_dict.update(
                     {
                         "True positive - post_hiccup": [
-                            post_removal_data.matchWithSensationMap["true_positive"]
+                            post_tp
                         ],
                         "False positive - post_hiccup": [
-                            post_removal_data.matchWithSensationMap["false_positive"]
+                            post_fp
                         ],
                         "True negative - post_hiccup": [
-                            post_removal_data.matchWithSensationMap["true_negative"]
+                            post_tn
                         ],
                         "False negative - post_hiccup": [
-                            post_removal_data.matchWithSensationMap["false_negative"]
+                            post_fn
                         ],
-                        "Num maternal sensed kicks - post_hiccup": [
-                            post_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]
+                        "Num sensation label - post_hiccup": [
+                            post_removal_data.matchWithSensationMap.num_maternal_sensed
                         ],
-                        "Num detected kicks - post_hiccup": [
-                            post_removal_data.matchWithSensationMap["num_detected_kicks"]
+                        "Num sensation calc - post_hiccup": [
+                            post_tp + post_fn
                         ],
-                        "Num sensor events - post_hiccup": [
-                            post_removal_data.matchWithSensationMap["num_sensor_events"]
-                        ]
+                        "Num sensor label - post_hiccup": [
+                            post_removal_data.matchWithSensationMap.num_sensor_detections
+                        ],
+                        "Num sensor calc - post_hiccup": [
+                            post_tp + post_fp + post_tn + post_fn
+                        ],
+                        "Num ML label - post_hiccup": [
+                            post_removal_data.matchWithSensationMap.num_ml_detections
+                        ],
+                        "Num ML calc - post_hiccup": [
+                            post_tp + post_fp
+                        ],
                     }
                 )
             del post_removal_data  # Free memory

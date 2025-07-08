@@ -225,29 +225,47 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
 def build_match_pred_with_sensation(pred_output: dict, remove_hiccups: bool) -> dict:
     """Build match with sensation map from prediction output."""
 
-    pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']    
+    pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']
+    tp = int(pre_removal_data.matchWithSensationMap.true_positive)
+    fp = int(pre_removal_data.matchWithSensationMap.false_positive)
+    tn = int(pre_removal_data.matchWithSensationMap.true_negative)
+    fn = int(pre_removal_data.matchWithSensationMap.false_negative)
     result = {
         "pre_hiccup": {
-            "true_positive": int(pre_removal_data.matchWithSensationMap["true_positive"]),
-            "false_positive": int(pre_removal_data.matchWithSensationMap["false_positive"]),
-            "true_negative": int(pre_removal_data.matchWithSensationMap["true_negative"]),
-            "false_negative": int(pre_removal_data.matchWithSensationMap["false_negative"]),
-            "num_maternally_sensed_kicks": int(pre_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]),
-            "num_ml_matched_kicks": int(pre_removal_data.matchWithSensationMap["num_detected_kicks"]),
-            "num_sensor_events": int(pre_removal_data.matchWithSensationMap["num_sensor_events"]),
+            "true_positive": tp,
+            "false_positive": fp,
+            "true_negative": tn,
+            "false_negative": fn,
+            "num_sensation_label": int(pre_removal_data.matchWithSensationMap.num_maternal_sensed),
+            "num_sensation_calc": tp + fn,
+            "num_sensor_label": int(pre_removal_data.matchWithSensationMap.num_ml_detections),
+            "num_sensor_calc": tp + fp + tn + fn,
+            "num_ml_label": int(pre_removal_data.matchWithSensationMap.num_sensor_detections),
+            "num_ml_calc": tp + fp,
         }
-    }    
+    }
     
     # Only include post-hiccup data if hiccup removal was performed
     if remove_hiccups and pred_output.get('post_hiccup_removal', None) is not None:
         post_removal_data: InferenceMetaInfo = pred_output['post_hiccup_removal']['data']
+        post_tp = int(post_removal_data.matchWithSensationMap.true_positive)
+        post_fp = int(post_removal_data.matchWithSensationMap.false_positive)
+        post_tn = int(post_removal_data.matchWithSensationMap.true_negative)
+        post_fn = int(post_removal_data.matchWithSensationMap.false_negative)
         result["post_hiccup"] = {
-            "num_maternally_sensed_kicks": int(post_removal_data.matchWithSensationMap["num_maternally_sensed_kicks"]),
-            "num_ml_matched_kicks": int(post_removal_data.matchWithSensationMap["num_detected_kicks"]),
-            "num_sensor_events": int(post_removal_data.matchWithSensationMap["num_sensor_events"]),
+            "true_positive": post_tp,
+            "false_positive": post_fp,
+            "true_negative": post_tn,
+            "false_negative": post_fn,
+            "num_sensation_label": int(post_removal_data.matchWithSensationMap.num_maternal_sensed),
+            "num_sensation_calc": post_tp + post_fn,
+            "num_sensor_label": int(post_removal_data.matchWithSensationMap.num_ml_detections),
+            "num_sensor_calc": post_tp + post_fp + post_tn + post_fn,
+            "num_ml_label": int(post_removal_data.matchWithSensationMap.num_sensor_detections),
+            "num_ml_calc": post_tp + post_fp,
         }
     
-    return result  
+    return result
 
 
 def process_inference_request(request_data: InferenceRequest) -> str:

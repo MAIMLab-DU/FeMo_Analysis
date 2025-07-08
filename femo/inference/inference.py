@@ -18,17 +18,27 @@ from ..data.transforms._utils import custom_binary_dilation, custom_binary_erosi
 
 
 @dataclass
+class MatchWithSensationMap:
+    true_positive: int
+    false_positive: int
+    true_negative: int
+    false_negative: int
+    num_maternal_sensed: int
+    num_sensor_detections: int
+    num_ml_detections: int
+
+
+@dataclass
 class InferenceMetaInfo:
     """
     Holds the data for inference.
     """
-
     fileName: str
     numKicks: int
     totalFMDuration: float
     totalNonFMDuration: float
     onsetInterval: list
-    matchWithSensationMap: dict = None
+    matchWithSensationMap: dict | MatchWithSensationMap = None
 
 
 class PredictionService(object):
@@ -134,12 +144,15 @@ class PredictionService(object):
         if np.sum(pipeline_output["sensation_map"]):
             sensation_map = pipeline_output["sensation_map"]
             imu_map = pipeline_output["imu_map"]
+            scheme_dict = pipeline_output["scheme_dict"]
             matched_dict = self._match_with_sensation_map(
                 preprocessed_data=pipeline_output["preprocessed_data"],
                 imu_map=imu_map,
                 sensation_map=sensation_map,
+                scheme_dict=scheme_dict,
                 ml_detection_map=binary_map,
             )
+            matched_dict = MatchWithSensationMap(**matched_dict)
 
         data = InferenceMetaInfo(
             fileName=os.path.basename(filename),
@@ -155,6 +168,7 @@ class PredictionService(object):
                                   preprocessed_data: dict,
                                   imu_map: np.ndarray,
                                   sensation_map: np.ndarray,
+                                  scheme_dict: dict,
                                   ml_detection_map: np.ndarray):
 
         # window size is equal to the window size used to create the maternal sensation map
@@ -163,6 +177,7 @@ class PredictionService(object):
         min_overlap_time = self.metrics.fm_dilation / 2
 
         sensation_data = preprocessed_data['sensation_data']
+        num_labels = scheme_dict['num_labels']
 
         # Variable declaration
         true_pos = 0  # True positive ML detection
@@ -239,15 +254,15 @@ class PredictionService(object):
 
                 index_window_start = index_window_end + 1
                 index_window_end = int(min(index_window_start+self.metrics._sensor_freq*matching_window_size, L_removed))
-        
+
         return {
             "true_positive": true_pos,
             "false_positive": false_pos,
             "true_negative": true_neg,
             "false_negative": false_neg,
-            "num_maternally_sensed_kicks": true_pos+false_neg,
-            "num_detected_kicks": true_pos+false_pos,
-            "num_sensor_events": true_pos + false_neg + true_neg + false_pos,
+            "num_maternal_sensed": num_maternal_sensed,
+            "num_sensor_detections": num_labels,
+            "num_ml_detections": np.max(label(ml_detection_map))
         }
 
     def _pre_hiccup_removal(
