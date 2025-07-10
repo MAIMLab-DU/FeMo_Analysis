@@ -19,6 +19,7 @@ class Result:
     start_indices: list[np.ndarray]|np.ndarray = None
     end_indices: list[np.ndarray]|np.ndarray = None
     dat_file_key: list[np.ndarray]|np.ndarray = None
+    # tp, fp, tn, fm
 
     @staticmethod
     def process_attributes(attribute,

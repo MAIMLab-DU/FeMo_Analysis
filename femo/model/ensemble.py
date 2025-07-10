@@ -185,6 +185,8 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
                 y_true=y_test, 
                 y_pred=y_test_pred
             )
+
+            
             perf_metrics['train_accuracy'].append(current_train_accuracy)
             perf_metrics['test_accuracy'].append(current_test_accuracy)
             perf_metrics['train_f1_score'].append(current_train_f1_score)
@@ -214,12 +216,19 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         self.logger.info(f"Average testing accuracy: {np.mean(perf_metrics['test_accuracy'])}")
         self.logger.info(f"Average training F1 score: {np.mean(perf_metrics['train_f1_score'])}")
         self.logger.info(f"Average testing F1 score: {np.mean(perf_metrics['test_f1_score'])}")
-
-        if non_fm_preg_data is not None:
+        
+        # if non preg data is not empty, evaluate the model on it
+        if non_fm_preg_data is not None and len(non_fm_preg_data) > 0:
             X_non_fm = non_fm_preg_data[:, :-5]
             y_non_fm = non_fm_preg_data[:, -1].astype(int)
             y_non_fm_pred = best_model.predict(X_non_fm)
             y_non_fm_pred_score = best_model.predict_proba(X_non_fm)[:, 1]
+
+            perf_metrics['non_fm_accuracy'] = accuracy_score(y_non_fm, y_non_fm_pred)
+            perf_metrics['non_fm_f1_score'] = f1_score(y_non_fm, y_non_fm_pred)
+
+            self.logger.info(f"Non-FM Preg Data Accuracy: {perf_metrics['non_fm_accuracy']:.3f}")
+            self.logger.info(f"Non-FM Preg Data F1 Score: {perf_metrics['non_fm_f1_score']:.3f}")
 
             predictions.append(y_non_fm_pred)
             prediction_scores.append(y_non_fm_pred_score)

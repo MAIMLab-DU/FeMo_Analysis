@@ -3,7 +3,7 @@ set -e
 
 # Record the start time
 start_time="$(date +%s)"
-VIRTUAL_ENV=.venv
+VIRTUAL_ENV=.virtualenv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Adjust paths for Windows compatibility
