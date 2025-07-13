@@ -1,7 +1,8 @@
 import time
 import numpy as np
+import pandas as pd
 from scipy.signal import butter, sosfiltfilt
-from ._utils import apply_pca
+from ._utils import apply_pca, str2bool
 from .base import BaseTransform
 
 
@@ -45,93 +46,133 @@ class DataPreprocessor(BaseTransform):
                     i = i + j
         return new_sensation_data
     
-    def transform(self, loaded_data: dict):
+    def transform(self, loaded_data: dict) -> dict:
+        """
+        Applies band-pass filtering, trims edge data, and optionally debounces maternal sensation signal,
+        without mutating the original loaded_data.
+
+        Filtering:
+            - FM sensors (sensor_1 through sensor_6): 1-30 Hz band-pass
+            - IMU acceleration + rotation: 1-10 Hz band-pass
+
+        Trimming:
+            - Remove first/last removal_period seconds (30 s if total duration > 5 min, else 5 s)
+
+        Debouncing:
+            - Optional logic to clean up binary maternal sensation signal
+
+        Args:
+            loaded_data (dict): Contains raw data for keys:
+                'sensor_1'…'sensor_6' (np.ndarray),
+                'imu_acceleration' (np.ndarray),
+                'imu_rotation' (pd.DataFrame with ['roll','pitch','yaw']),
+                and optionally 'sensation_data' (np.ndarray).
+
+        Returns:
+            dict: Preprocessed outputs:
+                - 'sensor_1'…'sensor_6' (np.ndarray)
+                - 'imu_acceleration' (np.ndarray)
+                - 'imu_rotation' (pd.DataFrame)
+                - 'imu_rotation_1D' (np.ndarray)
+                - 'sensation_data' (np.ndarray)
+        """
+        # Start timer
         start = time.time()
-        preprocessed_data = loaded_data.copy()
-        
-        # ---------------------------- Filter design -----------------------------#
-        # 3 types of filters are designed-
-        # bandpass filter, low-pass filter, and IIR notch filter.
+        self.logger.debug(f"Starting preprocessing for keys: {list(loaded_data.keys())}")
 
-        # TODO: Add settings file
-        # Filter setting
-        filter_order = 10
-        lowCutoff_FM = 1
-        highCutoff_FM = 30
-        lowCutoff_IMU = 1
-        highCutoff_IMU = 10
-        highCutoff_force = 10  # noqa: F841
-            
-        if len(loaded_data['sensor_1']) > self.sensor_freq*5*60:  # If greater than 5 minutes remove last and first 30 seconds
-            removal_period = 30  # Removal period in seconds   
-        else:  # Else remove just 5 seconds
-            removal_period = 5  # Removal period in seconds
+        # 1) Extract raw inputs without mutating loaded_data
+        s1_old = loaded_data['sensor_1']
+        s2_old = loaded_data['sensor_2']
+        s3_old = loaded_data['sensor_3']
+        s4_old = loaded_data['sensor_4']
+        s5_old = loaded_data['sensor_5']
+        s6_old = loaded_data['sensor_6']
+        acc_old = loaded_data['imu_acceleration']
+        rot_df_old = loaded_data['imu_rotation']
+        sens_old = loaded_data.get('sensation_data', np.array([], dtype=np.int8))
 
-        self.logger.debug(f"Filter order: {filter_order:.1f}")
-        self.logger.debug(f"IMU band-pass: {lowCutoff_IMU}-{highCutoff_IMU} Hz")
-        self.logger.debug(f"FM band-pass: {lowCutoff_FM}-{highCutoff_FM} Hz")
-        # self.logger.debug(f'\tForce sensor low-pass: {highCutoff_force} Hz')
-        self.logger.debug(f"Removal period: {removal_period} s")
+        # 2) Pre-allocate new arrays (float32 to minimize memory)
+        N = s1_old.shape[0]
+        s1 = np.empty(N, dtype=np.float32)
+        s2 = np.empty(N, dtype=np.float32)
+        s3 = np.empty(N, dtype=np.float32)
+        s4 = np.empty(N, dtype=np.float32)
+        s5 = np.empty(N, dtype=np.float32)
+        s6 = np.empty(N, dtype=np.float32)
+        imu_acc = np.empty(N, dtype=np.float32)
+        imu_rot_arr = np.empty((N, 3), dtype=np.float32)
+        sens_data = sens_old.astype(np.int8).copy()
 
-        # TODO: Add descriptive comments to docstrings or wiki
-        # ================Bandpass filter design==========================
-        #   A band-pass filter with a passband of 1-20 Hz is disigned for the fetal fetal movement data
-        #   Another band-pass filer with a passband of 1-10 Hz is designed for the IMU data
+        # 3) Design band-pass filters
+        fs = self.sensor_freq
+        order = 10
+        sos_FM  = butter(order//2, [1, 30], btype='bandpass', fs=fs, output='sos')
+        sos_IMU = butter(order//2, [1, 10], btype='bandpass', fs=fs, output='sos')
 
-        # ========SOS-based design
-        # Get second-order sections form
-        sos_FM  = butter(filter_order / 2, np.array([lowCutoff_FM, highCutoff_FM]) / (self.sensor_freq / 2), 'bandpass', output='sos')  # filter order for bandpass filter is twice the value of 1st parameter
-        sos_IMU = butter(filter_order / 2, np.array([lowCutoff_IMU, highCutoff_IMU]) / (self.sensor_freq / 2), 'bandpass', output='sos')
-        
-        # ========Zero-Pole-Gain-based design
-        # z_FM, p_FM, k_FM = butter(filter_order / 2, np.array([lowCutoff_FM, highCutoff_FM]) / (sensor_freq / 2), 'bandpass', output='zpk')# filter order for bandpass filter is twice the value of 1st parameter
-        # sos_FM, g_FM = zpk2sos(z_FM, p_FM, k_FM) #Convert zero-pole-gain filter parameters to second-order sections form
-        # z_IMU,p_IMU,k_IMU = butter(filter_order / 2, np.array([lowCutoff_IMU, highCutoff_IMU]) / (sensor_freq / 2), 'bandpass', output='zpk')
-        # sos_IMU, g_IMU = zpk2sos(z_IMU,p_IMU,k_IMU)
-        
-        # ========Transfer function-based design
-        # Numerator (b) and denominator (a) polynomials of the IIR filter
-        # b_FM,a_FM   = butter(filter_order/2,np.array([lowCutoff_FM, highCutoff_FM])/(sensor_freq/2),'bandpass', output='ba')# filter order for bandpass filter is twice the value of 1st parameter
-        # b_IMU,a_IMU = butter(filter_order/2,np.array([lowCutoff_IMU, highCutoff_IMU])/(sensor_freq/2),'bandpass', output='ba')
-        
+        # 4) Batch-filter all 6 FM channels at once
+        fm_stack = np.vstack([s1_old, s2_old, s3_old, s4_old, s5_old, s6_old])
+        fm_filt  = sosfiltfilt(sos_FM, fm_stack, axis=1)
+        s1, s2, s3, s4, s5, s6 = fm_filt.astype(np.float32)
+        self.logger.debug("FM channels filtered")
 
-        # -----------------------Data filtering--------------------------------
-        
-        # Bandpass filtering
-        preprocessed_data['sensor_1']                = sosfiltfilt(sos_FM,  preprocessed_data['sensor_1'])
-        preprocessed_data['sensor_2']                = sosfiltfilt(sos_FM,  preprocessed_data['sensor_2'])
-        preprocessed_data['sensor_3']                = sosfiltfilt(sos_FM,  preprocessed_data['sensor_3'])
-        preprocessed_data['sensor_4']                = sosfiltfilt(sos_FM,  preprocessed_data['sensor_4'])
-        preprocessed_data['sensor_5']                = sosfiltfilt(sos_FM,  preprocessed_data['sensor_5'])
-        preprocessed_data['sensor_6']                = sosfiltfilt(sos_FM,  preprocessed_data['sensor_6'])
-        preprocessed_data['imu_acceleration']        = sosfiltfilt(sos_IMU, preprocessed_data['imu_acceleration'])
-        preprocessed_data['imu_rotation']['roll']    = sosfiltfilt(sos_IMU, preprocessed_data['imu_rotation']['roll'].values)
-        preprocessed_data['imu_rotation']['pitch']   = sosfiltfilt(sos_IMU, preprocessed_data['imu_rotation']['pitch'].values)
-        preprocessed_data['imu_rotation']['yaw']     = sosfiltfilt(sos_IMU, preprocessed_data['imu_rotation']['yaw'].values)
+        # 5) Batch-filter IMU accel + 3 rotation dims in one go
+        imu_stack = np.vstack([acc_old, 
+                                rot_df_old['roll'].values,
+                                rot_df_old['pitch'].values,
+                                rot_df_old['yaw'].values])
+        imu_filt    = sosfiltfilt(sos_IMU, imu_stack, axis=1)
+        imu_acc     = imu_filt[0].astype(np.float32)
+        imu_rot_arr = imu_filt[1:].T.astype(np.float32)
+        self.logger.debug("FM & IMU channels batch-filtered")
 
-        # -----------------------Data trimming---------------------------------
-        
-        # Trimming of raw data
-        start_index = removal_period * self.sensor_freq
-        end_index = -removal_period * self.sensor_freq
-        try:
-            preprocessed_data['sensation_data'] = preprocessed_data['sensation_data'][start_index:end_index]
-            if self.resolve_debounce:
-                preprocessed_data['sensation_data'] = self._resolve_debouncing(preprocessed_data['sensation_data'])
-        except IndexError:
-            preprocessed_data['sensation_data'] = preprocessed_data['sensation_data']
+        # 6) Trim edges to remove startup/shutdown transients
+        duration_sec = N / fs
+        removal_period = 30 if duration_sec > 300 else 5
+        i0, i1 = int(removal_period * fs), -int(removal_period * fs)
+        s1 = s1[i0:i1]
+        s2 = s2[i0:i1]
+        s3 = s3[i0:i1]
+        s4 = s4[i0:i1]
+        s5 = s5[i0:i1]
+        s6 = s6[i0:i1]
+        imu_acc    = imu_acc[i0:i1]
+        imu_rot_arr = imu_rot_arr[i0:i1, :]
+        sens_data   = sens_data[i0:i1]
+        self.logger.debug(f"Signals trimmed to indices [{i0}:{i1}] (removal_period={removal_period}s)")
 
-        # Trimming of filtered data
-        preprocessed_data['sensor_1']                = preprocessed_data['sensor_1'][start_index:end_index]
-        preprocessed_data['sensor_2']                = preprocessed_data['sensor_2'][start_index:end_index]
-        preprocessed_data['sensor_3']                = preprocessed_data['sensor_3'][start_index:end_index]
-        preprocessed_data['sensor_4']                = preprocessed_data['sensor_4'][start_index:end_index]
-        preprocessed_data['sensor_5']                = preprocessed_data['sensor_5'][start_index:end_index]
-        preprocessed_data['sensor_6']                = preprocessed_data['sensor_6'][start_index:end_index]
-        preprocessed_data['imu_acceleration']        = preprocessed_data['imu_acceleration'][start_index:end_index]
-        preprocessed_data['imu_rotation']            = preprocessed_data['imu_rotation'].iloc[start_index:end_index]           
+        # 7) Optionally resolve debounce noise
+        if sens_data.size and str2bool(self.resolve_debounce):
+            sens_data = self._resolve_debouncing(sens_data)
+            self.logger.debug("Debouncing applied")
 
-        preprocessed_data['imu_rotation_1D'] = apply_pca(preprocessed_data['imu_rotation'])
-        self.logger.debug(f"Data preprocessed in {(time.time()-start)*1000} ms")
+        # 8) PCA on IMU rotation → 1D summary
+        imu_pca = apply_pca(imu_rot_arr)
+        self.logger.debug(f"PCA on rotation produced shape {imu_pca.shape}")
 
-        return preprocessed_data
+        # 9) Wrap Euler angles back into DataFrame for downstream compatibility
+        # preserve the original time-step indices
+        orig_idx      = rot_df_old.index
+        trimmed_idx   = orig_idx[i0:i1]
+        imu_rot_df = pd.DataFrame(
+            imu_rot_arr,
+            index=trimmed_idx,
+            columns=['roll', 'pitch', 'yaw']
+        )
+
+        # 10) Assemble and return processed dictionary
+        processed = {
+            'sensor_1':         s1,
+            'sensor_2':         s2,
+            'sensor_3':         s3,
+            'sensor_4':         s4,
+            'sensor_5':         s5,
+            'sensor_6':         s6,
+            'imu_acceleration': imu_acc,
+            'imu_rotation':     imu_rot_df,
+            'imu_rotation_1D':  imu_pca,
+            'sensation_data':   sens_data,
+        }
+
+        elapsed_ms = (time.time() - start) * 1000
+        self.logger.info(f"Preprocessing finished in {elapsed_ms:.2f} ms")
+        return processed

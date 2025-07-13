@@ -1,171 +1,430 @@
-import os
+import time
 import yaml
+import pickle
 import joblib
 import tarfile
-import time
+import pandas as pd
+from typing import Any
 from ..logger import LOGGER
-from collections import defaultdict
 from .transforms import (
     DataLoader,
     DataPreprocessor,
     SensorFusion,
     DataSegmentor,
     DetectionExtractor,
-    FeatureExtractor
+    FeatureExtractor,
 )
 
 
 class Pipeline(object):
+    STAGE_NAME_MAP = {
+        "load": 0,
+        "preprocess": 1,
+        "segment": 2,
+        "fusion": 3,
+        "extract_det": 4,
+        "extract_feat": 5,
+    }
 
     @property
     def logger(self):
         return LOGGER
 
-    def __init__(self,
-                 cfg: dict|str,
-                 inference: bool = False) -> None:
-
+    def __init__(self, cfg: dict | str, inference: bool = False) -> None:
         self.inference = inference
         self.cfg = cfg if isinstance(cfg, dict) else self._get_pipeline_cfg(cfg)
-        self.stages = self._get_stages(
-            pipeline_cfg=self.cfg
-        )
+        self.stages = self._get_stages(pipeline_cfg=self.cfg)
 
     @staticmethod
     def _get_pipeline_cfg(path=None):
         if path is None:
             raise ValueError("Pipeline configuration file path is required.")
-        with open(path, 'r') as file:
+        with open(path, "r") as file:
             return yaml.safe_load(file)
 
-    def _get_stages(self, pipeline_cfg: dict):
-        stages = defaultdict()
+    @staticmethod
+    def _get_stages(pipeline_cfg: dict):
+        # Build stages with name keys
+        stages_named = {
+            "load": DataLoader(**pipeline_cfg.get("load", {})),
+            "preprocess": DataPreprocessor(**pipeline_cfg.get("preprocess", {})),
+            "segment": DataSegmentor(**pipeline_cfg.get("segment", {})),
+            "fusion": SensorFusion(**pipeline_cfg.get("fusion", {})),
+            "extract_det": DetectionExtractor(**pipeline_cfg.get("extract_det", {})),
+            "extract_feat": FeatureExtractor(**pipeline_cfg.get("extract_feat", {})),
+        }
+        # Add legacy numeric-indexed keys
+        for name, idx in Pipeline.STAGE_NAME_MAP.items():
+            stages_named[idx] = stages_named[name]
+        return stages_named
 
-        stages[0] = DataLoader(**pipeline_cfg.get('load', {}))
-        stages[1] = DataPreprocessor(**pipeline_cfg.get('preprocess', {}))
-        stages[2] = DataSegmentor(**pipeline_cfg.get('segment', {}))
-        stages[3] = SensorFusion(**pipeline_cfg.get('fusion', {}))
-        stages[4] = DetectionExtractor(**pipeline_cfg.get('extract_det', {}))
-        stages[5] = FeatureExtractor(**pipeline_cfg.get('extract_feat', {}))
+    def get_stage(self, name_or_index: str | int):
+        """Get stage by name or legacy numeric index."""
+        if isinstance(name_or_index, int):
+            return self.stages.get(name_or_index)
+        if name_or_index in self.stages:
+            return self.stages[name_or_index]
+        if name_or_index in self.STAGE_NAME_MAP:
+            return self.stages.get(self.STAGE_NAME_MAP[name_or_index])
+        raise KeyError(f"No such stage: {name_or_index}")
 
-        return stages
+    def set_stage_params(self, stage_name: str, **kwargs):
+        """
+        Change one or more parameters on a given stage, with logging of old/new values.
+        """
+        try:
+            stage = self.get_stage(stage_name)
+        except KeyError:
+            raise KeyError(f"Unknown stage '{stage_name}'")
 
-    def process(self, filename: str, feature_set: str = 'crafted', outputs: list[str] = [
-        'imu_map', 'fm_dict', 'scheme_dict', 'sensation_map',
-        'extracted_detections', 'extracted_features', 'loaded_data',
-        'preprocessed_data'
-    ]):
-        start = time.time()
+        for key, val in kwargs.items():
+            if not hasattr(stage, key):
+                raise AttributeError(f"Stage '{stage_name}' has no attribute '{key}'")
+            old_val = getattr(stage, key)
+            setattr(stage, key, val)
+            self.logger.info(f"[{stage_name}] Updated '{key}': {old_val} -> {val}")
+
+    def process(
+        self,
+        filename: str,
+        feature_set: str = "crafted",
+        outputs: str | list[str] = None,
+    ) -> dict[str, Any]:
+        # Define supported outputs and their direct stage dependencies
+        SUPPORTED_OUTPUTS = {
+            "loaded_data": {"load"},
+            "preprocessed_data": {"preprocess"},
+            "imu_map": {"segment"},
+            "fm_dict": {"segment"},
+            "sensation_map": {"segment"},
+            "scheme_dict": {"fusion"},
+            "extracted_detections": {"extract_det"},
+            "extracted_features": {"extract_feat"},
+        }
+        # Define stage→stage prerequisites
+        STAGE_DEPS = {
+            "load": set(),
+            "preprocess": {"load"},
+            "segment": {"preprocess"},
+            "fusion": {"segment"},
+            "extract_det": {"fusion", "segment", "preprocess"},
+            "extract_feat": {"extract_det", "segment"},
+        }
+        # Fixed execution order
+        EXEC_ORDER = [
+            "load",
+            "preprocess",
+            "segment",
+            "fusion",
+            "extract_det",
+            "extract_feat",
+        ]
+
+        # Default outputs if none specified
+        if outputs is None or outputs == 'all':
+            outputs = list(SUPPORTED_OUTPUTS.keys())
+
+        # Validate requested outputs
+        outputs = set(outputs)
+        unknown = outputs - set(SUPPORTED_OUTPUTS)
+        if unknown:
+            raise ValueError(f"Unknown outputs requested: {unknown}")
+
+        # Compute all required stages by walking the dependency graph
+        required_stages = set()
         
-        # Step-0: Load data
-        self.logger.debug(f"Loading data from {filename}")
-        loaded_data = self.stages[0](filename=filename)
+        def add_stage_and_deps(stage):
+            if stage in required_stages:
+                return
+            required_stages.add(stage)
+            for dep in STAGE_DEPS.get(stage, []):
+                add_stage_and_deps(dep)
 
-        # Step-1: Preprocess data (filter and trimming)
-        self.logger.debug("Preprocessing data...")
-        preprocessed_data = self.stages[1](loaded_data=loaded_data)
+        for out in outputs:
+            for stage in SUPPORTED_OUTPUTS[out]:
+                add_stage_and_deps(stage)
 
-        imu_map = fm_dict = sensation_map = scheme_dict = extracted_detections = extracted_features = None
+        # Prepare storage for stage results
+        results: dict[str, Any] = {}
 
-        # Step-2: Get imu_map, fm_dict (fm sensors), and sensation_dict (button)
-        if 'imu_map' in outputs:
-            self.logger.debug("Creating IMU accelerometer map...")
-            imu_map = self.stages[2](
-                map_name='imu',
-                preprocessed_data=preprocessed_data
-            )
-        if 'fm_dict' or 'scheme_dict' in outputs:
-            self.logger.debug("Creating FeMo sensors map...")
-            fm_dict = self.stages[2](
-                map_name='fm_sensor',
-                preprocessed_data=preprocessed_data,
-                imu_map=imu_map
-            )
-        if 'sensation_map' in outputs:
-            self.logger.debug("Creating maternal sensation map...")
-            sensation_map = None
-            if not self.inference:
-                sensation_map = self.stages[2](
-                    map_name='sensation',
-                    preprocessed_data=preprocessed_data,
-                    imu_map=imu_map
+        # Helper: run a stage only if required
+        def run_stage(name: str):
+            if name not in required_stages:
+                return
+            if name in results:
+                return  # already run
+            self.logger.info(f"Running stage '{name}'")
+            if name == 'load':
+                results['loaded_data'] = self.get_stage("load")(filename=filename)
+            elif name == 'preprocess':
+                results['preprocessed_data'] = self.get_stage("preprocess")(
+                    loaded_data=results['loaded_data']
+                )
+            elif name == 'segment':
+                # we might need to create three different maps
+                if 'imu_map' in outputs or 'segment' in required_stages:
+                    results.setdefault('imu_map', 
+                        self.get_stage('segment')(
+                            map_name='imu',
+                            preprocessed_data=results['preprocessed_data']
+                        )
+                    )
+                if 'fm_dict' in outputs or 'fusion' in required_stages or 'extract_det' in required_stages:
+                    results.setdefault('fm_dict',
+                        self.get_stage('segment')(
+                            map_name='fm_sensor',
+                            preprocessed_data=results['preprocessed_data'],
+                            imu_map=results.get('imu_map')
+                        )
+                    )
+                if ('sensation_map' in outputs or 'segment' in required_stages):
+                    results.setdefault('sensation_map',
+                        self.get_stage('segment')(
+                            map_name='sensation',
+                            preprocessed_data=results['preprocessed_data'],
+                            imu_map=results.get('imu_map')
+                        )
+                    )
+            elif name == 'fusion':
+                results['scheme_dict'] = self.get_stage('fusion')(
+                    fm_dict=results['fm_dict']
+                )
+            elif name == 'extract_det':
+                results['extracted_detections'] = self.get_stage('extract_det')(
+                    inference=self.inference,
+                    preprocessed_data=results['preprocessed_data'],
+                    scheme_dict=results['scheme_dict'],
+                    sensation_map=results.get('sensation_map')
+                )
+            elif name == 'extract_feat':
+                results['extracted_features'] = self.get_stage('extract_feat')(
+                    inference=self.inference,
+                    fm_dict=results['fm_dict'],
+                    extracted_detections=results['extracted_detections'],
+                    feat=feature_set
                 )
 
-        # Step-3: Sensor fusion
-        if 'scheme_dict' in outputs:
-            self.logger.debug(f"Combining {self.stages[3].num_sensors} sensors map...")
-            scheme_dict = self.stages[3](fm_dict=fm_dict)
+        # Execute in correct order
+        start = time.time()
+        for stage in EXEC_ORDER:
+            run_stage(stage)
+        self.logger.info(f"Pipeline finished in {time.time()-start:0.3f}s")
 
-        # Step-4: Extract detections (event and non-event) from segmented data
-        def extract_detections(fm_dict, scheme_dict, sensation_map):
-            if fm_dict is None:
-               fm_dict = self.stages[2](
-                map_name='fm_sensor',
-                preprocessed_data=preprocessed_data,
-                imu_map=imu_map
-            )
-            if scheme_dict is None:
-                scheme_dict = self.stages[3](fm_dict=fm_dict)
-            if sensation_map is None:
-                sensation_map = self.stages[2](
-                    map_name='sensation',
-                    preprocessed_data=preprocessed_data,
-                    imu_map=imu_map
-                )
-            out =  self.stages[4](
+        # Return only what was requested
+        return {out: results.get(out) for out in outputs}
+
+    def extract_features_batch(self, filename: str,
+                               feature_sets: str | list[str] = ['crafted', 'tsfel']) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
+        """
+        Efficiently extract multiple feature sets without re-running upstream stages.
+
+        Returns:
+            dict[str, pd.DataFrame]: Mapping of feature set names to extracted feature DataFrames
+        """
+        # Run pipeline once up to extract_det
+        intermediate_outputs = self.process(
+            filename=filename,
+            outputs=[
+                'loaded_data',
+                'imu_map',
+                'preprocessed_data',
+                'fm_dict',
+                'sensation_map',
+                'scheme_dict',
+                'extracted_detections'
+            ]
+        )
+        if isinstance(feature_sets, str):
+            feature_sets = [feature_sets]
+
+        extract_feat_stage = self.get_stage('extract_feat')
+        results = {}
+
+        for feature_set in feature_sets:
+            feats = extract_feat_stage(
                 inference=self.inference,
-                preprocessed_data=preprocessed_data,
-                scheme_dict=scheme_dict,
-                sensation_map=sensation_map
-            )
-
-            return out 
-
-        if 'extracted_detections' in outputs:
-            self.logger.debug("Extracting detections...")
-            extracted_detections = extract_detections(
-                fm_dict=fm_dict,
-                scheme_dict=scheme_dict,
-                sensation_map=sensation_map
-            )
-        # Step-5: Extract features of each detection
-        if 'extracted_features' in outputs:
-            self.logger.debug("Extracting features...")
-            if extracted_detections is None:
-                extracted_detections = extract_detections(
-                    fm_dict=fm_dict,
-                    scheme_dict=scheme_dict,
-                    sensation_map=sensation_map
-                )
-            extracted_features = self.stages[5](
-                inference=self.inference,
-                fm_dict=fm_dict,
-                extracted_detections=extracted_detections,
+                fm_dict=intermediate_outputs['fm_dict'],
+                extracted_detections=intermediate_outputs['extracted_detections'],
                 feat=feature_set
             )
+            results[feature_set] = feats
 
-        self.logger.info(f"Pipeline process completed in {time.time() - start: 0.3f} seconds.")
-
-        return {
-            'loaded_data': loaded_data if 'loaded_data' in outputs else None,
-            'preprocessed_data': preprocessed_data if 'preprocessed_data' in outputs else None,
-            'imu_map': imu_map if 'imu_map' in outputs else None,
-            'fm_dict': fm_dict if 'fm_dict' in outputs else None,
-            'scheme_dict': scheme_dict if 'scheme_dict' in outputs else None,
-            'sensation_map': sensation_map if 'sensation_map' in outputs else None,
-            'extracted_detections': extracted_detections if 'extracted_detections' in outputs else None,
-            'extracted_features': extracted_features if 'extracted_features' in outputs else None
-        }
-
-    def save(self, file_path):
-        """Save the pipeline to a joblib file
-
+        return results, intermediate_outputs
+    
+    def save(self, file_path: str, save_targz: bool = False) -> None:
+        """Save the pipeline configuration and state to a joblib file.
+        
+        This saves only the configuration and essential state, allowing the
+        pipeline to use updated code when loaded.
+    
         Args:
-            file_path (str): Path to directory for saving the pipeline
+            file_path: Path to joblib file for saving the pipeline
+        """
+        from pathlib import Path
+        try:
+            from .. import __version__
+        except ImportError:
+            __version__ = "unknown"
+        
+        # Ensure the directory exists
+        save_path = Path(file_path)
+        if not save_path.suffix == '.joblib':            
+            raise ValueError(
+                f"Expected joblib file with '.joblib' extension, got {save_path}"
+            )
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Collect configuration and minimal state (not the entire object)
+        pipeline_state: dict[str, Any] = {
+            'cfg': self.cfg,
+            'inference': self.inference,
+            'version': __version__
+        }
+        
+        # Also save individual stage parameters that might have been modified
+        stage_params: dict[str, dict[str, Any]] = {}
+
+        # Define attributes to skip during serialization (computed properties, loggers, etc.)
+        # SKIP_ATTRIBUTES = {
+        #     'logger',              # Property that returns shared logger
+        #     'extension_backward',  # Computed property
+        #     'extension_forward',   # Computed property  
+        #     'fm_dilation_size',    # Computed property
+        #     'sensors',             # Computed property
+        #     'num_sensors',         # Computed property
+        #     'sensor_map'           # Static property
+        # }
+
+        for stage_name in self.STAGE_NAME_MAP.keys():
+            stage = self.get_stage(stage_name)
+            stage_dict: dict[str, Any] = {}
+
+            for attr_name in dir(stage):
+                if attr_name.startswith('__') or attr_name.endswith('__'):
+                    continue
+                # Get the descriptor from the class
+                descriptor = getattr(type(stage), attr_name, None)
+                # Skip properties without a setter (read-only)
+                if isinstance(descriptor, property) and descriptor.fset is None:
+                    continue
+                # Skip callables
+                attr_value = getattr(stage, attr_name)
+                if callable(attr_value):
+                    continue
+                # Try to serialize
+                try:
+                    pickle.dumps(attr_value)
+                    stage_dict[attr_name] = attr_value
+                except (TypeError, ValueError, AttributeError, pickle.PicklingError):
+                    continue
+
+            stage_params[stage_name] = stage_dict
+        
+        # Combine everything into a single structure
+        complete_state: dict[str, Any] = {
+            'pipeline_state': pipeline_state,
+            'stage_parameters': stage_params
+        }
+        
+        # Save to joblib file
+        joblib.dump(complete_state, save_path)
+        if save_targz:
+            tar_path = save_path.with_suffix('.tar.gz')
+            tar = tarfile.open(tar_path, "w:gz")
+            tar.add(save_path, arcname="pipeline.joblib")
+            tar.close()
+        self.logger.debug(f"Pipeline configuration saved to {save_path}")
+    
+    @classmethod
+    def load(cls, file_path: str) -> 'Pipeline':
+        """Load a pipeline from saved joblib file.
+        
+        This method handles both old format (whole pipeline object) and new format 
+        (configuration-only). For old format, it extracts the configuration and 
+        creates a new instance to ensure current code is used.
+        
+        Args:
+            file_path: Path to joblib file containing saved pipeline
+            
+        Returns:
+            Pipeline instance with saved configuration using current code
         """
         
-        joblib.dump(self, os.path.join(file_path, "pipeline.joblib"))
-        tar = tarfile.open(os.path.join(file_path, "pipeline.tar.gz"), "w:gz")
-        tar.add(os.path.join(file_path, "pipeline.joblib"), arcname="pipeline.joblib")
-        tar.close()
-        self.logger.debug(f"Pipeline saved to {file_path}")
+        # Load data from joblib file
+        from pathlib import Path
+
+        load_path = Path(file_path)
+        if not load_path.suffix == '.joblib':
+            raise ValueError(
+                f"Expected joblib file with '.joblib' extension, got {load_path}"
+            )
+        loaded_pipeline = joblib.load(load_path)
+        
+        # Check if this is the new format (dict with pipeline_state) or old format (Pipeline object)
+        if isinstance(loaded_pipeline, dict) and 'pipeline_state' in loaded_pipeline:
+            # New format: configuration-only save
+            pipeline_state: dict[str, Any] = loaded_pipeline['pipeline_state']
+            stage_params: dict[str, dict[str, Any]] = loaded_pipeline.get('stage_parameters', {})
+            
+            # Create new pipeline instance (uses current code)
+            pipeline = cls(
+                cfg=pipeline_state['cfg'],
+                inference=pipeline_state['inference']
+            )
+            
+            # Restore any modified stage parameters
+            for stage_name, params in stage_params.items():
+                try:
+                    stage = pipeline.get_stage(stage_name)
+                    for param_name, param_value in params.items():
+                        if hasattr(stage, param_name):
+                            setattr(stage, param_name, param_value)
+                except (KeyError, AttributeError) as e:
+                    pipeline.logger.warning(
+                        f"Could not restore parameter {param_name} for stage {stage_name}: {e}"
+                    )
+            
+        elif hasattr(loaded_pipeline, 'cfg') and hasattr(loaded_pipeline, 'inference'):
+            # Old format: whole pipeline object was saved
+            LOGGER.warning(
+                f"Loading legacy pipeline format from {load_path}. "
+                "Consider re-saving with current format for better compatibility."
+            )
+            
+            # Extract configuration from old pipeline object
+            old_pipeline = loaded_pipeline
+            
+            # Create new pipeline instance with extracted configuration (uses current code)
+            pipeline = cls(
+                cfg=old_pipeline.cfg,
+                inference=old_pipeline.inference
+            )
+            
+            # Try to preserve any modified stage parameters from the old pipeline
+            for stage_name in cls.STAGE_NAME_MAP.keys():
+                try:
+                    old_stage = old_pipeline.get_stage(stage_name)
+                    new_stage = pipeline.get_stage(stage_name)
+                    
+                    # Copy over non-callable attributes that might have been modified
+                    for attr_name in dir(old_stage):
+                        if not attr_name.startswith('_') and not callable(getattr(old_stage, attr_name)):
+                            try:
+                                attr_value = getattr(old_stage, attr_name)
+                                if hasattr(new_stage, attr_name):
+                                    setattr(new_stage, attr_name, attr_value)
+                            except (AttributeError, TypeError):
+                                continue
+                                
+                except (KeyError, AttributeError) as e:
+                    LOGGER.warning(
+                        f"Could not transfer parameters for stage {stage_name}: {e}"
+                    )
+        else:
+            raise ValueError(
+                f"Unrecognized pipeline file format in {load_path}. "
+                "Expected either new format (dict with 'pipeline_state') or old format (Pipeline object)."
+            )
+        
+        LOGGER.debug(f"Pipeline loaded from {load_path}")
+        return pipeline

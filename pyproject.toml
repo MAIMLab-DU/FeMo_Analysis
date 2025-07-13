@@ -38,12 +38,14 @@ dependencies = [
   "xgboost==2.1.1",
   "openpyxl==3.1.5",
   "matplotlib==3.9.2",
-  "tsfel==0.1.9"
+  "tsfel==0.1.9",
+  "numba==0.61.2"
 ]
 
 # Optional dependencies ------------------------------------------------------------------------------------------------
 [project.optional-dependencies]
 dev = [
+    "pre-commit",
     "ipython",
     "pytest",
     "pytest-cov",

@@ -1,8 +1,28 @@
 import numpy as np
 from skimage.measure import label
+from datetime import datetime, timezone
 
 
 def apply_pca(df):
+    """Apply Principal Component Analysis to reduce dimensionality to 1 component.
+    
+    Performs PCA on the input data to reduce three-dimensional values into a single
+    dimensional representation, specifically designed for IMU rotation filtered data.
+    
+    Args:
+        df (array-like): Input data array or DataFrame containing the multi-dimensional
+            data to be reduced. Expected to have multiple columns/features.
+    
+    Returns:
+        numpy.ndarray: 1D array containing the first principal component values,
+            representing the reduced dimensional data.
+    
+    Example:
+        >>> import numpy as np
+        >>> data = np.random.rand(100, 3)  # 3D data
+        >>> reduced_data = apply_pca(data)
+        >>> print(reduced_data.shape)  # (100,)
+    """
     # Implementing pca on IMU_roation_fltd to reduce the three dimensional values into one 
     from sklearn.decomposition import PCA
     pca = PCA(n_components=1)
@@ -12,6 +32,23 @@ def apply_pca(df):
 
 
 def custom_binary_dilation(data, dilation_size):   
+    """Performs custom binary dilation on labeled spike data.
+    This function identifies connected components (spikes) in binary data and dilates
+    around the boundary points (first and last indices) of each spike region. For
+    single-point spikes, dilation occurs around that single point.
+    Args:
+        data (array-like): Binary input data containing spike regions to be dilated.
+        dilation_size (int): Size of the dilation kernel. The dilation extends
+            dilation_size//2 points before and the remaining points after each
+            boundary point.
+    Returns:
+        numpy.ndarray: Binary array with dilated spike regions, where dilated
+            areas are set to 1.
+    Note:
+        The function only dilates around the first and last indices of each
+        connected component, not the entire spike region. For single-point
+        spikes, dilation occurs around that single point.
+    """
     
     # get number of spikes labelling them in ascending order
     labelled = label(data)
@@ -45,22 +82,25 @@ def custom_binary_dilation(data, dilation_size):
 
 
 def custom_binary_erosion(data, erosion_size):
-    """
-    Perform binary erosion on input binary data using a binary structure of size erosion_size.
-    Erosion will shrink the binary spikes (connected components of 1s) by half of the erosion_size
-    from both directions.
-
-    Example:
-        Input   data = np.array([0, 1, 1, 1, 0, 1, 1, 0])
-                erosion_size = 3
-        Output  eroded_data = np.array([0, 0, 1, 0, 0, 1, 0, 0])
-
-    Parameters:
-    - data: Binary input data (1D NumPy array)
-    - erosion_size: Binary structuring element size (int)
-
+    """Performs custom binary erosion on 1D labeled data.
+    
+    This function applies erosion to connected components in binary data by either
+    shrinking components from both ends or removing them entirely if they're too small.
+    
+    Args:
+        data: A 1D binary array containing the data to be eroded.
+        erosion_size (int): The minimum size threshold for erosion. Components smaller
+            than this size are completely removed, while larger components are shrunk
+            by removing pixels from both ends.
+            
     Returns:
-    - eroded_data (1D NumPy array)
+        numpy.ndarray: A copy of the input data with erosion applied. Components
+            smaller than erosion_size are set to 0, while larger components have
+            their boundary pixels removed symmetrically from both ends.
+            
+    Note:
+        The erosion is applied asymmetrically when erosion_size is even, with
+        slightly more erosion applied to the beginning of each component.
     """
     labelled = label(data)  # Label the connected components
     eroded_data = data.copy()  # Create a copy of the input data
@@ -81,3 +121,60 @@ def custom_binary_erosion(data, erosion_size):
             eroded_data[indexs] = 0
 
     return eroded_data
+
+
+def str2bool(value):
+    """Convert string representation of truth to boolean value.
+
+    This function converts various string representations of boolean values
+    to their corresponding boolean type. It handles common string representations
+    like 'true', 'yes', '1' for True and 'false', 'no', '0' for False.
+
+    Args:
+        value: A string or boolean value to convert. Case-insensitive for strings.
+
+    Returns:
+        bool: The boolean representation of the input value.
+
+    Raises:
+        ValueError: If the string value cannot be converted to a boolean.
+
+    Examples:
+        >>> str2bool("true")
+        True
+        >>> str2bool("FALSE")
+        False
+        >>> str2bool("yes")
+        True
+        >>> str2bool(True)
+        True
+        >>> str2bool("maybe")
+        ValueError: Invalid boolean string: maybe
+    """
+    if isinstance(value, bool):
+        return value
+    if value.lower() in {"true", "yes", "1"}:
+        return True
+    elif value.lower() in {"false", "no", "0"}:
+        return False
+    else:
+        raise ValueError(f"Invalid boolean string: {value}")
+
+
+def timestamp_to_iso(timestamp_ms: int):
+    """
+    Convert a timestamp in milliseconds to ISO 8601 format string.
+
+    Args:
+        timestamp_ms (int): Timestamp in milliseconds since Unix epoch.
+
+    Returns:
+        str: ISO 8601 formatted datetime string in UTC timezone with millisecond 
+             precision, ending with 'Z' to indicate UTC (e.g., '2023-12-25T10:30:45.123Z').
+
+    Example:
+        >>> timestamp_to_iso(1703505045123)
+        '2023-12-25T10:30:45.123Z'
+    """
+    iso_utc_ms = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+    return iso_utc_ms

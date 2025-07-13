@@ -7,6 +7,7 @@ VIRTUAL_ENV=.venv
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 remove_hiccups=false
 plot=false
+stage_params=()
 data_filename=""
 repacked_model=""
 perf_filename="meta_info.xlsx"
@@ -34,10 +35,11 @@ function show_help {
   echo "                             Path to repacked model file (.tar.gz)."
   echo "  -f <perf_filename>, --perf-filename"
   echo "                             Performance csv filename."
-  echo "  -w <work_dir>, --work-dir" 
+  echo "  -w <work_dir>, --work-dir"
   echo "                             Project working directory."
   echo "  -r <run_name>, --run-name"
   echo "                             Name of a specific run."
+  echo "  --set-stage-param key=value   Override pipeline stage parameter (e.g., segment.fm_dilation=5). Can be used multiple times."
   echo "  -h, --help             Show this help message and exit."
   echo
 }
@@ -82,6 +84,11 @@ while [[ $# -gt 0 ]]; do
       show_help
       exit
       ;;
+    --set-stage-param)
+      stage_params+=("$2")
+      shift
+      shift
+      ;;
     *)
       echo "Invalid option: $1" >&2
       echo "Use -h or --help for usage information."
@@ -100,7 +107,7 @@ fi
 work_dir="$(convert_path "$work_dir")"
 mkdir -p "$work_dir"
 
-if [[ -z "${run_name}" ]]; then    
+if [[ -z "${run_name}" ]]; then
     run_dir="$work_dir"
 else
     run_dir="$work_dir/$run_name"
@@ -129,7 +136,12 @@ fi
 pip install "$(convert_path "$SCRIPT_DIR/../.")" -q
 
 # Extract repacked model files to the temp directory
-tar -xzf "$repacked_model" -C "$TEMP_DIR"
+if [[ "$(uname -s)" == "MINGW"* || "$(uname -s)" == "MSYS"* ]]; then
+    # Use Windows-compatible tar command with proper path conversion
+    tar -xzf "$(cygpath -u "$repacked_model")" -C "$(cygpath -u "$TEMP_DIR")"
+else
+    tar -xzf "$repacked_model" -C "$TEMP_DIR"
+fi
 echo "Repacked model files extracted to: $TEMP_DIR"
 
 # Run inference script
@@ -143,7 +155,8 @@ python "$(convert_path "$SCRIPT_DIR/inference.py")" \
   --work-dir "$(convert_path "$run_dir")" \
   --outfile "$(convert_path "$perf_filename")" \
   --remove-hiccups "$remove_hiccups" \
-  --plot "$plot"
+  --plot "$plot" \
+  $(for param in "${stage_params[@]}"; do echo --set-stage-param "$param"; done)
 
 # Record the end time
 end_time="$(date +%s)"

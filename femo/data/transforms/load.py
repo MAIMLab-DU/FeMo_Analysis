@@ -1,6 +1,8 @@
 import time
 import numpy as np
 import pandas as pd
+from dataclasses import asdict
+from ._utils import timestamp_to_iso
 from scipy.spatial.transform import Rotation as R
 from .base import BaseTransform, FeMoData
 
@@ -11,128 +13,129 @@ class DataLoader(BaseTransform):
         super().__init__(**kwargs)
     
     def transform(self, filename):
+        """
+        Load a .dat file and return a dict with:
+        - sensor_1…sensor_6: FM channel magnitudes or voltages (float32)
+        - imu_acceleration:    interpolated & exact L2‐norm (float32)
+        - imu_rotation:        interpolated & exact Euler angles DataFrame
+        - sensation_data:      button presses (int8)
+        """
 
         start = time.time()
-        keys = [
-            'sensor_1',
-            'sensor_2',
-            'sensor_3',
-            'sensor_4',
-            'sensor_5',
-            'sensor_6',
-            'imu_acceleration',
-            'imu_rotation',
-            'sensation_data'
-        ]
+        self.logger.debug(f"Started loading from file: {filename}")
+
+        # 1) Read raw arrays and header
+        fe  = FeMoData(filename)
+        raw = fe._arrays
+        header = asdict(fe.header)
+        header['start_time'] = timestamp_to_iso(header['start_time'])
+        header['end_time'] = timestamp_to_iso(header['end_time'])  
+
+        # 2) Pre‐allocate outputs
+        N   = raw['button'].shape[0]
+        sensor_1         = np.zeros(N, dtype=np.float32)
+        sensor_2         = np.zeros(N, dtype=np.float32)
+        sensor_3         = np.zeros(N, dtype=np.float32)
+        sensor_4         = np.zeros(N, dtype=np.float32)
+        sensor_5         = np.zeros(N, dtype=np.float32)
+        sensor_6         = np.zeros(N, dtype=np.float32)
+        imu_acceleration = np.zeros(N, dtype=np.float32)
+        imu_rotation_arr = np.zeros((N, 3), dtype=np.float32)
+        sensation_data   = raw['button'][:, 1].astype(np.int8)
+
+        # 3) Scaling factors
+        scale_voltage = 3.3 / (2**16 - 1)
+        scale_accel   = 1.0 / 1000.0
+        scale_quat    = 1.0 / 10000.0
+
+        # 4) Sensor magnitudes & voltages
+        idx_acc    = raw['accel'][:, 0].astype(int)
+        accel_vals = raw['accel'][:, 1:].astype(np.float32) * scale_voltage
+        sensor_1[idx_acc] = np.linalg.norm(accel_vals[:, 0:3], axis=1)
+        sensor_2[idx_acc] = np.linalg.norm(accel_vals[:, 3:6], axis=1)
+
+        idx_pz  = raw['piezo'][:, 0].astype(int)
+        pz_vals = raw['piezo'][:, 1:].astype(np.float32) * scale_voltage
+        sensor_3[idx_pz] = pz_vals[:, 0]
+        sensor_4[idx_pz] = pz_vals[:, 1]
+        sensor_5[idx_pz] = pz_vals[:, 2]
+        sensor_6[idx_pz] = pz_vals[:, 3]
+
+        # 5) Prepare IMU raw data for interpolation (use float64 for accuracy)
+        idx_imu  = raw['imu'][:, 0].astype(int)
+        imu_vals = raw['imu'][:, 1:].astype(np.float64)
+
+        # 6) Per‐axis interpolation, then norm
+        t_full = np.arange(N)
+        ax = np.zeros(N, dtype=np.float64)
+        ay = np.zeros(N, dtype=np.float64)
+        az = np.zeros(N, dtype=np.float64)
+        # accel_x,y,z are in cols 7,8,9
+        ax[idx_imu] = imu_vals[:, 7] * scale_accel
+        ay[idx_imu] = imu_vals[:, 8] * scale_accel
+        az[idx_imu] = imu_vals[:, 9] * scale_accel
+
+        ax = np.interp(t_full, idx_imu, ax[idx_imu])
+        ay = np.interp(t_full, idx_imu, ay[idx_imu])
+        az = np.interp(t_full, idx_imu, az[idx_imu])
+
+        imu_acc = np.sqrt(ax*ax + ay*ay + az*az)
+        imu_acceleration[:] = imu_acc.astype(np.float32)
+
+        # 7) Per‐component quaternion interpolation, then normalize → Euler
+        qi = np.zeros(N, dtype=np.float64)
+        qj = np.zeros(N, dtype=np.float64)
+        qk = np.zeros(N, dtype=np.float64)
+        qr = np.zeros(N, dtype=np.float64)
+        # quaternion in cols [1,2,3,0]
+        qi[idx_imu] = imu_vals[:, 1] * scale_quat
+        qj[idx_imu] = imu_vals[:, 2] * scale_quat
+        qk[idx_imu] = imu_vals[:, 3] * scale_quat
+        qr[idx_imu] = imu_vals[:, 0] * scale_quat
+
+        qi = np.interp(t_full, idx_imu, qi[idx_imu])
+        qj = np.interp(t_full, idx_imu, qj[idx_imu])
+        qk = np.interp(t_full, idx_imu, qk[idx_imu])
+        qr = np.interp(t_full, idx_imu, qr[idx_imu])
+
+        quat_full = np.stack([qi, qj, qk, qr], axis=1)
+        norms = np.linalg.norm(quat_full, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        quat_full /= norms
+
+        zero_mask = np.all(quat_full == 0, axis=1)
+        if zero_mask.any():
+            first_valid = quat_full[~zero_mask][0]
+            quat_full[zero_mask] = first_valid
+
+        euler = R.from_quat(quat_full).as_euler('xyz', degrees=True)
+        imu_rotation_arr[:] = euler.astype(np.float32)
+
+        # 8) Forward‐fill any initial zeros in rotation
+        valid = np.any(imu_rotation_arr != 0, axis=1)
+        if valid.any():
+            first = np.argmax(valid)
+            imu_rotation_arr[:first, :] = imu_rotation_arr[first, :]
+            for i in range(first + 1, N):
+                if not valid[i]:
+                    imu_rotation_arr[i] = imu_rotation_arr[i - 1]
+
+        imu_rotation_df = pd.DataFrame(imu_rotation_arr, columns=['roll', 'pitch', 'yaw'])
+
+        # 9) Bundle outputs
         loaded_data = {
-            k:[] for k in keys
-        } 
-                
-        read_data = FeMoData(filename)
-        all_sensor_df = (read_data.dataframes["piezos"]
-                        .join(read_data.dataframes["accelerometers"])
-                        .join(read_data.dataframes["imu"])
-                        .join(read_data.dataframes["force"])
-                        .join(read_data.dataframes["push_button"])
-                        .join(read_data.dataframes["timestamp"]))
+            'sensor_1':         sensor_1,
+            'sensor_2':         sensor_2,
+            'sensor_3':         sensor_3,
+            'sensor_4':         sensor_4,
+            'sensor_5':         sensor_5,
+            'sensor_6':         sensor_6,
+            'imu_acceleration': imu_acceleration,
+            'imu_rotation':     imu_rotation_df,
+            'sensation_data':   sensation_data,
+            'header':           header
+        }
 
-        # Resample accelerometer data using linear interpolation
-
-        ### Accelerometer 1
-        all_sensor_df['x1'] = pd.Series(all_sensor_df['x1']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['y1'] = pd.Series(all_sensor_df['y1']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['z1'] = pd.Series(all_sensor_df['z1']).interpolate(method='linear', limit_direction='both')
-
-        ### Accelerometer 2
-        all_sensor_df['x2'] = pd.Series(all_sensor_df['x2']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['y2'] = pd.Series(all_sensor_df['y2']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['z2'] = pd.Series(all_sensor_df['z2']).interpolate(method='linear', limit_direction='both')
-
-        ### IMU_data
-        all_sensor_df['rotation_r'] = pd.Series(all_sensor_df['rotation_r']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['rotation_i'] = pd.Series(all_sensor_df['rotation_i']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['rotation_j'] = pd.Series(all_sensor_df['rotation_j']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['rotation_k'] = pd.Series(all_sensor_df['rotation_k']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['accel_x']    = pd.Series(all_sensor_df['accel_x']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['accel_y']    = pd.Series(all_sensor_df['accel_y']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['accel_z']    = pd.Series(all_sensor_df['accel_z']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['magnet_x']   = pd.Series(all_sensor_df['magnet_x']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['magnet_y']   = pd.Series(all_sensor_df['magnet_y']).interpolate(method='linear', limit_direction='both')
-        all_sensor_df['magnet_z']   = pd.Series(all_sensor_df['magnet_z']).interpolate(method='linear', limit_direction='both')
-
-        selected_data_columns = ['p1', 'p2', 'p3', 'p4', 'x1', 'y1', 'z1', 'x2', 'y2', 'z2', 'rotation_r', 'rotation_i', 
-                                 'rotation_j', 'rotation_k', 'magnet_x','magnet_y','magnet_z', 'accel_x', 'accel_y', 'accel_z', 'button']
-        selected_sensor_data = all_sensor_df[selected_data_columns]
-        
-        FM_sensor_columns = ['p1', 'p2', 'p3', 'p4', 'x1', 'y1', 'z1', 'x2', 'y2', 'z2']
-        
-        # Convert them to voltage value
-        # All sensor is 16 bit data and max voltage is 3.3v
-        # Voltage = (Raw data / 2^ADC resolution) * max_voltage
-
-        max_sensor_value = 2**16 - 1  
-        max_voltage = 3.3  
-
-        selected_sensor_data = selected_sensor_data.copy()
-        for column in selected_sensor_data.columns:
-            if column in FM_sensor_columns:
-                selected_sensor_data.loc[:, column] = (selected_sensor_data[column] / max_sensor_value) * max_voltage
-
-        # •	contains the rotation vector, which is the most accurate position (based on magnetometer, accelerometer and gyroscope)
-        # •	rotation vector is currently in quaternion format
-        # •	rotation vector originally is a float variable, it is stored as int16 with the following conversion: 
-        #       rounded (original_float_value x 10000)
-        # •	Magnetic vector is originally in Microtesla
-        #       Magnetic vector is stored as int16: rounded (original_float x 100)
-        # •	Linear acceleration is originally in m/s^2 (gravity excluded)
-        #       Linear acceleration is stored as int16: rounded (original_float_value x 1000)
-        
-        IMU_all = selected_sensor_data[['rotation_r','rotation_i','rotation_j', 'rotation_k',
-                                            'magnet_x','magnet_y','magnet_z',
-                                            'accel_x','accel_y','accel_z']]
-        
-        IMU_aclm_single_file    = (IMU_all[['accel_x', 'accel_y', 'accel_z']]/1000)
-        IMU_mag_single_file     = (IMU_all[['magnet_x', 'magnet_y', 'magnet_z']]/100)  # noqa: F841
-        IMU_rotation_quat       = (IMU_all[['rotation_i', 'rotation_j', 'rotation_k', 'rotation_r']]/10000)  
-        
-        # --------- Quaternion to euler conversion is not possible with zero-magnitude rows -----
-        # --------- Converting zero-magnitude rows with the first nonzero-magnitude row values --
-        # Find the first non-zero orientation row
-        non_zero_row = IMU_rotation_quat[(IMU_rotation_quat != 0).any(axis=1)].iloc[0].tolist()
-        # Replace rows with all zeros with first valid nonzero-magnitude row
-        IMU_rotation_quat.loc[(IMU_rotation_quat == 0).all(axis=1)] = non_zero_row
-        
-        IMU_rotation_quat = IMU_rotation_quat.values  # convert to numpy array        
-        
-        rotation = R.from_quat(IMU_rotation_quat)
-        IMU_rotation_rpy = rotation.as_euler('xyz', degrees=True)                
-        IMU_rotation_rpy = pd.DataFrame(IMU_rotation_rpy, columns=['roll', 'pitch', 'yaw'])  
-
-        # Calculate magnitude values for FM accelerometer data
-        loaded_data['sensor_1'] = np.linalg.norm(selected_sensor_data[['x1', 'y1', 'z1' ]], axis=1)
-        loaded_data['sensor_2'] = np.linalg.norm(selected_sensor_data[['x2', 'y2', 'z2' ]], axis=1)
-        
-        # Calculate magnitude values for FM piezoelectric data
-        loaded_data['sensor_3'] = np.array(selected_sensor_data['p1'])
-        loaded_data['sensor_4'] = np.array(selected_sensor_data['p2'])
-        loaded_data['sensor_5'] = np.array(selected_sensor_data['p3'])
-        loaded_data['sensor_6'] = np.array(selected_sensor_data['p4'])
-
-        # Calculate magnitude values for IMU accelerometers
-        loaded_data['imu_acceleration'] = np.linalg.norm(IMU_aclm_single_file[['accel_x', 'accel_y', 'accel_z']], axis=1)
-        loaded_data['imu_rotation'] = IMU_rotation_rpy # Rotation data is not combined
-         
-        # New data do not have flexi data, so we have passed a blank array for flexi data to keep the same format of return values
-        # loaded_data['flexi_data'] = np.zeros_like(loaded_data['sensor_3'])
-
-        try:
-            # Get maternal sensation (for training)
-            loaded_data['sensation_data'] = np.array(selected_sensor_data['button'])
-        except KeyError:
-            loaded_data['sensation_data'] = np.array([])
-
-        self.logger.debug(f"Loaded data file {filename} in {(time.time()-start)*1000} ms")
-
+        duration_ms = (time.time() - start) * 1e3
+        self.logger.info(f"Loaded '{filename}' in {duration_ms:.2f} ms")
         return loaded_data
-
-    
