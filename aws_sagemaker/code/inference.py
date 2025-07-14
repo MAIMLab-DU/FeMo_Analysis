@@ -3,7 +3,7 @@ import json
 import time
 import numpy as np
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from fastapi import FastAPI, Request, Response, status, HTTPException
 from pydantic import BaseModel, Field
 from femo.logger import LOGGER
@@ -168,10 +168,10 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
     """Build inference events data from prediction output."""
     try:
         # Extract required data with validation
-        pipeline_output = pred_output.get('pipeline_output', {})
-        loaded_data = pipeline_output.get('loaded_data', {})
-        header = loaded_data.get('header', {})
-        start_time = header.get('start_time')
+        pipeline_output: dict = pred_output.get('pipeline_output', {})
+        loaded_data: dict = pipeline_output.get('loaded_data', {})
+        header: dict = loaded_data.get('header', {})
+        start_time: str = header.get('start_time')
         
         if not start_time:
             raise ValueError("Missing start_time in pipeline output header")
@@ -180,11 +180,11 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
         if not pre_hiccup:
             raise ValueError("Missing pre_hiccup_removal data in prediction output")
             
-        time_per_sample = 1.0 / sensor_freq
+        seconds_per_sample = 1.0 / sensor_freq
         events = []
         
         # Define event types with validation
-        event_types = {}
+        event_types: Dict[str, np.ndarray] = {}
         
         # Maternal body movement events
         imu_map = pipeline_output.get('imu_map')
@@ -203,6 +203,11 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
             if hiccup_map is not None:
                 event_types['fetal_hiccups'] = np.array(hiccup_map)
         
+        # Add button press events if available
+        sensation_data = loaded_data['sensation_data']
+        if sensation_data is not None and np.any(sensation_data):
+            event_types['button_press'] = np.array(sensation_data)
+        
         # Add maternally sensed kicks if available
         sensation_map = pipeline_output.get('sensation_map')
         if sensation_map is not None and np.any(sensation_map):
@@ -211,7 +216,7 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
         # Extract events for each type
         for event_type, event_data in event_types.items():
             if event_data.size > 0:  # Only process non-empty arrays
-                extracted_events = extract_events(event_data, start_time, time_per_sample, event_type)
+                extracted_events = extract_events(event_data, start_time, seconds_per_sample, event_type)
                 LOGGER.info(f"Extracted {len(extracted_events)} events for type '{event_type}'")
                 events.extend(extracted_events)
 
