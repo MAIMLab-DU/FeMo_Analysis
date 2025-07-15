@@ -1,3 +1,4 @@
+import struct
 import numpy as np
 from skimage.measure import label
 from datetime import datetime, timezone
@@ -178,3 +179,36 @@ def timestamp_to_iso(timestamp_ms: int):
     """
     iso_utc_ms = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
     return iso_utc_ms
+
+
+def check_file_format(filename: str) -> str:
+    """
+    Check if the first 4 bytes represent a Unix timestamp (V1 format) or magic number (V2 format).
+    
+    Args:
+        filename: Path to the file to check
+        
+    Returns:
+        str: 'v1', 'v2'
+    """
+    with open(filename, 'rb') as file_handle:
+        first_four_bytes: bytes = file_handle.read(4)
+        
+    if len(first_four_bytes) < 4:
+        return 'unknown'    
+    # Unpack as little-endian unsigned integer
+    value: int = struct.unpack('<L', first_four_bytes)[0]    
+    # Check for specific magic numbers first
+    if value == 0x48414148:  # "HAAH" - file header start
+        return 'v2'    
+    if (value & 0xFFFF) == 0xA55E:  # Sync header signature
+        return 'v2'    
+    # Check if it could be a reasonable Unix timestamp
+    # Unix timestamps are typically between:
+    # - 1970-01-01 (0) and some future date
+    # - Reasonable range: 1970-01-01 to 2100-01-01
+    min_timestamp: int = 0          # 1970-01-01 00:00:00 UTC
+    max_timestamp: int = 4102444800 # 2100-01-01 00:00:00 UTC 
+    if min_timestamp <= value <= max_timestamp:
+        return 'v1'    
+    return 'unknown'
