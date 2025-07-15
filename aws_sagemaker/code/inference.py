@@ -10,7 +10,8 @@ from femo.logger import LOGGER
 from femo.inference import PredictionService, InferenceMetaInfo
 from utils import (
     extract_s3_details,
-    extract_events
+    extract_events,
+    trim_data
 )
 
 # SageMaker model paths
@@ -170,6 +171,7 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
         # Extract required data with validation
         pipeline_output: dict = pred_output.get('pipeline_output', {})
         loaded_data: dict = pipeline_output.get('loaded_data', {})
+        preprocessed_data: dict = pipeline_output.get('preprocessed_data', {})
         header: dict = loaded_data.get('header', {})
         start_time: str = header.get('start_time')
         
@@ -203,10 +205,15 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
             if hiccup_map is not None:
                 event_types['fetal_hiccups'] = np.array(hiccup_map)
         
-        # Add button press events if available
-        sensation_data = loaded_data['sensation_data']
-        if sensation_data is not None and np.any(sensation_data):
-            event_types['button_press'] = np.array(sensation_data)
+        # Add pre debounce button press events if available
+        pre_debounce_sensation_data = loaded_data['sensation_data']
+        pre_debounce_sensation_data = trim_data(pre_debounce_sensation_data, sample_rate=sensor_freq)
+        if pre_debounce_sensation_data is not None and np.any(pre_debounce_sensation_data):
+            event_types['button_press_pre_debounce'] = np.array(pre_debounce_sensation_data)
+
+        post_debounce_sensation_data = preprocessed_data['sensation_data']
+        if post_debounce_sensation_data is not None and np.any(post_debounce_sensation_data):
+            event_types['button_press_post_debounce'] = np.array(post_debounce_sensation_data)
         
         # Add maternally sensed kicks if available
         sensation_map = pipeline_output.get('sensation_map')
