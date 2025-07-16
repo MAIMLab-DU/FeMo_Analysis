@@ -18,7 +18,7 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)
 logging.getLogger('tensorflow.python.util.deprecation').setLevel(logging.ERROR)
 
 
-__version__ = "1.1.0"
+__version__ = "2.0.0"
 
 __all__ = (
     "__version__"
