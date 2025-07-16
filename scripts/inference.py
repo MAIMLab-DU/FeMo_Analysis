@@ -204,6 +204,45 @@ def main(args):
                     * 100
                 ],
             }
+            if pre_removal_data.matchWithSensationMap is not None:
+                tp = pre_removal_data.matchWithSensationMap.true_positive
+                fp = pre_removal_data.matchWithSensationMap.false_positive
+                tn = pre_removal_data.matchWithSensationMap.true_negative
+                fn = pre_removal_data.matchWithSensationMap.false_negative
+                metainfo_dict.update(
+                    {
+                        "True positive - pre_hiccup": [
+                            tp
+                        ],
+                        "False positive - pre_hiccup": [
+                            fp
+                        ],
+                        "True negative - pre_hiccup": [
+                            tn
+                        ],
+                        "False negative - pre_hiccup": [
+                            fn
+                        ],
+                        "Num sensation label - pre_hiccup": [
+                            pre_removal_data.matchWithSensationMap.num_maternal_sensed
+                        ],
+                        "Num sensation calc - pre_hiccup": [
+                            tp + fn
+                        ],
+                        "Num sensor label - pre_hiccup": [
+                            pre_removal_data.matchWithSensationMap.num_sensor_detections
+                        ],
+                        "Num sensor calc - pre_hiccup": [
+                            tp + fp + tn + fn
+                        ],
+                        "Num ML label - pre_hiccup": [
+                            pre_removal_data.matchWithSensationMap.num_ml_detections
+                        ],
+                        "Num ML calc - pre_hiccup": [
+                            tp + fp
+                        ],
+                    }
+                )
 
             if args.remove_hiccups:
                 post_removal_data: InferenceMetaInfo = pred_output["post_hiccup_removal"]["data"]
@@ -230,6 +269,45 @@ def main(args):
                         ],
                     }
                 )
+                if post_removal_data.matchWithSensationMap is not None:
+                    post_tp = post_removal_data.matchWithSensationMap.true_positive
+                    post_fp = post_removal_data.matchWithSensationMap.false_positive
+                    post_tn = post_removal_data.matchWithSensationMap.true_negative
+                    post_fn = post_removal_data.matchWithSensationMap.false_negative
+                    metainfo_dict.update(
+                        {
+                            "True positive - post_hiccup": [
+                                post_tp
+                            ],
+                            "False positive - post_hiccup": [
+                                post_fp
+                            ],
+                            "True negative - post_hiccup": [
+                                post_tn
+                            ],
+                            "False negative - post_hiccup": [
+                                post_fn
+                            ],
+                            "Num sensation label - post_hiccup": [
+                                post_removal_data.matchWithSensationMap.num_maternal_sensed
+                            ],
+                            "Num sensation calc - post_hiccup": [
+                                post_tp + post_fn
+                            ],
+                            "Num sensor label - post_hiccup": [
+                                post_removal_data.matchWithSensationMap.num_sensor_detections
+                            ],
+                            "Num sensor calc - post_hiccup": [
+                                post_tp + post_fp + post_tn + post_fn
+                            ],
+                            "Num ML label - post_hiccup": [
+                                post_removal_data.matchWithSensationMap.num_ml_detections
+                            ],
+                            "Num ML calc - post_hiccup": [
+                                post_tp + post_fp
+                            ],
+                        }
+                    )
                 del post_removal_data  # Free memory
 
             del pre_removal_data  # Free memory
