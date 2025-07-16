@@ -4,7 +4,7 @@ import copy
 import numpy as np
 from tqdm import tqdm
 from .base import FeMoBaseClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -85,8 +85,8 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
         best_accuracy = -1
 
         for k in tqdm(range(num_folds), desc="Hyperparameter tuning..."):
-            X_train, y_train = train_data[k][:, :-3], train_data[k][:, -1]
-            X_val, y_val = test_data[k][:, :-3], test_data[k][:, -1]
+            X_train, y_train = train_data[k][:, :-4], train_data[k][:, -1].astype(int)
+            X_val, y_val = test_data[k][:, :-4], test_data[k][:, -1].astype(int)
 
             classifiers = self.get_classifiers(hyperparams, y_train)
             voting_clf = VotingClassifier(estimators=classifiers, voting='soft', n_jobs=-1)
@@ -136,20 +136,23 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
 
         hyperparams = copy.deepcopy(self.hyperparams)
 
-        best_accuracy = -1
+        best_f1_score = -1
         best_model = None
         predictions = []
         prediction_scores = []
-        det_indices = []
-        filename_hash = []
-        accuracy_scores = {
+        start_indices = []
+        end_indices = []
+        dat_file_keys = []
+        eval_metrics = {
             'train_accuracy': [],
-            'test_accuracy': []
+            'test_accuracy': [],
+            'train_f1_score': [],
+            'test_f1_score': []
         }
 
         for i in range(num_iterations):
-            X_train, y_train = train_data[i][:, :-3], train_data[i][:, -1]
-            X_test, y_test = test_data[i][:, :-3], test_data[i][:, -1]
+            X_train, y_train = train_data[i][:, :-4], train_data[i][:, -1].astype(int)
+            X_test, y_test = test_data[i][:, :-4], test_data[i][:, -1].astype(int)
 
             if 'estimators' in hyperparams:
                 classifiers = hyperparams['estimators']
@@ -168,35 +171,49 @@ class FeMoEnsembleClassifier(FeMoBaseClassifier):
                 y_pred=y_train_pred,
                 y_true=y_train
             )
+            current_train_f1 = f1_score(
+                y_true=y_train,
+                y_pred=y_train_pred,
+            )
             current_test_accuracy = accuracy_score(
                 y_pred=y_test_pred,
                 y_true=y_test
             )
-            accuracy_scores['train_accuracy'].append(current_train_accuracy)
-            accuracy_scores['test_accuracy'].append(current_test_accuracy)
+            current_test_f1 = f1_score(
+                y_true=y_test,
+                y_pred=y_test_pred,
+            )
+            eval_metrics['train_accuracy'].append(current_train_accuracy)
+            eval_metrics['test_accuracy'].append(current_test_accuracy)
+            eval_metrics['train_f1_score'].append(current_train_f1)
+            eval_metrics['test_f1_score'].append(current_test_f1)
 
-            if current_test_accuracy > best_accuracy:
-                best_accuracy = current_test_accuracy
+            if current_test_f1 > best_f1_score:
+                best_f1_score = current_test_f1
                 best_model = estimator
 
-            det_indices.append(test_data[i][:, -2])
-            filename_hash.append(test_data[i][:, -3])
+            start_indices.append(test_data[i][:, -3])
+            end_indices.append(test_data[i][:, -2])
+            dat_file_keys.append(test_data[i][:, -4])
 
             self.logger.info(f"Iteration {i+1}:")
-            self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}")
-            self.logger.info(f"Test Accuracy: {current_test_accuracy:.3f}")
-            self.logger.info(f"Best Test Accuracy: {best_accuracy:.3f}")
+            self.logger.info(f"Training Accuracy: {current_train_accuracy:.3f}, F1 Score: {current_train_f1:.3f}")
+            self.logger.info(f"Test Accuracy: {current_test_accuracy:.3f}, F1 Score: {current_test_f1:.3f}")
+            self.logger.info(f"Best Test Accuracy: {best_f1_score:.3f}, Best F1 Score: {best_f1_score:.3f}")
         
         self.logger.info(f"Fitting model with train data took: {time.time() - start: 0.2f} seconds")
-        self.logger.info(f"Average training accuracy: {np.mean(accuracy_scores['train_accuracy'])}")
-        self.logger.info(f"Average testing accuracy: {np.mean(accuracy_scores['test_accuracy'])}")
+        self.logger.info(f"Average training accuracy: {np.mean(eval_metrics['train_accuracy'])}, F1 Score: {np.mean(eval_metrics['train_f1_score'])}")
+        self.logger.info(f"Average testing accuracy: {np.mean(eval_metrics['test_accuracy'])}, F1 Score: {np.mean(eval_metrics['test_f1_score'])}")
         
         self.model = best_model
-        self.result.accuracy_scores = accuracy_scores
+        self.result.accuracy_scores = eval_metrics
         self.result.preds = predictions
         self.result.pred_scores = prediction_scores
-        self.result.det_indices = det_indices
-        self.result.filename_hash = filename_hash
+        self.result.start_indices = start_indices
+        self.result.end_indices = end_indices
+        self.result.dat_file_key = dat_file_keys
+
+        return eval_metrics
 
     def predict(self, X):
         

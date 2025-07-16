@@ -3,14 +3,15 @@ import json
 import time
 import numpy as np
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from fastapi import FastAPI, Request, Response, status, HTTPException
 from pydantic import BaseModel, Field
 from femo.logger import LOGGER
 from femo.inference import PredictionService, InferenceMetaInfo
 from utils import (
     extract_s3_details,
-    extract_events
+    extract_events,
+    trim_data
 )
 
 # SageMaker model paths
@@ -135,7 +136,7 @@ def build_inference_metainfo_data(pred_output: dict, remove_hiccups: bool, inclu
         result["pre_hiccup"]["onsetInterval_sec"] = [float(x) for x in pre_removal_data.onsetInterval]
     
     # Only include post-hiccup data if hiccup removal was performed
-    if remove_hiccups and 'post_hiccup_removal' in pred_output:
+    if remove_hiccups and pred_output.get('post_hiccup_removal', None) is not None:
         post_removal_data: InferenceMetaInfo = pred_output['post_hiccup_removal']['data']
         
         post_onset_intervals = post_removal_data.onsetInterval
@@ -168,10 +169,11 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
     """Build inference events data from prediction output."""
     try:
         # Extract required data with validation
-        pipeline_output = pred_output.get('pipeline_output', {})
-        loaded_data = pipeline_output.get('loaded_data', {})
-        header = loaded_data.get('header', {})
-        start_time = header.get('start_time')
+        pipeline_output: dict = pred_output.get('pipeline_output', {})
+        loaded_data: dict = pipeline_output.get('loaded_data', {})
+        preprocessed_data: dict = pipeline_output.get('preprocessed_data', {})
+        header: dict = loaded_data.get('header', {})
+        start_time: str = header.get('start_time')
         
         if not start_time:
             raise ValueError("Missing start_time in pipeline output header")
@@ -180,11 +182,11 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
         if not pre_hiccup:
             raise ValueError("Missing pre_hiccup_removal data in prediction output")
             
-        time_per_sample = 1.0 / sensor_freq
+        seconds_per_sample = 1.0 / sensor_freq
         events = []
         
         # Define event types with validation
-        event_types = {}
+        event_types: Dict[str, np.ndarray] = {}
         
         # Maternal body movement events
         imu_map = pipeline_output.get('imu_map')
@@ -201,7 +203,17 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
             post_hiccup = pred_output.get('post_hiccup_removal', {})
             hiccup_map = post_hiccup.get('hiccup_map')
             if hiccup_map is not None:
-                event_types['other'] = np.array(hiccup_map)
+                event_types['fetal_hiccups'] = np.array(hiccup_map)
+        
+        # Add pre debounce button press events if available
+        pre_debounce_sensation_data = loaded_data['sensation_data']
+        pre_debounce_sensation_data = trim_data(pre_debounce_sensation_data, sample_rate=sensor_freq)
+        if pre_debounce_sensation_data is not None and np.any(pre_debounce_sensation_data):
+            event_types['button_press_pre_debounce'] = np.array(pre_debounce_sensation_data)
+
+        post_debounce_sensation_data = preprocessed_data['sensation_data']
+        if post_debounce_sensation_data is not None and np.any(post_debounce_sensation_data):
+            event_types['button_press_post_debounce'] = np.array(post_debounce_sensation_data)
         
         # Add maternally sensed kicks if available
         sensation_map = pipeline_output.get('sensation_map')
@@ -211,7 +223,7 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
         # Extract events for each type
         for event_type, event_data in event_types.items():
             if event_data.size > 0:  # Only process non-empty arrays
-                extracted_events = extract_events(event_data, start_time, time_per_sample, event_type)
+                extracted_events = extract_events(event_data, start_time, seconds_per_sample, event_type)
                 LOGGER.info(f"Extracted {len(extracted_events)} events for type '{event_type}'")
                 events.extend(extracted_events)
 
@@ -220,6 +232,52 @@ def build_inference_events_data(pred_output: dict, remove_hiccups: bool, sensor_
     except Exception as e:
         LOGGER.error(f"Error building inference events data: {e}")
         raise ValueError(f"Failed to build inference events data: {e}")
+
+
+def build_match_pred_with_sensation(pred_output: dict, remove_hiccups: bool) -> dict:
+    """Build match with sensation map from prediction output."""
+
+    pre_removal_data: InferenceMetaInfo = pred_output['pre_hiccup_removal']['data']
+    tp = int(pre_removal_data.matchWithSensationMap.true_positive)
+    fp = int(pre_removal_data.matchWithSensationMap.false_positive)
+    tn = int(pre_removal_data.matchWithSensationMap.true_negative)
+    fn = int(pre_removal_data.matchWithSensationMap.false_negative)
+    result = {
+        "pre_hiccup": {
+            "true_positive": tp,
+            "false_positive": fp,
+            "true_negative": tn,
+            "false_negative": fn,
+            "num_sensation_label": int(pre_removal_data.matchWithSensationMap.num_maternal_sensed),
+            "num_sensation_calc": tp + fn,
+            "num_sensor_label": int(pre_removal_data.matchWithSensationMap.num_ml_detections),
+            "num_sensor_calc": tp + fp + tn + fn,
+            "num_ml_label": int(pre_removal_data.matchWithSensationMap.num_sensor_detections),
+            "num_ml_calc": tp + fp,
+        }
+    }
+    
+    # Only include post-hiccup data if hiccup removal was performed
+    if remove_hiccups and pred_output.get('post_hiccup_removal', None) is not None:
+        post_removal_data: InferenceMetaInfo = pred_output['post_hiccup_removal']['data']
+        post_tp = int(post_removal_data.matchWithSensationMap.true_positive)
+        post_fp = int(post_removal_data.matchWithSensationMap.false_positive)
+        post_tn = int(post_removal_data.matchWithSensationMap.true_negative)
+        post_fn = int(post_removal_data.matchWithSensationMap.false_negative)
+        result["post_hiccup"] = {
+            "true_positive": post_tp,
+            "false_positive": post_fp,
+            "true_negative": post_tn,
+            "false_negative": post_fn,
+            "num_sensation_label": int(post_removal_data.matchWithSensationMap.num_maternal_sensed),
+            "num_sensation_calc": post_tp + post_fn,
+            "num_sensor_label": int(post_removal_data.matchWithSensationMap.num_ml_detections),
+            "num_sensor_calc": post_tp + post_fp + post_tn + post_fn,
+            "num_ml_label": int(post_removal_data.matchWithSensationMap.num_sensor_detections),
+            "num_ml_calc": post_tp + post_fp,
+        }
+    
+    return result
 
 
 def process_inference_request(request_data: InferenceRequest) -> str:
@@ -261,6 +319,14 @@ def process_inference_request(request_data: InferenceRequest) -> str:
             "events": events
         }
         output_type = "events"
+    
+    if np.sum(pred_output["pipeline_output"]["sensation_map"]) > 0:
+        LOGGER.info(f"Detected maternally sensed kicks in jobId: {request_data.jobId}")
+        matched_dict = build_match_pred_with_sensation(
+            pred_output, 
+            request_data.removeHiccups
+        )
+        inference_result["match_pred_with_sensation"] = matched_dict
     
     # Prepare complete result
     complete_result = {

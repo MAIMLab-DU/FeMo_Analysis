@@ -50,3 +50,26 @@ def extract_events(arr: np.ndarray, start_time: str,
             'end_t': event_end_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         })
     return events
+
+
+def trim_data(data: np.ndarray, sample_rate: int = 1024) -> np.ndarray:
+    """
+    Trims the first and last `removal_period` seconds of the data.
+
+    Args:
+        data (np.ndarray): The input data array.
+        sample_rate (int): The sampling rate of the data in Hz (Default 1024).
+
+    Returns:
+        np.ndarray: The trimmed data array.
+    """
+    if not isinstance(data, np.ndarray):
+        raise TypeError("Input must be a numpy array.")
+    
+    if data.ndim != 1:
+        raise ValueError("Input array must be one-dimensional.")
+    
+    removal_period = 30 if len(data) / sample_rate > 300 else 5
+    num_samples_to_remove = int(removal_period * sample_rate)
+    
+    return data[num_samples_to_remove:-num_samples_to_remove] if len(data) > 2 * num_samples_to_remove else data

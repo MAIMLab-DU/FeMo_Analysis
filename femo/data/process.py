@@ -7,7 +7,6 @@ import pandas as pd
 from typing import Literal
 from sklearn.base import BaseEstimator
 from ..logger import LOGGER
-from .utils import normalize_features
 from .ranking import FeatureRanker
 
 class Processor(BaseEstimator):
@@ -34,6 +33,53 @@ class Processor(BaseEstimator):
         self._feat_rank_cfg = preprocess_config.get('feature_ranking') if preprocess_config else {}
         self._feature_ranker = FeatureRanker(feature_set=feature_set, **self.feat_rank_cfg) if self.feat_rank_cfg is not None else FeatureRanker()
 
+    def _normalize_features(
+            self,
+            data: np.ndarray,
+            mu: np.ndarray | None = None,
+            dev: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Normalize features and remove columns with NaN values.
+        
+        Args:
+            data: Input feature array of shape (n_samples, n_features)
+            mu: Pre-computed mean values (optional)
+            dev: Pre-computed deviation values (optional)
+            
+        Returns:
+            Tuple of (normalized_features, mu, dev)
+        """
+        if mu is None:
+            mu = np.mean(data, axis=0)
+        
+        # Check for NaN columns and log information
+        nan_mask: np.ndarray = np.any(np.isnan(data), axis=0)
+        num_nan_features: int = np.sum(nan_mask)
+        
+        if num_nan_features > 0:
+            self.logger.warning(f"{num_nan_features} features contain NaN values and will be removed in data")
+            self.logger.warning(f"NaN feature indices: {np.where(nan_mask)[0]}")
+        
+        norm_feats: np.ndarray = data - mu
+        
+        if dev is None:
+            dev = np.max(norm_feats, axis=0) - np.min(norm_feats, axis=0)
+        
+        # Avoid division by zero by adding a small epsilon
+        dev = np.where(dev == 0, 1e-8, dev)
+        norm_feats = norm_feats / dev
+        
+        # Check for NaN columns and log information
+        nan_mask: np.ndarray = np.any(np.isnan(norm_feats), axis=0)
+        num_nan_features: int = np.sum(nan_mask)
+        
+        if num_nan_features > 0:
+            self.logger.warning(f"{num_nan_features} features contain NaN values and will be removed")
+            self.logger.warning(f"NaN feature indices: {np.where(nan_mask)[0]}")
+        
+        valid_features: np.ndarray = norm_feats[:, ~nan_mask]
+        
+        return valid_features, mu, dev
+
     def fit(self, X, y=None):
         """Fit the processor by calculating normalization parameters and ranking features.
 
@@ -45,7 +91,7 @@ class Processor(BaseEstimator):
         self.logger.debug("Fitting Processor and calculating normalization parameters...")
 
         # Normalize features and store parameters
-        X_norm, mu, dev = normalize_features(X, self.mu, self.dev)
+        X_norm, mu, dev = self._normalize_features(X, self.mu, self.dev)
         self.mu, self.dev = mu, dev
         
         # Rank features and store the top feature indices
@@ -71,7 +117,8 @@ class Processor(BaseEstimator):
             raise RuntimeError("Processor must be fitted before calling predict.")
 
         # Apply normalization using stored parameters
-        X_norm, _, _ = normalize_features(X, self.mu, self.dev)
+        X_norm, _, _ = self._normalize_features(X, self.mu, self.dev)
+        self.logger.info(f"Normalized features shape: {X_norm.shape}")
 
         # Select top-ranked features
         X_norm = X_norm[:, self.top_feat_indices]
@@ -82,13 +129,34 @@ class Processor(BaseEstimator):
         """Convert the input data to pandas Dataframe
 
         Args:
-            data (np.ndarray): Input data array of shape (n_samples, n_features_new + 3)
+            data (np.ndarray): Input data array of shape (n_samples, n_features_new + 4)
             columns (list[str]): Column names of features
         """
 
         if self.top_feat_indices is not None:
-            columns = columns[self.top_feat_indices].tolist() + ['filename_hash', 'det_indices', 'labels']
-        return pd.DataFrame(data, columns=columns)
+            columns = columns[self.top_feat_indices].tolist() + ['dat_file_key', 'start_indices', 'end_indices', 'labels']
+        
+        # Create DataFrame
+        df = pd.DataFrame(data, columns=columns)
+        
+        # Ensure proper data types
+        if 'dat_file_key' in df.columns:
+            df['dat_file_key'] = df['dat_file_key'].astype(str)
+        
+        # Convert last three columns to int
+        if 'start_indices' in df.columns:
+            df['start_indices'] = df['start_indices'].astype(int)
+        if 'end_indices' in df.columns:
+            df['end_indices'] = df['end_indices'].astype(int)
+        if 'labels' in df.columns:
+            df['labels'] = df['labels'].astype(int)
+        
+        # Ensure all feature columns are float (exclude metadata columns)
+        feature_columns = [col for col in df.columns if col not in ['dat_file_key', 'start_indices', 'end_indices', 'labels']]
+        for col in feature_columns:
+            df[col] = df[col].astype(float)
+        
+        return df
     
     def save(self, file_path, key: str = 'crafted'):
         """Save the processor to a joblib file and append it to an existing tar.gz archive.

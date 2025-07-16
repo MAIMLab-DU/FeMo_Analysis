@@ -11,10 +11,29 @@ from ..model.base import FeMoBaseClassifier
 from ..logger import LOGGER
 from ..data.pipeline import Pipeline
 from ..eval.metrics import FeMoMetrics
-from ..plot.plotter import FeMoPlotter
 from ..data.process import Processor
 from ..data.transforms import SensorFusion
 from ..data.transforms._utils import custom_binary_dilation, custom_binary_erosion
+from .plot_utils import (
+    create_figure,
+    save_figure,
+    plot_imu_rotation,
+    plot_imu_acceleration,
+    plot_sensor_data,
+    plot_sensation_map,
+    plot_detections
+)
+
+
+@dataclass
+class MatchWithSensationMap:
+    true_positive: int
+    false_positive: int
+    true_negative: int
+    false_negative: int
+    num_maternal_sensed: int
+    num_sensor_detections: int
+    num_ml_detections: int
 
 
 @dataclass
@@ -22,12 +41,12 @@ class InferenceMetaInfo:
     """
     Holds the data for inference.
     """
-
     fileName: str
     numKicks: int
     totalFMDuration: float
     totalNonFMDuration: float
     onsetInterval: list
+    matchWithSensationMap: dict | MatchWithSensationMap = None
 
 
 class PredictionService(object):
@@ -35,7 +54,6 @@ class PredictionService(object):
     pipeline: Pipeline = None
     processor: defaultdict = {"crafted": None, "tsfel": None}
     metrics: FeMoMetrics = None
-    plotter = FeMoPlotter()
     default_hiccup_cfg = {
         "std_threshold_percentage": 0.15,
         "hiccup_period_distance": 5,
@@ -103,8 +121,10 @@ class PredictionService(object):
             self.metrics = joblib.load(self.metrics_path)
         return self.metrics
 
-    def _calc_meta_info(self, filename: str, preprocessed_data: dict, binary_map: np.ndarray):
+    def _calc_meta_info(self, filename: str, pipeline_output: dict, binary_map: np.ndarray):
         self.logger.info(f"Calculating prediction meta info {filename}")
+
+        preprocessed_data = pipeline_output["preprocessed_data"]
         sensor_freq = self.pipeline.get_stage("load").sensor_freq
         fm_dilation = self.pipeline.get_stage("segment").fm_dilation
 
@@ -125,24 +145,142 @@ class PredictionService(object):
         duration_trimmed_data_files = len(preprocessed_data["sensor_1"]) / 1024 / 60  # in minutes
         # Time fetus was not moving
         total_nonFM_duration = duration_trimmed_data_files - total_FM_duration
+
+        # Match with sensation map if available
+        matched_dict = None
+        if np.sum(pipeline_output["sensation_map"]):
+            sensation_map = pipeline_output["sensation_map"]
+            imu_map = pipeline_output["imu_map"]
+            scheme_dict = pipeline_output["scheme_dict"]
+            matched_dict = self._match_with_sensation_map(
+                preprocessed_data=pipeline_output["preprocessed_data"],
+                imu_map=imu_map,
+                sensation_map=sensation_map,
+                scheme_dict=scheme_dict,
+                ml_detection_map=binary_map,
+            )
+            matched_dict = MatchWithSensationMap(**matched_dict)
+
         data = InferenceMetaInfo(
             fileName=os.path.basename(filename),
             numKicks=n_movements,
             totalFMDuration=total_FM_duration,
             totalNonFMDuration=total_nonFM_duration,
             onsetInterval=onset_interval,
+            matchWithSensationMap=matched_dict
         )
         return data
+
+    def _match_with_sensation_map(self,
+                                  preprocessed_data: dict,
+                                  imu_map: np.ndarray,
+                                  sensation_map: np.ndarray,
+                                  scheme_dict: dict,
+                                  ml_detection_map: np.ndarray):
+
+        # window size is equal to the window size used to create the maternal sensation map
+        matching_window_size = self.metrics.maternal_dilation_forward + self.metrics.maternal_dilation_backward 
+        # Minimum overlap in second
+        min_overlap_time = self.metrics.fm_dilation / 2
+
+        sensation_data = preprocessed_data['sensation_data']
+        num_labels = scheme_dict['num_labels']
+
+        # Variable declaration
+        true_pos = 0  # True positive ML detection
+        false_neg = 0  # False negative detection
+        true_neg = 0  # True negative detection
+        false_pos = 0  # False positive detection
+
+        # Labeling sensation data and determining the number of maternal sensation detection
+        labeled_sensation_data = label(sensation_data)
+        num_maternal_sensed = len(np.unique(labeled_sensation_data)) - 1
+
+        # ------------------ Determination of TPD and FND ----------------%    
+        if num_maternal_sensed:  # When there is a detection by the mother
+            for k in range(1, num_maternal_sensed + 1):
+                L_min = np.where(labeled_sensation_data == k)[0][0]  # Sample no. corresponding to the start of the label
+                L_max = np.where(labeled_sensation_data == k)[0][-1] # Sample no. corresponding to the end of the label
+
+                # sample no. for the starting point of this sensation in the map
+                L1 = L_min * round(self.metrics._sensor_freq / self.metrics._sensation_freq) - self.metrics.extension_backward
+                L1 = max(L1, 0)  # Just a check so that L1 remains higher than 1st data sample
+
+                # sample no. for the ending point of this sensation in the map
+                L2 = L_max * round(self.metrics._sensor_freq / self.metrics._sensation_freq) + self.metrics.extension_forward
+                L2 = min(L2, len(ml_detection_map))  # Just a check so that L2 remains lower than the last data sample
+
+                indv_sensation_map = np.zeros(len(ml_detection_map))  # Need to be initialized before every detection matching
+                indv_sensation_map[L1:L2+1] = 1  # mapping individual sensation data
+
+                # this is non-zero if there is a coincidence with maternal body movement
+                overlap = np.sum(indv_sensation_map * imu_map)
+
+                if not overlap:  # true when there is no coincidence, meaning FM
+                    # TPD and FND calculation
+                    # Non-zero value gives the matching
+                    Y = np.sum(ml_detection_map * indv_sensation_map)
+                    if Y:  # true if there is a coincidence
+                        true_pos += 1  # TPD incremented
+                    else:
+                        false_neg += 1  # FND incremented
+
+            # ------------------- Determination of TND and FPD  ------------------%    
+            # Removal of the TPD and FND parts from the individual sensor data
+            labeled_ml_detection = label(ml_detection_map)
+            # Non-zero elements give the matching. In sensation_map multiple windows can overlap, which was not the case in the sensation_data
+            curnt_matched_vector = labeled_ml_detection * sensation_map
+            # Gives the label of the matched sensor data segments
+            curnt_matched_label = np.unique(curnt_matched_vector)
+            arb_value = 4  # An arbitrary value
+            
+            
+            if len(curnt_matched_label) > 1:
+                curnt_matched_label = curnt_matched_label[1:]  # Removes the first element, which is 0
+                for m in range(len(curnt_matched_label)):
+                    ml_detection_map[labeled_ml_detection == curnt_matched_label[m]] = arb_value
+                    # Assigns an arbitrary value to the TPD segments of the segmented signal
+
+            # Assigns an arbitrary value to the area under the M_sntn_Map
+            ml_detection_map[sensation_map == 1] = arb_value
+            # Removes all the elements with value = arb_value from the segmented data
+            removed_ml_detection = ml_detection_map[ml_detection_map != arb_value]
+
+            # Calculation of TND and FPD for individual sensors
+            L_removed = len(removed_ml_detection)
+            index_window_start = 0
+            index_window_end = int(min(index_window_start+self.metrics._sensor_freq*matching_window_size, L_removed))
+            while index_window_start < L_removed:
+                indv_window = removed_ml_detection[index_window_start: index_window_end]
+                index_non_zero = np.where(indv_window)[0]
+
+                if len(index_non_zero) >= (min_overlap_time*self.metrics._sensor_freq):
+                    false_pos += 1
+                else:
+                    true_neg += 1
+
+                index_window_start = index_window_end + 1
+                index_window_end = int(min(index_window_start+self.metrics._sensor_freq*matching_window_size, L_removed))
+
+        return {
+            "true_positive": true_pos,
+            "false_positive": false_pos,
+            "true_negative": true_neg,
+            "false_negative": false_neg,
+            "num_maternal_sensed": num_maternal_sensed,
+            "num_sensor_detections": num_labels,
+            "num_ml_detections": np.max(label(ml_detection_map))
+        }
 
     def _pre_hiccup_removal(
         self,
         filename: str,
         y_pred: np.ndarray,
-        preprocessed_data: dict,
-        fm_dict: dict,
-        scheme_dict: dict,
+        pipeline_output: dict,
     ):
         self.logger.info(f"Generating pre-hiccup removal map for {filename}")
+        fm_dict = pipeline_output["fm_dict"]
+        scheme_dict = pipeline_output["scheme_dict"]
 
         ones = np.sum(y_pred)
         self.logger.info(f"Number of bouts: {ones}")
@@ -161,7 +299,7 @@ class PredictionService(object):
 
         # Now get the reduced detection_map
         reduced_detection_map = ml_map * fm_dict["fm_map"]  # Reduced, because of the new dilation length
-        data = self._calc_meta_info(filename, preprocessed_data, reduced_detection_map)
+        data = self._calc_meta_info(filename, pipeline_output, reduced_detection_map)
 
         return data, ml_map
 
@@ -170,9 +308,11 @@ class PredictionService(object):
         filename: str,
         hiccup_analyzer: HiccupAnalysis,
         ml_map: np.ndarray,
-        preprocessed_data: dict,
-        imu_map: np.ndarray,
+        pipeline_output: dict,
     ):
+        self.logger.info(f"Generating post-hiccup removal map from {filename}")
+        preprocessed_data = pipeline_output["preprocessed_data"]
+        imu_map = pipeline_output["imu_map"]
         ml_detection_map = np.copy(ml_map)
 
         if hiccup_analyzer.fm_dilation > self.pipeline.get_stage("segment").fm_dilation:
@@ -225,7 +365,7 @@ class PredictionService(object):
             acstc_1_or_2 = np.zeros_like(ml_map)
 
         hiccup_removed_ml_map = np.clip(ml_map - hiccup_map, 0, 1)
-        data = self._calc_meta_info(filename, preprocessed_data, hiccup_removed_ml_map)
+        data = self._calc_meta_info(filename, pipeline_output, hiccup_removed_ml_map)
 
         return {
             "data": data,
@@ -249,7 +389,10 @@ class PredictionService(object):
 
         # Helper function to process the file
         def process_file(file_path: str):
-            prediction_output = defaultdict()
+            prediction_output = {
+                "pre_hiccup_removal": None,
+                "post_hiccup_removal": None
+            }
 
             pipeline = self.get_pipeline()
             feature_sets = pipeline.get_stage('extract_feat').feature_sets
@@ -275,9 +418,7 @@ class PredictionService(object):
             data, ml_map = self._pre_hiccup_removal(
                 filename=file_path,
                 y_pred=y_pred,
-                preprocessed_data=pipeline_output["preprocessed_data"],
-                fm_dict=pipeline_output["fm_dict"],
-                scheme_dict=pipeline_output["scheme_dict"],
+                pipeline_output=pipeline_output,
             )
             prediction_output["pre_hiccup_removal"] = {"data": data, "ml_map": ml_map}
 
@@ -291,8 +432,7 @@ class PredictionService(object):
                     filename=filename,
                     hiccup_analyzer=hiccup_analyzer,
                     ml_map=ml_map,
-                    preprocessed_data=pipeline_output["preprocessed_data"],
-                    imu_map=pipeline_output["imu_map"],
+                    pipeline_output=pipeline_output,
                 )
                 prediction_output["post_hiccup_removal"] = post_hiccup_dict
 
@@ -314,49 +454,133 @@ class PredictionService(object):
     def save_pred_plots(
         self,
         pipeline_output: dict,
-        ml_map: np.ndarray,
+        detection_map: np.ndarray,
         filename: str,
-        det_type: str = "Fetal movement",
-    ):
-        plt_cfg = {"figsize": [16, 15], "x_unit": "min"}
-        fig, axes = self.plotter.create_figure(figsize=plt_cfg["figsize"])
-        i = 0
-        for sensor_type in self.plotter.sensor_map.keys():
-            for j in range(len(self.plotter.sensor_map[sensor_type])):
-                sensor_name = f"{sensor_type}_{j+1}"
-                axes = self.plotter.plot_sensor_data(
+        det_type: str = "ML Predicted Fetal Movement",
+        plot_all_sensors: bool = False,
+        plot_preprocessed: bool = False,
+    ) -> None:
+        """Save prediction plots including IMU data, sensor data, and detection maps.
+        
+        Args:
+            pipeline_output: Dictionary containing preprocessed data and other pipeline outputs
+            ml_map: Machine learning detection map
+            filename: Filename for saving the plot
+            det_type: Type of detection for labeling
+        """
+        plt_config: dict = {"figsize": [16, 15]}
+        plot_key: str = "preprocessed_data" if plot_preprocessed else "loaded_data"
+        
+        # Calculate total number of subplots needed by checking actual data availability
+        num_subplots: int = 0
+        plot_types = ["imu_rotation", "imu_acceleration"]
+        if plot_all_sensors:
+            sensors = self.pipeline.get_stage("load").sensor_map.values()
+            plot_types.extend([item for values in sensors for item in values])
+        else:
+            plot_types.extend(self.pipeline.get_stage("load").sensors)
+        
+        num_subplots += len(plot_types)  # Add number of sensor plots        
+        # Add sensation map if present and has data
+        if "sensation_map" in pipeline_output and np.sum(pipeline_output["sensation_map"]) > 0:
+            num_subplots += 1        
+        # Add 2 for detection plots
+        num_subplots += 2
+        self.logger.info(f"Total number of subplots to create: {num_subplots}")
+        
+        # Create figure with correct number of subplots
+        fig, axes = create_figure(figsize=plt_config["figsize"], num_subplots=num_subplots)
+        current_axis_index: int = 0
+        
+        # Get sensor frequency for time axis calculations
+        sensor_freq: int = self.pipeline.get_stage("load").sensor_freq
+        
+        # Plot IMU rotation data (roll, pitch, yaw) in the first subplot
+        if "imu_rotation" in pipeline_output[plot_key]:
+            imu_rotation_data: np.ndarray = pipeline_output[plot_key]["imu_rotation"]
+            self.logger.info(f"Plotting IMU rotation data with shape {imu_rotation_data.shape}")
+            axes = plot_imu_rotation(
+                axes=axes,
+                axis_idx=current_axis_index,
+                imu_rotation_data=imu_rotation_data,
+                sensor_freq=sensor_freq,
+                preprocessed=plot_preprocessed
+            )
+            current_axis_index += 1
+        
+        # Plot IMU acceleration data in the second subplot
+        if "imu_acceleration" in pipeline_output[plot_key]:
+            imu_acceleration_data: np.ndarray = pipeline_output[plot_key]["imu_acceleration"]
+            self.logger.info(f"Plotting IMU acceleration data with shape {imu_acceleration_data.shape}")
+            axes = plot_imu_acceleration(
+                axes=axes,
+                axis_idx=current_axis_index,
+                imu_acceleration_data=imu_acceleration_data,
+                sensor_freq=sensor_freq,
+                preprocessed=plot_preprocessed
+            )
+            current_axis_index += 1
+        
+        # Plot sensor data - only plot those with actual data
+        for sensor in plot_types[2:]:  # Skip IMU rotation and acceleration
+            if sensor in pipeline_output[plot_key]:
+                sensor_data = pipeline_output[plot_key][sensor]
+                if np.sum(sensor_data) == 0:
+                    self.logger.warning(f"No data for sensor {sensor}, skipping plot.")
+                    continue
+                self.logger.info(f"Plotting sensor data for {sensor} with shape {sensor_data.shape}")
+                axes = plot_sensor_data(
                     axes=axes,
-                    axis_idx=i,
-                    data=pipeline_output["preprocessed_data"][self.plotter.sensor_map[sensor_type][j]],
-                    sensor_name=sensor_name,
-                    x_unit=plt_cfg.get("x_unit", "min"),
+                    axis_idx=current_axis_index,
+                    sensor_data=sensor_data,
+                    sensor_name=sensor,
+                    sensor_freq=sensor_freq,
+                    preprocessed=plot_preprocessed
                 )
-                i += 1
+                current_axis_index += 1
+        
+        # Plot sensation map if present and has data
+        if "sensation_map" in pipeline_output and np.sum(pipeline_output["sensation_map"]) > 0:
+            self.logger.info("Plotting sensation map.")
+            axes = plot_sensation_map(
+                axes=axes,
+                axis_idx=current_axis_index,
+                sensation_data=pipeline_output["sensation_map"],
+                sensor_freq=sensor_freq
+            )
+            current_axis_index += 1
 
-        # TODO: might be better to have this more configurable
+        # Plot detection maps
         fusion_stage: SensorFusion = self.pipeline.get_stage("fusion")
-        desired_scheme = fusion_stage.desired_scheme
+        desired_scheme_tuple = fusion_stage.desired_scheme
 
-        axes = self.plotter.plot_detections(
+        # Plot detection map from desired scheme
+        self.logger.info(f"Plotting detection map for scheme: {desired_scheme_tuple}")
+        axes = plot_detections(
             axes=axes,
-            axis_idx=i,
+            axis_idx=current_axis_index,
             detection_map=pipeline_output["scheme_dict"]["user_scheme"],
-            det_type=f"At least {desired_scheme[1]} {desired_scheme[0]} Sensor Events",
+            det_type=f"At least {desired_scheme_tuple[1]} {desired_scheme_tuple[0]} Sensor Events",
             ylabel="Detection",
             xlabel="",
-            x_unit=plt_cfg.get("x_unit", "min"),
+            sensor_freq=sensor_freq
         )
-        axes = self.plotter.plot_detections(
+        current_axis_index += 1
+        
+        # Plot detection map from ML predictions
+        self.logger.info(f"Plotting detection map for {det_type}")
+        axes = plot_detections(
             axes=axes,
-            axis_idx=i + 1,
-            detection_map=ml_map,
+            axis_idx=current_axis_index,
+            detection_map=detection_map,
             det_type=det_type,
             ylabel="Detection",
-            xlabel=f"Time ({plt_cfg.get('x_unit', 'min')})",
-            x_unit=plt_cfg.get("x_unit", "min"),
+            xlabel="",
+            sensor_freq=sensor_freq
         )
 
-        self.plotter.save_figure(fig, filename)
+        save_figure(fig, filename)
+        self.logger.info(f"Saved figure to {os.path.abspath(filename)}")
 
     def save_hiccup_analysis_plots(
         self,
