@@ -1,5 +1,4 @@
 import os
-import joblib
 import yaml
 import json
 import pandas as pd
@@ -34,14 +33,7 @@ def main(args):
         dataset_cfg = yaml.safe_load(f)
 
     results_df = pd.read_csv(args.results_path, index_col=False)
-    metadata: dict = joblib.load(args.metadata_path)
-
-    overall_tpd_pred = results_df.get('predictions').to_numpy()[0: metadata['num_tpd']]
-    overall_fpd_pred = results_df.get('predictions').to_numpy()[metadata['num_tpd']:]
-    matching_index_tpd = 0
-    matching_index_fpd = 0
     LOGGER.info(f"Loaded results from {args.results_path}")
-    LOGGER.info(f"Loaded metadata from {args.metadata_path}")
 
     dataset = FeMoDataset(
         base_dir=args.data_dir,
@@ -74,8 +66,8 @@ def main(args):
         'sensation_label': [],
         'sensor_calc': [],
         'sensor_label': [],
-        'num_tpd': [],
-        'num_fpd': []
+        'ml_calc': [],
+        'ml_label': []
     }
 
     for item in tqdm(dataset.data_manifest['items'], desc="Processing items", unit="item"):
@@ -94,18 +86,16 @@ def main(args):
 
         pipeline_output = dataset.pipeline.process(
             filename=os.path.join(args.data_dir, data_file_key),
-            outputs=['preprocessed_data', 'imu_map', 'sensation_map', 'scheme_dict']
-
+            outputs=['sensation_map', 'scheme_dict', 'preprocessed_data', 'imu_map']
         )
+        prediction_results = results_df[results_df['dat_file_key'] == data_file_key]
+
         tpfp_dict = metrics.calc_tpfp(
             preprocessed_data=pipeline_output['preprocessed_data'],
             imu_map=pipeline_output['imu_map'],
             sensation_map=pipeline_output['sensation_map'],
             scheme_dict=pipeline_output['scheme_dict'],
-            overall_tpd_pred=overall_tpd_pred,
-            overall_fpd_pred=overall_fpd_pred,
-            matching_index_tpd=matching_index_tpd,
-            matching_index_fpd=matching_index_fpd
+            pred_results=prediction_results,
         )
         filewise_tpfp['filename'].append(data_file_key)
         
@@ -115,15 +105,13 @@ def main(args):
             filewise_tpfp[key].append(value)
             overall_tpfp[key] += value
 
+        # calc and label should be the same for all files
         filewise_tpfp['sensation_calc'].append(tpfp_dict['true_positive'] + tpfp_dict['false_negative'])
         filewise_tpfp['sensation_label'].append(tpfp_dict['num_maternal_sensed'])
-        filewise_tpfp['sensor_calc'].append(tpfp_dict['true_positive'] + tpfp_dict['false_positive'])
-        filewise_tpfp['sensor_label'].append(tpfp_dict['num_sensor_sensed'])
-        filewise_tpfp['num_tpd'].append(len(tpfp_dict['tpd_indices']))
-        filewise_tpfp['num_fpd'].append(len(tpfp_dict['fpd_indices']))
-
-        matching_index_tpd = tpfp_dict['matching_index_tpd']
-        matching_index_fpd = tpfp_dict['matching_index_fpd']
+        filewise_tpfp['sensor_calc'].append(tpfp_dict['true_positive'] + tpfp_dict['false_positive'] + tpfp_dict['true_negative'] + tpfp_dict['false_negative'])
+        filewise_tpfp['sensor_label'].append(tpfp_dict['num_sensor_detections'])
+        filewise_tpfp['ml_calc'].append(tpfp_dict['true_positive'] + tpfp_dict['false_positive'])
+        filewise_tpfp['ml_label'].append(tpfp_dict['num_ml_detections'])
     
     outfile_dir = os.path.join(args.work_dir, "performance")
     os.makedirs(outfile_dir, exist_ok=True)

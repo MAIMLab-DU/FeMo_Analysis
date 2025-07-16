@@ -46,8 +46,8 @@ def main(args):
     try:
         for key in feature_sets:
             key_dataset = pd.read_csv(os.path.join(args.train, f"{key}_dataset.csv"))
-            dataset = pd.concat([dataset, key_dataset.iloc[:, :-3]], axis=1)
-        dataset = pd.concat([dataset, key_dataset.iloc[:, -3:]], axis=1)
+            dataset = pd.concat([dataset, key_dataset.iloc[:, :-4]], axis=1)
+        dataset = pd.concat([dataset, key_dataset.iloc[:, -4:]], axis=1)
     except Exception:
         raise ValueError(
             (

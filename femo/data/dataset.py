@@ -8,7 +8,6 @@ from typing import Union
 from collections import defaultdict
 from botocore.exceptions import ClientError, NoCredentialsError
 from ..logger import LOGGER
-from .utils import gen_hash
 from .pipeline import Pipeline
 
 
@@ -94,14 +93,16 @@ class FeMoDataset:
         features = data.get('features')
         columns = data.get('columns')
         labels = data.get('labels')
-        det_indices = data.get('det_indices')
+        start_indices = data.get('start_indices')
+        end_indices = data.get('end_indices')
 
         if features is None:
             raise ValueError("No features in extracted data.")
 
         features_df = pd.DataFrame(features, columns=columns)
-        features_df['filename_hash'] = key
-        features_df['det_indices'] = det_indices
+        features_df['dat_file_key'] = key
+        features_df['start_indices'] = start_indices
+        features_df['end_indices'] = end_indices
         features_df['labels'] = labels
 
         features_df = features_df.reset_index(drop=True)
@@ -124,7 +125,7 @@ class FeMoDataset:
                 self.logger.warning("Skipping item due to missing datFileKey or csvFileKey.")
                 continue
 
-            map_key = gen_hash(data_file_key)
+            map_key = data_file_key
             data_filename = self._resolve_path(data_file_key)
 
             if not self._download_from_s3(str(data_filename), bucket, data_file_key):

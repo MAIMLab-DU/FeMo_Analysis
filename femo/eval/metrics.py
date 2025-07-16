@@ -2,6 +2,7 @@ import os
 import joblib
 import tarfile
 import numpy as np
+import pandas as pd
 from ..logger import LOGGER
 from skimage.measure import label
 from sklearn.metrics import accuracy_score
@@ -69,67 +70,40 @@ class FeMoMetrics(object):
             'test_fpd_sd': np.std(acc_fpd),
         }
     
-    def _get_ml_detection_map(self,
-                             scheme_dict: dict,
-                             sensation_map: np.ndarray,
-                             overall_tpd_pred: np.ndarray,
-                             overall_fpd_pred: np.ndarray,
-                             matching_index_tpd: int,
-                             matching_index_fpd: int):
-        
-        num_labels: int = scheme_dict['num_labels']
-        labeled_user_scheme: np.ndarray = scheme_dict['labeled_user_scheme']
-
-        segmented_sensor_data_ml = np.zeros(labeled_user_scheme.shape)
-        
-        tpd_indices, fpd_indices = [], []
-        if num_labels:  # When there is a detection by the sensor system
-            for k in range(1, num_labels + 1):
-                label_start = np.where(labeled_user_scheme == k)[0][0]  # start of the label
-                label_end = np.where(labeled_user_scheme == k)[0][-1] + 1  # end of the label
-                indv_window = np.zeros(len(sensation_map))
-                indv_window[label_start:label_end] = 1
-                overlap = np.sum(indv_window * sensation_map)  # Checks the overlap with the maternal sensation
-
-                if overlap:
-                    # This is a TPD
-                    if matching_index_tpd < len(overall_tpd_pred) and overall_tpd_pred[matching_index_tpd] == 1:  # Checks the detection from the classifier
-                        segmented_sensor_data_ml[label_start:label_end] = 1
-                    matching_index_tpd += 1
-                    tpd_indices.append(k)
-                else:
-                    # This is an FPD
-                    if matching_index_fpd < len(overall_fpd_pred) and overall_fpd_pred[matching_index_fpd] == 1:  # Checks the detection from the classifier
-                        segmented_sensor_data_ml[label_start:label_end] = 1
-                    matching_index_fpd += 1
-                    fpd_indices.append(k)
-
-        return {
-            'ml_detection_map': segmented_sensor_data_ml,
-            'num_labels': num_labels,
-            'matching_index_tpd': matching_index_tpd,
-            'matching_index_fpd': matching_index_fpd,
-            'tpd_indices': tpd_indices,
-            'fpd_indices': fpd_indices
-        }
-    
     def calc_tpfp(self,
-                  preprocessed_data: dict,
-                  imu_map: np.ndarray,
-                  sensation_map: np.ndarray,
-                  ml_dict: dict|None = None,
-                  **kwargs):
+                preprocessed_data: dict,
+                imu_map: np.ndarray,
+                sensation_map: np.ndarray,
+                scheme_dict: dict,
+                pred_results: pd.DataFrame):
         
         # window size is equal to the window size used to create the maternal sensation map
         matching_window_size = self.maternal_dilation_forward + self.maternal_dilation_backward 
         # Minimum overlap in second
         min_overlap_time = self.fm_dilation / 2
-
         sensation_data = preprocessed_data['sensation_data']
-        if ml_dict is None:
-            ml_dict = self._get_ml_detection_map(sensation_map=sensation_map, **kwargs)
-        ml_detection_map = np.copy(ml_dict['ml_detection_map'])
-
+    
+        # Get user scheme data
+        user_scheme = scheme_dict['user_scheme']
+        num_labels = scheme_dict['num_labels']
+        
+        # Initialize ML prediction map with same length as other maps
+        ml_prediction_map = np.zeros(len(user_scheme))        
+        # Populate ML prediction map using pred_results DataFrame
+        if not pred_results.empty:
+            for idx, row in pred_results.iterrows():
+                start_idx = int(row['start_indices'])
+                end_idx = int(row['end_indices'])
+                prediction = int(row['predictions'])
+                
+                # Only mark as 1 if prediction is positive (1) and indices are valid
+                if prediction == 1 and 0 <= start_idx < len(ml_prediction_map) and 0 <= end_idx <= len(ml_prediction_map):
+                    ml_prediction_map[start_idx:end_idx] = 1
+        
+        # Get sensation data for ground truth
+        num_ml_detections = len(np.unique(label(ml_prediction_map))) - 1
+        ml_detection_map = np.copy(ml_prediction_map)
+        
         # Variable declaration
         true_pos = 0  # True positive ML detection
         false_neg = 0  # False negative detection
@@ -140,7 +114,7 @@ class FeMoMetrics(object):
         labeled_sensation_data = label(sensation_data)
         num_maternal_sensed = len(np.unique(labeled_sensation_data)) - 1
 
-        # ------------------ Determination of TPD and FND ----------------%    
+        # ------------------ Determination of True Positive Prediction and False Negative Prediction ----------------%    
         if num_maternal_sensed:  # When there is a detection by the mother
             for k in range(1, num_maternal_sensed + 1):
                 L_min = np.where(labeled_sensation_data == k)[0][0]  # Sample no. corresponding to the start of the label
@@ -161,15 +135,15 @@ class FeMoMetrics(object):
                 overlap = np.sum(indv_sensation_map * imu_map)
 
                 if not overlap:  # true when there is no coincidence, meaning FM
-                    # TPD and FND calculation
+                    # TPP and FNP calculation
                     # Non-zero value gives the matching
                     Y = np.sum(ml_detection_map * indv_sensation_map)
                     if Y:  # true if there is a coincidence
-                        true_pos += 1  # TPD incremented
+                        true_pos += 1  # TPP incremented
                     else:
-                        false_neg += 1  # FND incremented
+                        false_neg += 1  # FNP incremented
 
-            # ------------------- Determination of TND and FPD  ------------------%    
+            # ------------------- Determination of True Negative Prediction and False Positive Prediction  ------------------%    
             # Removal of the TPD and FND parts from the individual sensor data
             labeled_ml_detection = label(ml_detection_map)
             # Non-zero elements give the matching. In sensation_map multiple windows can overlap, which was not the case in the sensation_data
@@ -206,7 +180,7 @@ class FeMoMetrics(object):
                 index_window_start = index_window_end + 1
                 index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
                 
-        # Else no ground truth, only TND and FPD calculation allowed
+        # Else no ground truth, only True Negative Prediction and False Positive Prediction calculation allowed
         else:
             # ------------------- Determination of TND and FPD  ------------------%    
             # Removal of the TPD and FND parts from the individual sensor data
@@ -244,18 +218,15 @@ class FeMoMetrics(object):
 
                 index_window_start = index_window_end + 1
                 index_window_end = int(min(index_window_start+self._sensor_freq*matching_window_size, L_removed))
-
+        
         return {
             'true_positive': true_pos,
-            'false_positive': false_pos,
+            'false_positive': false_pos, 
             'true_negative': true_neg,
             'false_negative': false_neg,
             'num_maternal_sensed': num_maternal_sensed,
-            'num_sensor_sensed': ml_dict['num_labels'],
-            'matching_index_tpd': ml_dict['matching_index_tpd'],
-            'matching_index_fpd': ml_dict['matching_index_fpd'],
-            'tpd_indices': ml_dict['tpd_indices'],
-            'fpd_indices': ml_dict['fpd_indices']
+            'num_sensor_detections': num_labels,
+            'num_ml_detections': num_ml_detections
         }
     
     def calc_metrics(self,

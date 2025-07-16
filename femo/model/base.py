@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from ..logger import LOGGER
 from collections import defaultdict
-from typing import Literal
+from typing import Literal, Dict, Any
 from keras.models import load_model
 from dataclasses import dataclass, fields
 from abc import ABC, abstractmethod
@@ -16,52 +16,9 @@ class Result:
     accuracy_scores: dict = None
     preds: list[np.ndarray]|np.ndarray = None
     pred_scores: list[np.ndarray]|np.ndarray = None
-    det_indices: list[np.ndarray]|np.ndarray = None
-    filename_hash: list[np.ndarray]|np.ndarray = None
-
-    @staticmethod
-    def process_attributes(attribute,
-                           metadata: dict,
-                           thresh: float = 0.5,
-                           preds: bool = False):
-        tpd_attribute_rand = np.zeros((1, 1))
-        fpd_attribute_rand = np.zeros((1, 1))
-
-        num_folds = metadata['num_folds']
-        for i in range(num_folds):
-            # All except the last fold
-            if i != num_folds - 1:
-                tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:metadata['num_tpd_each_fold'], np.newaxis]])
-                fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][metadata['num_tpd_each_fold']:, np.newaxis]])
-            else:
-                tpd_attribute_rand = np.concatenate([tpd_attribute_rand, attribute[i][0:metadata['num_tpd_last_fold'], np.newaxis]])
-                fpd_attribute_rand = np.concatenate([fpd_attribute_rand, attribute[i][metadata['num_tpd_last_fold']:, np.newaxis]])
-
-        # Remove the initial zeros added
-        tpd_attribute_rand = tpd_attribute_rand[1:]
-        fpd_attribute_rand = fpd_attribute_rand[1:]
-
-        tpd_attribute = np.zeros((metadata['num_tpd'], 1))
-        fpd_attribute = np.zeros((metadata['num_fpd'], 1))
-
-        if num_folds > 1:  # Stratified K-fold division
-            # Non-randomized the predictions to match with the original data set
-            for i in range(metadata['num_tpd']):
-                index = metadata['rand_num_tpd'][i]
-                tpd_attribute[index] = tpd_attribute_rand[i]
-
-            for i in range(metadata['num_fpd']):
-                index = metadata['rand_num_fpd'][i]
-                fpd_attribute[index] = fpd_attribute_rand[i]
-        else:
-            tpd_attribute = tpd_attribute_rand
-            fpd_attribute = fpd_attribute_rand
-
-        if preds:
-            tpd_attribute = tpd_attribute >= thresh
-            fpd_attribute = fpd_attribute >= thresh
-
-        return np.concatenate([tpd_attribute, fpd_attribute])
+    start_indices: list[np.ndarray]|np.ndarray = None
+    end_indices: list[np.ndarray]|np.ndarray = None
+    dat_file_key: list[np.ndarray]|np.ndarray = None
 
     def _assert_no_none_fields(self):
         # Check each field to ensure it is not None
@@ -71,10 +28,12 @@ class Result:
     
     def save(self, filename: str):
         results_df = {
-            'filename_hash': [item for fold in self.filename_hash for item in fold] 
-                            if isinstance(self.filename_hash, list) else np.squeeze(self.filename_hash).tolist(),
-            'det_indices': [item for fold in self.det_indices for item in fold] 
-                            if isinstance(self.det_indices, list) else np.squeeze(self.det_indices).tolist(),
+            'dat_file_key': [item for fold in self.dat_file_key for item in fold] 
+                            if isinstance(self.dat_file_key, list) else np.squeeze(self.dat_file_key).tolist(),
+            'start_indices': [item for fold in self.start_indices for item in fold] 
+                            if isinstance(self.start_indices, list) else np.squeeze(self.start_indices).tolist(),
+            'end_indices': [item for fold in self.end_indices for item in fold]
+                            if isinstance(self.end_indices, list) else np.squeeze(self.end_indices).tolist(),
             'predictions': [item for fold in self.preds for item in fold] 
                             if isinstance(self.preds, list) else np.squeeze(self.preds).tolist(),
             'prediction_scores': [item for fold in self.pred_scores for item in fold] 
@@ -89,16 +48,6 @@ class Result:
                         results_path: str|None = None,
                         metadata_path: str|None = None):
         self._assert_no_none_fields()
-
-        preds = self.process_attributes(self.preds, metadata, preds=True, thresh=threshold)
-        pred_scores = self.process_attributes(self.pred_scores, metadata, thresh=threshold)
-        det_indices = self.process_attributes(self.det_indices, metadata, thresh=threshold)
-        filename_hash = self.process_attributes(self.filename_hash, metadata, thresh=threshold)
-
-        self.preds = preds.astype(float)
-        self.pred_scores = pred_scores.astype(float)
-        self.det_indices = det_indices.astype(int)
-        self.filename_hash = filename_hash.astype(int)
 
         if results_path is not None:
             results_path = os.path.join(results_path, "results.csv")
@@ -156,7 +105,7 @@ class FeMoBaseClassifier(ABC):
                    custom_ratio: int|None = None,
                    num_folds: int = 5):
 
-        X, y = data[:, :-1], data[:, -1]
+        X, y = data[:, :-1], data[:, -1].astype(int)
         train, test = [], []
         metadata = defaultdict()
 
@@ -228,11 +177,15 @@ class FeMoBaseClassifier(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def fit(self, *args, **kwargs):
+    def fit(self, *args, **kwargs) -> Dict[str, Any]:
         """Class method used to fit the model
+        
+        Returns:
+            Dict[str, Any]: Dictionary containing evaluation metrics with string keys
+                        and numeric values (accuracy, f1-score, etc.)
 
         Raises:
-            NotImplementedError
+            NotImplementedError: This method must be implemented by subclasses
         """
         raise NotImplementedError
     
